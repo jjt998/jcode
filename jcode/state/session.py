@@ -16,6 +16,13 @@ class SessionStore:
         files = sorted(self.root.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
         return files[0].stem if files else None
 
+    def run_ids(self, session: dict) -> list[str]:
+        return [str(run_id) for run_id in session.get("run_ids", []) if str(run_id).strip()]
+
+    def latest_run_id(self, session: dict) -> str:
+        run_ids = self.run_ids(session)
+        return run_ids[-1] if run_ids else ""
+
     def load_requested(self, session_id: str | None, resume: str | None, workspace_root: Path) -> dict:
         selected = session_id or resume
         if selected == "latest":

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from jcode.evidence.session_log import SessionEventBus
 from jcode.runtime.engine import Engine
+from jcode.state.resume import build_resume_context
 
 
 class JCodeAgent:
@@ -46,9 +47,19 @@ class JCodeAgent:
     def resume(self, session_id: str) -> None:
         self.session = self.session_store.load_requested(session_id, None, self.workspace.root)
         self.working_memory = type(self.working_memory).from_dict(self.session.get("working_memory", {}), self.workspace.root)
+        self.working_memory.resume_context = build_resume_context(
+            session=self.session,
+            session_store=self.session_store,
+            run_store=self.run_store,
+            workspace=self.workspace,
+            resume_requested=session_id,
+        )
         self.tool_executor.working_memory = self.working_memory
         self.tool_executor.tool_policy.working_memory = self.working_memory
         self.session_events = SessionEventBus(self.session_events.path.parent / f"{self.session['id']}.events.jsonl")
+        self.worker_manager.session_events = self.session_events
+        self.session_events.emit("session_resumed", **self.working_memory.resume_context)
+        self.session_events.emit("resume_checkpoint_evaluated", **self.working_memory.resume_context)
 
     def abort(self) -> None:
         self.abort_requested = True

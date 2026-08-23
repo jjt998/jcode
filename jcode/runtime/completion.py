@@ -27,6 +27,7 @@ def finish_run(agent, task_state, run_dir, final_text: str, stop_reason: str = V
             session_id=agent.session.get("id", ""),
             workers=agent.worker_manager.worker_refs(),
             memory=memory_audit,
+            resume=agent.working_memory.resume_context,
         ),
     )
     agent.session["working_memory"] = agent.working_memory.to_dict()

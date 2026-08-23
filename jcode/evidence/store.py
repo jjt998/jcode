@@ -12,10 +12,13 @@ class RunStore:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def start_run(self, task_state) -> Path:
-        run_dir = self.root / task_state.run_id
+        run_dir = self.run_dir(task_state.run_id)
         (run_dir / "artifacts").mkdir(parents=True, exist_ok=True)
         self.write_task_state(run_dir, task_state)
         return run_dir
+
+    def run_dir(self, run_id: str) -> Path:
+        return self.root / str(run_id)
 
     def write_artifact(self, run_dir: Path, name: str, content: str) -> str:
         safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in name)

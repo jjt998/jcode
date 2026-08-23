@@ -42,10 +42,21 @@ class CheckpointManager:
         if not self.path.exists():
             return "no_checkpoint", {}
         data = json.loads(self.path.read_text(encoding="utf-8"))
-        if data.get("schema_version") != SCHEMA_VERSION:
-            return "schema_mismatch", data
-        if not data.get("resumable", False):
-            return "checkpoint_not_resumable", data
-        if data.get("workspace_fingerprint") != self.workspace.fingerprint():
-            return "workspace_mismatch", data
-        return "full_valid", data
+        return evaluate_checkpoint_data(data, self.workspace)
+
+
+def evaluate_checkpoint_path(path: Path, workspace: Workspace) -> tuple[str, dict]:
+    if not path.exists():
+        return "no_checkpoint", {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return evaluate_checkpoint_data(data, workspace)
+
+
+def evaluate_checkpoint_data(data: dict, workspace: Workspace) -> tuple[str, dict]:
+    if data.get("schema_version") != SCHEMA_VERSION:
+        return "schema_mismatch", data
+    if not data.get("resumable", False):
+        return "checkpoint_not_resumable", data
+    if data.get("workspace_fingerprint") != workspace.fingerprint():
+        return "workspace_mismatch", data
+    return "full_valid", data

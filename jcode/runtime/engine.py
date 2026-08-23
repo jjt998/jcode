@@ -22,6 +22,8 @@ class Engine:
         append_history(agent.session, "user", user_message, run_id=task_state.run_id)
         agent.session_events.emit("run_started", run_id=task_state.run_id, task_id=task_state.task_id, user_request=user_message[:500])
         agent.run_store.append_trace(run_dir, "run_started", task_state.run_id, task_id=task_state.task_id, user_request=user_message[:500])
+        if agent.working_memory.resume_context:
+            agent.run_store.append_trace(run_dir, "resume_evaluated", task_state.run_id, **agent.working_memory.resume_context)
         final_text = ""
 
         for step in range(agent.config.max_steps):

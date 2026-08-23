@@ -15,6 +15,7 @@ from jcode.policy.tool_rules import ToolPolicyChecker
 from jcode.providers.openai_compatible import OpenAICompatibleClient
 from jcode.providers.router import ModelRouter
 from jcode.runtime.agent import JCodeAgent
+from jcode.state.resume import build_resume_context
 from jcode.state.session import SessionStore
 from jcode.state.workspace import Workspace
 from jcode.tools.executor import ToolExecutor
@@ -31,12 +32,13 @@ def build_agent(config: AppConfig) -> JCodeAgent:
     session = session_store.load_requested(config.session_id, config.resume, workspace.root)
     working_memory = WorkingMemory.from_dict(session.get("working_memory", {}), workspace.root)
     if config.resume:
-        working_memory.resume_context = {
-            "session_id": session.get("id", ""),
-            "resume_requested": config.resume,
-            "history_items": len(session.get("history", [])),
-            "workspace_fingerprint": workspace.fingerprint(),
-        }
+        working_memory.resume_context = build_resume_context(
+            session=session,
+            session_store=session_store,
+            run_store=run_store,
+            workspace=workspace,
+            resume_requested=config.resume,
+        )
     redactor = SecretRedactor.from_environment(extra_names=("JCODE_API_KEY",))
     registry = build_default_registry(workspace)
     permissions = PermissionChecker(config.approval)
@@ -55,6 +57,9 @@ def build_agent(config: AppConfig) -> JCodeAgent:
     client = OpenAICompatibleClient(config.api_key, config.base_url, config.model)
     router = ModelRouter(client)
     session_events = SessionEventBus(state_dir / "sessions" / f"{session['id']}.events.jsonl")
+    if config.resume:
+        session_events.emit("session_resumed", **working_memory.resume_context)
+        session_events.emit("resume_checkpoint_evaluated", **working_memory.resume_context)
     workers = WorkerManager(workspace, state_dir / "workers", executor, router, config, session_events=session_events)
     builder = PromptBuilder(workspace=workspace, durable_memory=memory_store)
     return JCodeAgent(
