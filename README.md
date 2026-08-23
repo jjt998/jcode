@@ -2,7 +2,7 @@
 
 JCode 是一个轻量级本地 Coding Agent，设计上借鉴 Pico，但刻意保留更小的代码体量和更直接的工程链路。
 
-它覆盖本地代码代理最核心的一条链路：命令行入口、运行时装配、ReAct 循环、Prompt 构建、模型调用、工具执行、子 Agent、策略治理、工作记忆、运行证据、Checkpoint 和最终回答。
+它覆盖本地代码代理最核心的一条链路：命令行入口、运行时装配、ReAct 循环、上下文构建、模型调用、工具执行、子 Agent、策略治理、工作记忆、运行证据、Checkpoint 和最终回答。
 
 JCode 不包含 Pico 的 TUI、完整评测套件、Dream 整理、复杂多 Provider 路由、大规模 benchmark、vision/media 工具等非核心能力。
 
@@ -47,7 +47,7 @@ max_steps = 50
 max_new_tokens = 8192
 ```
 
-如果没有配置 `JCODE_API_KEY`，JCode 仍会构建 Prompt 并写入运行证据，但不会发送真实模型请求。
+如果没有配置 `JCODE_API_KEY`，JCode 仍会构建上下文并写入运行证据，但不会发送真实模型请求。
 
 ## 运行
 
@@ -97,7 +97,7 @@ jcode.app.cli
 
 - `app`：命令行参数、配置读取和运行时装配。
 - `runtime`：Agent 主循环、模型动作解析、终态收口和异常停止。
-- `context`：Prompt 分段构建、预算估算、技能提示注入。
+- `context`：模型上下文分段构建、预算估算、技能提示注入。
 - `tools`：工具注册、参数校验、工作区读写、shell、patch 和子任务工具。
 - `policy`：权限、工具规则、重复调用、sandbox、Final Gate 和敏感信息处理。
 - `state`：Session、TaskState、History、Checkpoint 和 Workspace。
@@ -105,9 +105,13 @@ jcode.app.cli
 - `workers`：轻量子 Agent 的创建、消息、等待、结果和 trace。
 - `evidence`：运行 trace、session event、report、artifact 和审计数据。
 
-## Prompt 结构
+## 代码约定
 
-JCode 始终使用稳定的 Prompt 结构，即使用户只输入一个很短的问题：
+- 类实例属性必须在类体中显式声明类型，避免只在 `__init__` 中动态挂载，保证 IDE 可以建立稳定的声明、定义和跳转链路。
+
+## 上下文结构
+
+JCode 始终使用稳定的上下文结构，即使用户只输入一个很短的问题：
 
 ```text
 prefix
@@ -189,11 +193,10 @@ JCode 支持轻量子 Agent 工具：
 
 JCode 的每次运行都可以审计：
 
-- `trace.jsonl`：逐事件记录 run started、prompt built、model parsed、tool executed、checkpoint created、memory maintained、run finished 等事件。
+- `trace.jsonl`：逐事件记录 run started、context built、model parsed、tool executed、checkpoint created、memory maintained、run finished 等事件。
 - `task_state.json`：当前任务状态、步数、工具数、失败工具、变更文件和最终答案。
 - `checkpoint.json`：恢复所需的运行状态和工作区指纹。
 - `report.json`：运行汇总、事件计数、worker refs、memory audit 和最终回答长度。
 - `<session_id>.events.jsonl`：跨 run 的 session 事件流。
 
 这些文件用于回答两个问题：这次运行做了什么，以及为什么停在当前状态。
-

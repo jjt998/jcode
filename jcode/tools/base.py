@@ -18,7 +18,7 @@ class ToolResult:
 class Tool:
     name: str
     schema: type
-    execute: Callable[[object], ToolResult]
+    execute: Callable[..., ToolResult]
     read_only: bool = True
     risky: bool = False
     description: str = ""

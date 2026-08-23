@@ -11,17 +11,16 @@ class ToolPolicyDecision:
 
 
 class ToolPolicyChecker:
-    def __init__(self, workspace, working_memory):
+    def __init__(self, workspace):
         self.workspace = workspace
-        self.working_memory = working_memory
 
-    def check(self, tool, args: dict) -> ToolPolicyDecision:
+    def check(self, tool, args: dict, working_memory) -> ToolPolicyDecision:
         path = args.get("path") or args.get("file")
         if path:
             self.workspace.resolve_path(path)
         if tool.name in {"write_file", "apply_patch"}:
             rel = str(path or "").replace("\\", "/")
-            if rel and rel not in self.working_memory.file_freshness:
+            if rel and rel not in working_memory.file_freshness:
                 return ToolPolicyDecision(False, "read_before_write", f"error: read {rel} before modifying it")
         if tool.name == "apply_patch" and args.get("old_text") == args.get("new_text"):
             return ToolPolicyDecision(False, "empty_patch", "error: patch old_text and new_text are identical")

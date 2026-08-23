@@ -7,16 +7,16 @@ from jcode.tools.workspace import read_file
 
 
 class ToolExecutor:
-    def __init__(self, *, registry, permissions, tool_policy, sandbox, call_guard, redactor, working_memory):
+    def __init__(self, *, workspace, registry, permissions, tool_policy, sandbox, call_guard, redactor):
+        self.workspace = workspace
         self.registry = registry
         self.permissions = permissions
         self.tool_policy = tool_policy
         self.sandbox = sandbox
         self.call_guard = call_guard
         self.redactor = redactor
-        self.working_memory = working_memory
 
-    def execute(self, name: str, args: dict) -> ToolResult:
+    def execute(self, name: str, args: dict, *, working_memory) -> ToolResult:
         tool = self.registry.get(name)
         if tool is None:
             return ToolResult("denied", f"error: unknown tool {name}", error_type="unknown_tool", metadata={"decision": "tool_lookup"})
@@ -28,7 +28,7 @@ class ToolExecutor:
         if self.call_guard.repeated(name, parsed_args):
             return ToolResult("denied", f"error: repeated identical tool call for {name}", error_type="repeated_identical_call", metadata={"decision": "call_guard"})
         try:
-            policy = self.tool_policy.check(tool, parsed_args)
+            policy = self.tool_policy.check(tool, parsed_args, working_memory)
         except Exception as exc:
             return ToolResult("denied", f"error: {exc}", error_type="path_escape", metadata={"decision": "tool_policy"})
         if not policy.allowed:
@@ -40,16 +40,16 @@ class ToolExecutor:
             ok, message = self.sandbox.check_shell()
             if not ok:
                 return ToolResult("denied", f"error: {message}", error_type="sandbox_required", metadata={"decision": "sandbox"})
-        before = self.registry.workspace.snapshot() if tool.risky else {}
+        before = self.workspace.snapshot() if tool.risky else {}
         try:
-            result = read_file(self.registry.workspace, self.working_memory, parsed) if name == "read_file" else tool.execute(parsed)
+            result = read_file(self.workspace, working_memory, parsed) if name == "read_file" else tool.execute(self.workspace, parsed)
         except Exception as exc:
-            after = self.registry.workspace.snapshot() if tool.risky else before
+            after = self.workspace.snapshot() if tool.risky else before
             changed = sorted(set(after) ^ set(before))
             status = "partial_success" if changed else "error"
             code = "tool_partial_success" if changed else "tool_failed"
             return ToolResult(status, f"error: tool {name} failed: {exc}", changed_files=changed, error_type=code, metadata={"decision": "execution"})
-        after = self.registry.workspace.snapshot() if tool.risky else before
+        after = self.workspace.snapshot() if tool.risky else before
         changed = sorted(set(after) ^ set(before))
         if changed and not result.changed_files:
             result.changed_files = changed

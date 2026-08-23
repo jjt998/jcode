@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from jcode.app.config import AppConfig
-from jcode.context.builder import PromptBuilder
+from jcode.context.builder import ContextBuilder
 from jcode.evidence.store import RunStore
 from jcode.evidence.session_log import SessionEventBus
 from jcode.memory.durable import DurableMemoryStore
@@ -40,19 +40,19 @@ def build_agent(config: AppConfig) -> JCodeAgent:
             resume_requested=config.resume,
         )
     redactor = SecretRedactor.from_environment(extra_names=("JCODE_API_KEY",))
-    registry = build_default_registry(workspace)
+    registry = build_default_registry()
     permissions = PermissionChecker(config.approval)
     sandbox = SandboxPolicy(config.sandbox)
     call_guard = CallGuard()
-    tool_policy = ToolPolicyChecker(workspace, working_memory)
+    tool_policy = ToolPolicyChecker(workspace)
     executor = ToolExecutor(
+        workspace=workspace,
         registry=registry,
         permissions=permissions,
         tool_policy=tool_policy,
         sandbox=sandbox,
         call_guard=call_guard,
         redactor=redactor,
-        working_memory=working_memory,
     )
     client = OpenAICompatibleClient(config.api_key, config.base_url, config.model)
     router = ModelRouter(client)
@@ -61,7 +61,7 @@ def build_agent(config: AppConfig) -> JCodeAgent:
         session_events.emit("session_resumed", **working_memory.resume_context)
         session_events.emit("resume_checkpoint_evaluated", **working_memory.resume_context)
     workers = WorkerManager(workspace, state_dir / "workers", executor, router, config, session_events=session_events)
-    builder = PromptBuilder(workspace=workspace, durable_memory=memory_store)
+    builder = ContextBuilder(workspace=workspace, durable_memory=memory_store)
     return JCodeAgent(
         config=config,
         workspace=workspace,
@@ -71,7 +71,7 @@ def build_agent(config: AppConfig) -> JCodeAgent:
         memory_store=memory_store,
         session_events=session_events,
         working_memory=working_memory,
-        prompt_builder=builder,
+        context_builder=builder,
         model_router=router,
         tool_executor=executor,
         worker_manager=workers,

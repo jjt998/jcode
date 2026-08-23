@@ -22,18 +22,18 @@ Stable safety rules:
 
 
 @dataclass
-class PromptBuildResult:
-    prompt: str
+class ContextBuildResult:
+    context: str
     metadata: dict
 
 
-class PromptBuilder:
+class ContextBuilder:
     def __init__(self, workspace, durable_memory, total_budget: int = 60000):
         self.workspace = workspace
         self.durable_memory = durable_memory
         self.total_budget = total_budget
 
-    def build(self, session: dict, working_memory, user_message: str) -> PromptBuildResult:
+    def build(self, session: dict, working_memory, user_message: str) -> ContextBuildResult:
         working_memory.retrieved_memory = self.durable_memory.retrieve(user_message)
         history = self._render_history(session.get("history", []), budget=12000)
         sections = {
@@ -43,16 +43,16 @@ class PromptBuilder:
             "history": history,
             "current_request": "Current user request:\n" + user_message,
         }
-        prompt = "\n\n".join(f"[{name}]\n{sections[name]}" for name in SECTION_ORDER)
+        context = "\n\n".join(f"[{name}]\n{sections[name]}" for name in SECTION_ORDER)
         metadata = {
             "sections": {
                 name: {"chars": len(sections[name]), "estimated_tokens": estimate_tokens(sections[name])}
                 for name in SECTION_ORDER
             },
-            "total_chars": len(prompt),
-            "estimated_input_tokens": estimate_tokens(prompt),
+            "total_chars": len(context),
+            "estimated_input_tokens": estimate_tokens(context),
         }
-        return PromptBuildResult(prompt=prompt, metadata=metadata)
+        return ContextBuildResult(context=context, metadata=metadata)
 
     def _render_history(self, history: list[dict], budget: int) -> str:
         lines = []

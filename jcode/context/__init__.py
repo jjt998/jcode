@@ -1,1 +1,1 @@
-"""Prompt context construction."""
+"""Agent context construction."""
