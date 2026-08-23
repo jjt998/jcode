@@ -90,7 +90,6 @@ JCode 保留一条清晰的主链路：
 jcode.app.cli
 -> jcode.app.bootstrap
 -> jcode.runtime.agent
--> jcode.runtime.engine
 -> context / tools / policy / state / memory / workers / evidence
 ```
 
@@ -197,5 +196,4 @@ JCode 的每次运行都可以审计：
 - `<session_id>.events.jsonl`：跨 run 的 session 事件流。
 
 这些文件用于回答两个问题：这次运行做了什么，以及为什么停在当前状态。
-
 
