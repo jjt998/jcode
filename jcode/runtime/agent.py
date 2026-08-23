@@ -202,7 +202,7 @@ class JCodeAgent:
         if action.tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"}:
             result = self.worker_manager.run_tool(action.tool_name, action.tool_args or {})
         else:
-            result = self.tool_executor.execute(action.tool_name, action.tool_args or {}, working_memory=self.working_memory)
+            result = self.tool_executor.execute(action.tool_name, action.tool_args or {}, working_memory=self.working_memory, run_id=task_state.run_id)
 
         task_state.record_tool(action.tool_name, result)
         self._append_history(

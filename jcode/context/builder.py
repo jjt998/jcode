@@ -34,7 +34,7 @@ class ContextBuilder:
         self.total_budget = total_budget
 
     def build(self, session: dict, working_memory, user_message: str) -> ContextBuildResult:
-        working_memory.retrieved_memory = self.durable_memory.retrieve(user_message)
+        working_memory.set_retrieval(user_message, self.durable_memory.retrieve(user_message))
         history = self._render_history(session.get("history", []), budget=12000)
         sections = {
             "prefix": PREFIX.strip(),

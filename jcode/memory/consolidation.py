@@ -5,4 +5,10 @@ def maintain_after_turn(store, working_memory, user_message: str, final_text: st
     promoted = store.promote_from_turn(user_message, final_text)
     if promoted:
         working_memory.durable_promotions.extend(promoted)
-    return {"promoted_count": len(promoted), "promoted_preview": [text[:200] for text in promoted]}
+    consolidation = store.consolidate_daily_logs()
+    return {
+        "promoted_count": len(promoted),
+        "promoted_preview": [text[:200] for text in promoted],
+        "daily_log_enabled": True,
+        "topic_consolidation": consolidation,
+    }
