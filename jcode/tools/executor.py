@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from jcode.policy.permissions import PermissionChecker
     from jcode.policy.sandbox import SandboxPolicy
     from jcode.policy.secrets import SecretRedactor
+    from jcode.policy.tool_profiles import ToolSetProfile
     from jcode.policy.tool_rules import ToolPolicyChecker
     from jcode.state.workspace import Workspace
     from jcode.tools.registry import ToolRegistry
@@ -37,7 +38,17 @@ class ToolExecutor:
         self.call_guard = call_guard
         self.redactor = redactor
 
-    def execute(self, name: str, args: dict, *, working_memory: WorkingMemory, run_id: str = "", source: str = "model") -> ToolResult:
+    def execute(
+        self,
+        name: str,
+        args: dict,
+        *,
+        working_memory: WorkingMemory,
+        tool_profile: ToolSetProfile | None = None,
+        write_scope: list[str] | None = None,
+        run_id: str = "",
+        source: str = "model",
+    ) -> ToolResult:
         request = ToolCallRequest(name=name, raw_args=dict(args or {}), run_id=run_id, source=source)
         tool = self.registry.get(request.name)
         if tool is None:
@@ -55,6 +66,12 @@ class ToolExecutor:
             return self._denied(decision, request=request, tool=tool)
         parsed_args = parsed.model_dump()
         invocation = ToolInvocation(request=request, tool=tool, parsed_args=parsed_args, read_only=tool.read_only, risky=tool.risky)
+        profile_decision = self._check_profile(invocation, tool_profile)
+        if not profile_decision.allowed:
+            return self._denied(profile_decision, invocation=invocation)
+        scope_decision = self._check_write_scope(invocation, write_scope)
+        if not scope_decision.allowed:
+            return self._denied(scope_decision, invocation=invocation)
         if self.call_guard.repeated(request.name, parsed_args):
             decision = PolicyDecision.deny(
                 "repeated_identical_call",
@@ -85,7 +102,7 @@ class ToolExecutor:
             changed = sorted(set(after) ^ set(before))
             status = "partial_success" if changed else "error"
             code = "tool_partial_success" if changed else "tool_failed"
-            metadata = self._metadata(invocation, [policy, permission, sandbox_decision], {"decision": "execution"})
+            metadata = self._metadata(invocation, [profile_decision, scope_decision, policy, permission, sandbox_decision], {"decision": "execution"})
             return ToolResult(status, f"error: tool {request.name} failed: {exc}", changed_files=changed, error_type=code, metadata=metadata, decision="executed")
         after = self.workspace.snapshot() if tool.risky else before
         changed = sorted(set(after) ^ set(before))
@@ -93,8 +110,53 @@ class ToolExecutor:
             result.changed_files = changed
         result.text = self.redactor.redact(result.text)
         result.decision = "executed"
-        result.metadata.update(self._metadata(invocation, [policy, permission, sandbox_decision], {"decision": "executed", "workspace_changed": bool(result.changed_files)}))
+        result.metadata.update(
+            self._metadata(
+                invocation,
+                [profile_decision, scope_decision, policy, permission, sandbox_decision],
+                {"decision": "executed", "workspace_changed": bool(result.changed_files)},
+            )
+        )
         return result
+
+    def _check_profile(self, invocation: ToolInvocation, tool_profile: ToolSetProfile | None) -> PolicyDecision:
+        if tool_profile is None or tool_profile.allows(invocation.tool.name):
+            return PolicyDecision.allow(
+                "tool_profile_allowed",
+                layer="tool_profile",
+                metadata={"tool_profile": getattr(tool_profile, "name", "none")},
+            )
+        return PolicyDecision.deny(
+            "tool_profile_denied",
+            f"error: tool {invocation.tool.name} is not allowed by profile {tool_profile.name}",
+            layer="tool_profile",
+            metadata={"tool_profile": tool_profile.name},
+        )
+
+    def _check_write_scope(self, invocation: ToolInvocation, write_scope: list[str] | None) -> PolicyDecision:
+        scopes = list(write_scope or [])
+        if not scopes or invocation.tool.name not in {"write_file", "apply_patch"}:
+            return PolicyDecision.allow("write_scope_not_required", layer="tool_profile", metadata={"write_scope": scopes})
+        target_value = invocation.parsed_args.get("path", "")
+        try:
+            target = self.workspace.resolve_path(target_value)
+            allowed_roots = [self.workspace.resolve_path(scope) for scope in scopes]
+        except Exception as exc:
+            return PolicyDecision.deny(
+                "write_scope_mismatch",
+                f"error: write target is outside allowed scope: {target_value}",
+                layer="tool_profile",
+                metadata={"error_type": type(exc).__name__, "write_scope": scopes},
+            )
+        for allowed_root in allowed_roots:
+            if target == allowed_root or allowed_root in target.parents:
+                return PolicyDecision.allow("write_scope_allowed", layer="tool_profile", metadata={"write_scope": scopes})
+        return PolicyDecision.deny(
+            "write_scope_mismatch",
+            f"error: write target is outside allowed scope: {target_value}",
+            layer="tool_profile",
+            metadata={"write_scope": scopes},
+        )
 
     def _denied(self, decision: PolicyDecision, *, request: ToolCallRequest | None = None, tool=None, invocation: ToolInvocation | None = None) -> ToolResult:
         if invocation is None and request is not None and tool is not None:

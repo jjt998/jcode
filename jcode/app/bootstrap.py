@@ -12,6 +12,7 @@ from jcode.policy.permissions import PermissionChecker
 from jcode.policy.sandbox import SandboxPolicy
 from jcode.policy.secrets import SecretRedactor
 from jcode.policy.tool_rules import ToolPolicyChecker
+from jcode.policy.tool_profiles import build_tool_profiles
 from jcode.providers.openai_compatible import OpenAICompatibleClient
 from jcode.providers.router import ModelRouter
 from jcode.runtime.agent import JCodeAgent
@@ -41,6 +42,7 @@ def build_agent(config: AppConfig) -> JCodeAgent:
         )
     redactor = SecretRedactor.from_environment(extra_names=("JCODE_API_KEY",))
     registry = build_default_registry()
+    tool_profiles = build_tool_profiles(registry)
     permissions = PermissionChecker(config.approval)
     sandbox = SandboxPolicy(config.sandbox)
     call_guard = CallGuard()
@@ -77,4 +79,7 @@ def build_agent(config: AppConfig) -> JCodeAgent:
         worker_manager=workers,
         final_gate=FinalGate(),
         redactor=redactor,
+        tool_profiles=tool_profiles,
+        active_tool_profile_name="default",
+        write_scope=[],
     )

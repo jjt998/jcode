@@ -5,12 +5,14 @@ from typing import TYPE_CHECKING
 from jcode.evidence.summaries import build_report
 from jcode.evidence.session_log import SessionEventBus
 from jcode.memory.consolidation import maintain_after_turn
+from jcode.policy.decisions import PolicyDecision
 from jcode.runtime.actions import parse_model_action
 from jcode.runtime.transitions import ABORTED, MODEL_ERROR, STEP_LIMIT_REACHED, VALID_FINAL
 from jcode.state.checkpoint import CheckpointManager
 from jcode.state.history import append_history
 from jcode.state.resume import build_resume_context
 from jcode.state.task import TaskState
+from jcode.tools.base import ToolResult
 
 if TYPE_CHECKING:
     from jcode.app.config import AppConfig
@@ -20,6 +22,7 @@ if TYPE_CHECKING:
     from jcode.memory.working import WorkingMemory
     from jcode.policy.final_gate import FinalGate
     from jcode.policy.secrets import SecretRedactor
+    from jcode.policy.tool_profiles import ToolSetProfile
     from jcode.providers.router import ModelRouter
     from jcode.state.session import SessionStore
     from jcode.state.workspace import Workspace
@@ -42,6 +45,9 @@ class JCodeAgent:
     worker_manager: WorkerManager
     final_gate: FinalGate
     redactor: SecretRedactor
+    tool_profiles: dict[str, ToolSetProfile]
+    active_tool_profile_name: str
+    write_scope: list[str]
     abort_requested: bool
 
     def __init__(
@@ -61,6 +67,9 @@ class JCodeAgent:
         worker_manager,
         final_gate,
         redactor,
+        tool_profiles,
+        active_tool_profile_name: str = "default",
+        write_scope: list[str] | None = None,
     ):
         self.config = config
         self.workspace = workspace
@@ -76,7 +85,24 @@ class JCodeAgent:
         self.worker_manager = worker_manager
         self.final_gate = final_gate
         self.redactor = redactor
+        self.tool_profiles = tool_profiles
+        self.active_tool_profile_name = active_tool_profile_name
+        self.write_scope = list(write_scope or [])
         self.abort_requested = False
+
+    @property
+    def active_tool_profile(self) -> ToolSetProfile:
+        return self.tool_profiles[self.active_tool_profile_name]
+
+    def set_tool_profile(self, name: str) -> None:
+        if name not in self.tool_profiles:
+            raise ValueError(f"unknown tool profile: {name}")
+        self.active_tool_profile_name = name
+
+    def run_dream(self, quiet: bool = False, session_ids: list[str] | None = None) -> str:
+        from jcode.memory.consolidation import run_dream
+
+        return run_dream(self, quiet=quiet, session_ids=session_ids)
 
     def ask(self, user_message: str) -> str:
         self.abort_requested = False
@@ -200,9 +226,37 @@ class JCodeAgent:
     def _handle_tool_action(self, action, task_state, run_dir, checkpoint) -> None:
         self._record_trace(run_dir, "tool_requested", task_state, name=action.tool_name, args=action.tool_args or {})
         if action.tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"}:
-            result = self.worker_manager.run_tool(action.tool_name, action.tool_args or {})
+            if self.active_tool_profile_name == "default":
+                result = self.worker_manager.run_tool(action.tool_name, action.tool_args or {})
+            else:
+                decision = PolicyDecision.deny(
+                    "tool_profile_denied",
+                    f"error: tool {action.tool_name} is not allowed by profile {self.active_tool_profile_name}",
+                    layer="tool_profile",
+                    metadata={"tool_profile": self.active_tool_profile_name},
+                )
+                result = ToolResult(
+                    "denied",
+                    decision.message,
+                    error_type=decision.reason,
+                    metadata={
+                        "policy": [decision.to_dict()],
+                        "decision": decision.layer,
+                        "tool_name": action.tool_name,
+                        "source": "model",
+                        "run_id": task_state.run_id,
+                    },
+                    decision=decision.decision,
+                )
         else:
-            result = self.tool_executor.execute(action.tool_name, action.tool_args or {}, working_memory=self.working_memory, run_id=task_state.run_id)
+            result = self.tool_executor.execute(
+                action.tool_name,
+                action.tool_args or {},
+                working_memory=self.working_memory,
+                tool_profile=self.active_tool_profile,
+                write_scope=self.write_scope,
+                run_id=task_state.run_id,
+            )
 
         task_state.record_tool(action.tool_name, result)
         self._append_history(
@@ -246,7 +300,7 @@ class JCodeAgent:
 
     def _finish_run(self, task_state, run_dir, final_text: str, stop_reason: str = VALID_FINAL) -> str:
         task_state.finish("completed" if stop_reason == VALID_FINAL else "stopped", stop_reason, final_text)
-        memory_audit = maintain_after_turn(self.memory_store, self.working_memory, task_state.user_request, final_text)
+        memory_audit = maintain_after_turn(self.memory_store, self.working_memory, task_state.user_request, final_text, agent=self)
         self._record_trace(run_dir, "memory_maintained", task_state, **memory_audit)
         self._record_trace(run_dir, "run_finished", task_state, status=task_state.status, stop_reason=stop_reason)
         self.session_events.emit("turn_finished", run_id=task_state.run_id, status=task_state.status, stop_reason=stop_reason)

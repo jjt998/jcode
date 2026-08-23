@@ -21,6 +21,9 @@ class AppConfig:
     max_steps: int
     max_new_tokens: int
     temperature: float
+    auto_dream: bool = False
+    dream_interval_hours: float = 24.0
+    dream_min_sessions: int = 5
     session_id: str | None = None
     resume: str | None = None
 
@@ -32,6 +35,12 @@ def _load_toml(path: Path | None) -> dict:
         return tomllib.load(fh)
 
 
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def load_config(args) -> AppConfig:
     cwd = Path(args.cwd).resolve()
     config_path = Path(args.config).resolve() if args.config else cwd / ".jcode.toml"
@@ -40,6 +49,7 @@ def load_config(args) -> AppConfig:
     provider_raw = dict(raw.get("providers", {}).get(provider, {}))
     security_raw = dict(raw.get("security", {}))
     runtime_raw = dict(raw.get("runtime", {}))
+    memory_raw = dict(raw.get("memory", {}))
     return AppConfig(
         cwd=cwd,
         provider=provider,
@@ -51,6 +61,9 @@ def load_config(args) -> AppConfig:
         max_steps=int(args.max_steps or runtime_raw.get("max_steps") or 50),
         max_new_tokens=int(args.max_new_tokens or runtime_raw.get("max_new_tokens") or 8192),
         temperature=float(args.temperature),
+        auto_dream=_as_bool(memory_raw.get("auto_dream", False)),
+        dream_interval_hours=float(memory_raw.get("dream_interval_hours", 24.0)),
+        dream_min_sessions=int(memory_raw.get("dream_min_sessions", 5)),
         session_id=args.session_id,
         resume=args.resume,
     )

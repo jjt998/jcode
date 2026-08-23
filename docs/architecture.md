@@ -33,6 +33,9 @@ app
 ## 工具与策略合同
 
 - 工具执行入口先构造 `ToolCallRequest`，再形成 `ToolInvocation`，之后按 validation、call guard、tool policy、permission、sandbox、execution 的顺序推进。
+- 工具 profile 是工具执行面的第一层能力收束；默认提供 `default`、`readonly`、`worker`、`dream` 四个命名 profile。
+- Profile gate 发生在参数校验后、具体策略检查前；拒绝统一写入 `ToolResult.metadata["policy"]`，稳定原因码为 `tool_profile_denied`。
+- Dream profile 只允许读取、列举、搜索以及 `write_file` / `apply_patch`，并额外叠加 `.jcode/memory/` 写作用域；越界写入原因码为 `write_scope_mismatch`。
 - 所有治理层都归一为 `PolicyDecision`：`decision` 表示 allow/warn/deny，`reason` 是稳定原因码，`layer` 标记来源层。
 - `ToolResult.metadata["policy"]` 保存本次工具调用经过的策略决策，便于 trace/report 审计。
 - `ToolResult.status` 继续保持现有兼容值，`ToolResult.decision` 表示治理决策，`ToolResult.ok` 提供成功判断。
@@ -45,7 +48,10 @@ app
 - `DurableMemoryStore` 同时保留旧 `notes.jsonl` 兼容入口，并维护 Pico 风格的 daily log、`MEMORY.md` 索引和 topic 文件。
 - Daily log 位于 `.jcode/memory/logs/YYYY/MM/YYYY-MM-DD.md`，每轮结束把高层摘要写入追加日志。
 - Topic consolidation 是确定性轻量整理：把 daily log 条目分类写入 `topics/project-conventions.md`、`topics/key-decisions.md`、`topics/dependency-facts.md`、`topics/user-preferences.md`，并更新 `MEMORY.md`。
-- 当前 consolidation 不启动后台 agent，不读取大 transcript，不引入 Pico 的 Dream/TUI/media 运行面。
+- Dream 是受限记忆整理子 Agent：通过 `agent.run_dream()` 手动触发，创建独立 session、独立 working memory 和独立 run evidence，但复用 provider、config、session store、run store、tool executor 与 memory store。
+- Dream 的 workspace 仍是项目根，但 active profile 固定为 `dream`，写作用域固定为 `.jcode/memory/`；它可以整理 daily log、topic 文件和 `MEMORY.md`，不能改普通源码文件。
+- `auto_dream`、`dream_interval_hours`、`dream_min_sessions` 已进入配置模型，默认 `auto_dream = false`；不会引入后台线程自动 Dream。
+- Dream 每次运行会在 `.jcode/memory/dream_reports/` 写 JSON 报告，并在 session events 中记录 `dream_started`、`dream_finished` 或 `dream_failed`。
 
 ## 当前主链路
 
