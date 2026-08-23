@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from jcode.evidence.session_log import SessionEventBus
 from jcode.runtime.engine import Engine
 
 
@@ -12,6 +13,8 @@ class JCodeAgent:
         session,
         session_store,
         run_store,
+        memory_store,
+        session_events,
         working_memory,
         prompt_builder,
         model_router,
@@ -25,6 +28,8 @@ class JCodeAgent:
         self.session = session
         self.session_store = session_store
         self.run_store = run_store
+        self.memory_store = memory_store
+        self.session_events = session_events
         self.working_memory = working_memory
         self.prompt_builder = prompt_builder
         self.model_router = model_router
@@ -40,6 +45,10 @@ class JCodeAgent:
 
     def resume(self, session_id: str) -> None:
         self.session = self.session_store.load_requested(session_id, None, self.workspace.root)
+        self.working_memory = type(self.working_memory).from_dict(self.session.get("working_memory", {}), self.workspace.root)
+        self.tool_executor.working_memory = self.working_memory
+        self.tool_executor.tool_policy.working_memory = self.working_memory
+        self.session_events = SessionEventBus(self.session_events.path.parent / f"{self.session['id']}.events.jsonl")
 
     def abort(self) -> None:
         self.abort_requested = True

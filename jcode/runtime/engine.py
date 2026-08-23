@@ -14,11 +14,13 @@ class Engine:
 
     def ask(self, user_message: str) -> str:
         agent = self.agent
+        agent.abort_requested = False
         task_state = TaskState.create(user_message)
         run_dir = agent.run_store.start_run(task_state)
         checkpoint = CheckpointManager(run_dir, agent.workspace)
         agent.working_memory.task_goal = user_message
-        append_history(agent.session, "user", user_message)
+        append_history(agent.session, "user", user_message, run_id=task_state.run_id)
+        agent.session_events.emit("run_started", run_id=task_state.run_id, task_id=task_state.task_id, user_request=user_message[:500])
         agent.run_store.append_trace(run_dir, "run_started", task_state.run_id, task_id=task_state.task_id, user_request=user_message[:500])
         final_text = ""
 
@@ -55,17 +57,17 @@ class Engine:
                 decision = agent.final_gate.check(action.content, task_state, agent.working_memory)
                 agent.run_store.append_trace(run_dir, "final_readiness_decision", task_state.run_id, **decision)
                 if decision["allowed"]:
-                    append_history(agent.session, "assistant", action.content)
+                    append_history(agent.session, "assistant", action.content, run_id=task_state.run_id)
                     checkpoint.create(agent.session, task_state, agent.working_memory, agent.worker_manager.worker_refs())
                     agent.run_store.append_trace(run_dir, "checkpoint_created", task_state.run_id, trigger="final")
                     final_text = action.content
                     return finish_run(agent, task_state, run_dir, final_text, VALID_FINAL)
-                append_history(agent.session, "tool", decision["message"], name="final_gate")
+                append_history(agent.session, "tool", decision["message"], name="final_gate", run_id=task_state.run_id, tool_status="denied")
                 agent.working_memory.observe_tool(decision["message"])
                 continue
 
             if action.kind != "tool":
-                append_history(agent.session, "tool", action.content, name="parser")
+                append_history(agent.session, "tool", action.content, name="parser", run_id=task_state.run_id, tool_status="error")
                 agent.working_memory.observe_tool(action.content)
                 continue
 
@@ -75,8 +77,18 @@ class Engine:
             else:
                 result = agent.tool_executor.execute(action.tool_name, action.tool_args or {})
 
-            task_state.tool_steps += 1
-            append_history(agent.session, "tool", result.text, name=action.tool_name, tool_status=result.status)
+            task_state.record_tool(action.tool_name, result)
+            append_history(
+                agent.session,
+                "tool",
+                result.text,
+                name=action.tool_name,
+                run_id=task_state.run_id,
+                tool_status=result.status,
+                error_type=result.error_type,
+                changed_files=result.changed_files,
+                metadata=result.metadata,
+            )
             agent.working_memory.observe_tool(f"{action.tool_name}: {result.status}: {result.text[:500]}")
             if action.tool_name == "wait_subagent" and result.status == "success":
                 agent.working_memory.subagent_results.append(result.text[:1000])
@@ -90,6 +102,7 @@ class Engine:
                 status=result.status,
                 error_type=result.error_type,
                 changed_files=result.changed_files,
+                metadata=result.metadata,
                 result=agent.redactor.redact(result.text[:1000]),
             )
             checkpoint.create(agent.session, task_state, agent.working_memory, agent.worker_manager.worker_refs())

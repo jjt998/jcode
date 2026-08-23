@@ -3,6 +3,7 @@ from __future__ import annotations
 from jcode.app.config import AppConfig
 from jcode.context.builder import PromptBuilder
 from jcode.evidence.store import RunStore
+from jcode.evidence.session_log import SessionEventBus
 from jcode.memory.durable import DurableMemoryStore
 from jcode.memory.working import WorkingMemory
 from jcode.policy.call_guard import CallGuard
@@ -29,6 +30,13 @@ def build_agent(config: AppConfig) -> JCodeAgent:
     memory_store = DurableMemoryStore(state_dir / "memory")
     session = session_store.load_requested(config.session_id, config.resume, workspace.root)
     working_memory = WorkingMemory.from_dict(session.get("working_memory", {}), workspace.root)
+    if config.resume:
+        working_memory.resume_context = {
+            "session_id": session.get("id", ""),
+            "resume_requested": config.resume,
+            "history_items": len(session.get("history", [])),
+            "workspace_fingerprint": workspace.fingerprint(),
+        }
     redactor = SecretRedactor.from_environment(extra_names=("JCODE_API_KEY",))
     registry = build_default_registry(workspace)
     permissions = PermissionChecker(config.approval)
@@ -46,7 +54,8 @@ def build_agent(config: AppConfig) -> JCodeAgent:
     )
     client = OpenAICompatibleClient(config.api_key, config.base_url, config.model)
     router = ModelRouter(client)
-    workers = WorkerManager(workspace, state_dir / "workers", executor, router, config)
+    session_events = SessionEventBus(state_dir / "sessions" / f"{session['id']}.events.jsonl")
+    workers = WorkerManager(workspace, state_dir / "workers", executor, router, config, session_events=session_events)
     builder = PromptBuilder(workspace=workspace, durable_memory=memory_store)
     return JCodeAgent(
         config=config,
@@ -54,6 +63,8 @@ def build_agent(config: AppConfig) -> JCodeAgent:
         session=session,
         session_store=session_store,
         run_store=run_store,
+        memory_store=memory_store,
+        session_events=session_events,
         working_memory=working_memory,
         prompt_builder=builder,
         model_router=router,

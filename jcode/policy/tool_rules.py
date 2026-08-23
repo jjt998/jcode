@@ -23,6 +23,8 @@ class ToolPolicyChecker:
             rel = str(path or "").replace("\\", "/")
             if rel and rel not in self.working_memory.file_freshness:
                 return ToolPolicyDecision(False, "read_before_write", f"error: read {rel} before modifying it")
+        if tool.name == "apply_patch" and args.get("old_text") == args.get("new_text"):
+            return ToolPolicyDecision(False, "empty_patch", "error: patch old_text and new_text are identical")
         if tool.name == "run_shell":
             timeout = int(args.get("timeout", 60))
             if timeout < 1 or timeout > 600:

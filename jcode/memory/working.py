@@ -15,6 +15,8 @@ class WorkingMemory:
     resume_context: dict = field(default_factory=dict)
     retrieved_memory: list[str] = field(default_factory=list)
     subagent_results: list[str] = field(default_factory=list)
+    durable_promotions: list[str] = field(default_factory=list)
+    safety_notes: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict, workspace_root: Path) -> "WorkingMemory":
@@ -28,6 +30,8 @@ class WorkingMemory:
             resume_context=dict(data.get("resume_context", {})),
             retrieved_memory=list(data.get("retrieved_memory", [])),
             subagent_results=list(data.get("subagent_results", [])),
+            durable_promotions=list(data.get("durable_promotions", [])),
+            safety_notes=list(data.get("safety_notes", [])),
         )
 
     def to_dict(self) -> dict:
@@ -40,6 +44,8 @@ class WorkingMemory:
             "resume_context": self.resume_context,
             "retrieved_memory": self.retrieved_memory,
             "subagent_results": self.subagent_results[-10:],
+            "durable_promotions": self.durable_promotions[-20:],
+            "safety_notes": self.safety_notes[-20:],
         }
 
     def note_file_read(self, relpath: str, freshness: str) -> None:
@@ -49,6 +55,9 @@ class WorkingMemory:
 
     def observe_tool(self, text: str) -> None:
         self.tool_observations.append(text[:1000])
+
+    def note_safety(self, text: str) -> None:
+        self.safety_notes.append(text[:1000])
 
     def render(self) -> str:
         lines = ["Working memory:"]
@@ -68,4 +77,6 @@ class WorkingMemory:
             lines.append("- subagent_results:\n" + "\n".join(f"  - {x}" for x in self.subagent_results[-5:]))
         if self.tool_observations:
             lines.append("- recent_tool_observations:\n" + "\n".join(f"  - {x}" for x in self.tool_observations[-5:]))
+        if self.safety_notes:
+            lines.append("- safety_notes:\n" + "\n".join(f"  - {x}" for x in self.safety_notes[-5:]))
         return "\n".join(lines)

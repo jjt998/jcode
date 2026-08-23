@@ -25,14 +25,20 @@ class SessionStore:
             if path.exists():
                 return json.loads(path.read_text(encoding="utf-8"))
         return {
+            "schema_version": 2,
             "id": session_id or f"{now_iso().replace(':', '').replace('-', '')}-{uuid.uuid4().hex[:6]}",
             "created_at": now_iso(),
+            "updated_at": now_iso(),
             "workspace_root": str(workspace_root),
             "history": [],
             "working_memory": {},
+            "run_ids": [],
+            "event_seq": 0,
         }
 
     def save(self, session: dict) -> Path:
+        session.setdefault("schema_version", 2)
+        session["updated_at"] = now_iso()
         path = self.root / f"{session['id']}.json"
         path.write_text(json.dumps(session, ensure_ascii=False, indent=2), encoding="utf-8")
         return path

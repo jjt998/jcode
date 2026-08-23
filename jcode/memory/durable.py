@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from jcode.memory.safety import looks_sensitive
 from jcode.state.workspace import now_iso
 
 
@@ -12,9 +13,12 @@ class DurableMemoryStore:
         self.root.mkdir(parents=True, exist_ok=True)
         self.path = root / "notes.jsonl"
 
-    def add(self, text: str, source: str = "manual") -> None:
+    def add(self, text: str, source: str = "manual") -> bool:
+        if not text.strip() or looks_sensitive(text):
+            return False
         with self.path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps({"text": text, "source": source, "updated_at": now_iso()}, ensure_ascii=False) + "\n")
+        return True
 
     def retrieve(self, query: str, limit: int = 5, max_chars: int = 2000) -> list[str]:
         if not self.path.exists():
@@ -39,3 +43,13 @@ class DurableMemoryStore:
             result.append(text)
             used += len(text)
         return result
+
+    def promote_from_turn(self, user_message: str, final_text: str) -> list[str]:
+        candidates = []
+        if final_text.strip():
+            candidates.append(f"Task: {user_message[:300]}\nOutcome: {final_text[:1000]}")
+        promoted = []
+        for text in candidates:
+            if self.add(text, source="turn_summary"):
+                promoted.append(text)
+        return promoted
