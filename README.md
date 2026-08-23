@@ -4,7 +4,7 @@ JCode 是一个轻量级本地 Coding Agent，设计上借鉴 Pico，但刻意�
 
 它覆盖本地代码代理最核心的一条链路：命令行入口、运行时装配、ReAct 循环、上下文构建、模型调用、工具执行、子 Agent、策略治理、工作记忆、运行证据、Checkpoint 和最终回答。
 
-JCode 不包含 Pico 的 TUI、完整评测套件、Dream 整理、复杂多 Provider 路由、大规模 benchmark、vision/media 工具等非核心能力。
+JCode 已包含受限 Dream 子 Agent 和工具 Profile，但不包含 Pico 的 TUI、完整评测套件、复杂多 Provider 路由、大规模 benchmark、vision/media 工具等非核心能力。
 
 ## 安装
 
@@ -78,7 +78,11 @@ jcode --session-id demo-session "实现一个小功能"
     <session_id>.json
     <session_id>.events.jsonl
   memory/
-    notes.jsonl
+    MEMORY.md
+    logs/YYYY/MM/YYYY-MM-DD.md
+    topics/*.md
+    dream_reports/*.json
+    notes.jsonl  # legacy compatibility
   workers/
 ```
 
@@ -101,7 +105,7 @@ jcode.app.cli
 - `tools`：工具注册、参数校验、工作区读写、shell、patch 和子任务工具。
 - `policy`：权限、工具规则、重复调用、sandbox、Final Gate 和敏感信息处理。
 - `state`：Session、TaskState、History、Checkpoint 和 Workspace。
-- `memory`：Working Memory、Durable Memory、检索、安全过滤和轮次整理。
+- `memory`：Working_Memory、Daily Log、Durable Memory、检索、安全过滤和轮次整理。
 - `workers`：轻量子 Agent 的创建、消息、等待、结果和 trace。
 - `evidence`：运行 trace、session event、report、artifact 和审计数据。
 
@@ -125,7 +129,7 @@ current_request
 
 - `prefix` 放稳定身份、输出协议和安全规则。
 - `skill` 放技能相关提示。
-- `working_memory` 放当前任务目标、最近文件、文件 freshness、恢复上下文、检索到的长期记忆、子 Agent 结果和工具观察。
+- `working_memory` 放 `Working_Memory` 渲染结果，包括当前任务目标、最近文件、文件 freshness、恢复上下文、检索到的长期记忆、子 Agent 结果和工具观察。
 - `history` 放当前 session 的历史对话和工具结果。
 - `current_request` 放本轮用户请求。
 
@@ -161,12 +165,15 @@ current_request
 
 ## 记忆与恢复
 
-JCode 使用两层记忆：
+JCode 对外统一使用三层记忆认知：
 
-- Working Memory：当前任务内的目标、约束、最近文件、工具观察、子 Agent 结果和恢复上下文。
-- Durable Memory：跨 session 的简短长期记忆，保存在 `.jcode/memory/notes.jsonl`。
+- `Working_Memory`：当前回合的短期推理状态，包含 `task`、`files`、`retrieval`、`tools`、`safety`。它服务当前上下文构建和工具策略，不追求长期保存。
+- `Daily Log`：每轮追加的过程层日志，位于 `.jcode/memory/logs/YYYY/MM/YYYY-MM-DD.md`，记录当天发生了什么、做了什么和本轮摘要。它是整理输入，不是最终知识库。
+- `Durable Memory`：长期稳定结论层，包括 `.jcode/memory/MEMORY.md`、`.jcode/memory/topics/*.md`、未来的结构化记忆文件和可检索沉淀内容。`notes.jsonl` 仅作为旧版本兼容入口保留。
 
-每轮结束时，JCode 会尝试把任务结果整理成长期记忆。包含明显密钥、token、password、secret 等敏感特征的内容不会写入长期记忆。
+每轮结束时，JCode 会先把摘要写入 Daily Log，再把过程信号整理到 Durable Memory 的 topic 和索引里。包含明显密钥、token、password、secret 等敏感特征的内容不会进入长期结论层。
+
+Dream 子 Agent 可以通过内部入口 `agent.run_dream()` 手动触发。Dream 使用受限工具 Profile，只能在 `.jcode/memory/` 内整理 Daily Log、topic 和 `MEMORY.md`，不会修改普通源码文件。
 
 Checkpoint 保存在每次运行的 `checkpoint.json` 中，记录 session、run、step、last action、changed files、working memory、workspace fingerprint 和 worker refs，用于后续恢复判断。
 

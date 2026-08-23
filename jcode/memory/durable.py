@@ -40,7 +40,7 @@ class DurableMemoryStore:
 
     def __init__(self, root: Path):
         self.root = ensure_memory_dir(root)
-        self.path = root / "notes.jsonl"
+        self.path = self.root / "notes.jsonl"
         self.index_path = self.root / ENTRYPOINT_NAME
         self.topics_dir = self.root / "topics"
 
@@ -74,16 +74,32 @@ class DurableMemoryStore:
             used += len(text)
         return result
 
-    def promote_from_turn(self, user_message: str, final_text: str) -> list[str]:
+    def promote_from_turn(self, user_message: str, final_text: str) -> dict:
         candidates = []
         if final_text.strip():
             candidates.append(f"Task: {user_message[:300]}\nOutcome: {final_text[:1000]}")
         promoted = []
+        log_paths = []
         for text in candidates:
-            self.append_daily_log(text, source="turn_summary")
+            log_path = self.append_daily_log(text, source="turn_summary")
+            if log_path:
+                log_paths.append(log_path)
             if self.add(text, source="turn_summary"):
                 promoted.append(text)
-        return promoted
+        return {
+            "daily_log": {
+                "enabled": True,
+                "source": "turn_summary",
+                "count": len(log_paths),
+                "paths": log_paths,
+            },
+            "durable_memory": {
+                "promoted_count": len(promoted),
+                "promoted_preview": [text[:200] for text in promoted],
+                "legacy_notes_jsonl": str(self.path),
+            },
+            "promoted": promoted,
+        }
 
     def consolidate_daily_logs(self) -> dict:
         entries = iter_daily_log_entries(self.root)

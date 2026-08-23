@@ -18,16 +18,14 @@ DREAM_MIN_NEW_TOKENS = 4096
 
 
 def maintain_after_turn(store, working_memory, user_message: str, final_text: str, agent=None) -> dict:
-    promoted = store.promote_from_turn(user_message, final_text)
-    if promoted:
-        working_memory.durable_promotions.extend(promoted)
+    promotion = store.promote_from_turn(user_message, final_text)
     consolidation = store.consolidate_daily_logs()
     auto_dream = _maybe_run_auto_dream(store, agent)
+    durable_memory = dict(promotion.get("durable_memory", {}))
+    durable_memory["topic_consolidation"] = consolidation
     return {
-        "promoted_count": len(promoted),
-        "promoted_preview": [text[:200] for text in promoted],
-        "daily_log_enabled": True,
-        "topic_consolidation": consolidation,
+        "daily_log": dict(promotion.get("daily_log", {"enabled": True, "source": "turn_summary", "count": 0, "paths": []})),
+        "durable_memory": durable_memory,
         "auto_dream": auto_dream,
     }
 
@@ -46,32 +44,34 @@ def build_dream_prompt(memory_dir, session_ids: list[str] | None = None) -> str:
         session_section = label + "\n" + "\n".join(f"- {session_id}" for session_id in session_ids)
     return f"""# Dream: Memory Consolidation
 
-You are a restricted Dream sub-agent for JCode. Your only job is to organize durable memory files.
+You are a restricted Dream sub-agent for JCode. Your only job is to turn process-layer Daily Log signal into conclusion-layer Durable Memory.
 
 Memory directory: `{memory_path}`
 Allowed writes: only inside `{memory_path}`.
-Daily logs live under `logs/YYYY/MM/YYYY-MM-DD.md`.
-The memory index is `MEMORY.md`.
+Working_Memory is the current-turn scratchpad and is not your durable source of truth.
+Daily Log files live under `logs/YYYY/MM/YYYY-MM-DD.md`; they are process logs, not final knowledge.
+Durable Memory is the conclusion layer: `MEMORY.md`, `topics/*`, and future structured memory files.
+The Durable Memory index is `MEMORY.md`.
 
 ## Read
 
 - List the memory directory.
 - Read `MEMORY.md` if it exists.
 - Skim topic files under `topics/`.
-- Review recent daily logs. Search narrowly if logs are large.
+- Review recent Daily Log entries as process input. Search narrowly if logs are large.
 
 ## Consolidate
 
 - Merge duplicate or overlapping notes.
-- Keep stable project conventions, key decisions, dependency facts, and user preferences.
+- Promote only stable conclusions into Durable Memory: project conventions, key decisions, dependency facts, and user preferences.
 - Remove obvious noise and stale contradictions.
 - Do not preserve secrets, credentials, raw command output, long logs, or transient task state.
 - Convert relative dates to absolute dates when the surrounding evidence makes that possible.
 
 ## Write
 
-- Update topic files under `topics/`.
-- Update `MEMORY.md` as an index, keeping it under {MAX_ENTRYPOINT_LINES} lines.
+- Update Durable Memory topic files under `topics/`.
+- Update Durable Memory index `MEMORY.md`, keeping it under {MAX_ENTRYPOINT_LINES} lines.
 - Do not write outside the memory directory.
 
 Return a brief final summary of what changed. If nothing changed, say so.

@@ -16,7 +16,6 @@ class WorkingMemory:
     retrieved_memory: list[str] = field(default_factory=list)
     last_retrieval_query: str = ""
     subagent_results: list[str] = field(default_factory=list)
-    durable_promotions: list[str] = field(default_factory=list)
     safety_notes: list[str] = field(default_factory=list)
 
     @classmethod
@@ -25,7 +24,6 @@ class WorkingMemory:
         files = data.get("files", {}) if isinstance(data.get("files"), dict) else {}
         retrieval = data.get("retrieval", {}) if isinstance(data.get("retrieval"), dict) else {}
         tools = data.get("tools", {}) if isinstance(data.get("tools"), dict) else {}
-        durable = data.get("durable", {}) if isinstance(data.get("durable"), dict) else {}
         safety = data.get("safety", {}) if isinstance(data.get("safety"), dict) else {}
         return cls(
             workspace_root=workspace_root,
@@ -38,7 +36,6 @@ class WorkingMemory:
             retrieved_memory=list(retrieval.get("items", data.get("retrieved_memory", []))),
             last_retrieval_query=str(retrieval.get("last_query", data.get("last_retrieval_query", ""))),
             subagent_results=list(tools.get("subagent_results", data.get("subagent_results", []))),
-            durable_promotions=list(durable.get("promotions", data.get("durable_promotions", []))),
             safety_notes=list(safety.get("notes", data.get("safety_notes", []))),
         )
 
@@ -62,9 +59,6 @@ class WorkingMemory:
                 "observations": self.tool_observations[-20:],
                 "subagent_results": self.subagent_results[-10:],
             },
-            "durable": {
-                "promotions": self.durable_promotions[-20:],
-            },
             "safety": {
                 "notes": self.safety_notes[-20:],
             },
@@ -86,7 +80,7 @@ class WorkingMemory:
         self.safety_notes.append(text[:1000])
 
     def render(self) -> str:
-        lines = ["Working memory:"]
+        lines = ["Working_Memory:"]
         lines.append("[task]")
         lines.append(f"- goal: {self.task_goal or '(not set)'}")
         if self.constraints:
