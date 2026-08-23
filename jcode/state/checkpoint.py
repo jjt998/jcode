@@ -9,6 +9,9 @@ SCHEMA_VERSION = 1
 
 
 class CheckpointManager:
+    workspace: Workspace
+    path: Path
+
     def __init__(self, run_dir: Path, workspace: Workspace):
         self.workspace = workspace
         self.path = run_dir / "checkpoint.json"

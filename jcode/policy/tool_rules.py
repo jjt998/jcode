@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from jcode.policy.decisions import PolicyDecision
+
+if TYPE_CHECKING:
+    from jcode.memory.working import WorkingMemory
+    from jcode.state.workspace import Workspace
+    from jcode.tools.base import Tool
 
 
 class ToolPolicyChecker:
-    workspace: object
+    workspace: Workspace
 
     def __init__(self, workspace):
         self.workspace = workspace
 
-    def check(self, tool, args: dict, working_memory) -> PolicyDecision:
+    def check(self, tool: Tool, args: dict, working_memory: WorkingMemory) -> PolicyDecision:
         path = args.get("path") or args.get("file")
         if path:
             self.workspace.resolve_path(path)

@@ -3,13 +3,29 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from jcode.tools.base import ToolResult
 from jcode.tools.schemas import SendSubagentMessageArgs, SpawnSubagentArgs, WaitSubagentArgs
 from jcode.workers.runtime import WorkerRuntime
 
+if TYPE_CHECKING:
+    from jcode.app.config import AppConfig
+    from jcode.evidence.session_log import SessionEventBus
+    from jcode.providers.router import ModelRouter
+    from jcode.state.workspace import Workspace
+    from jcode.tools.executor import ToolExecutor
+
 
 class WorkerManager:
+    workspace: Workspace
+    root: Path
+    tool_executor: ToolExecutor
+    model_router: ModelRouter
+    config: AppConfig
+    session_events: SessionEventBus | None
+    workers: dict[str, WorkerRuntime]
+
     def __init__(self, workspace, root: Path, tool_executor, model_router, config, session_events=None):
         self.workspace = workspace
         self.root = root

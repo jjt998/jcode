@@ -1,20 +1,32 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from pydantic import ValidationError
 
 from jcode.policy.decisions import PolicyDecision
 from jcode.tools.base import ToolCallRequest, ToolInvocation, ToolResult
 from jcode.tools.workspace import read_file
 
+if TYPE_CHECKING:
+    from jcode.memory.working import WorkingMemory
+    from jcode.policy.call_guard import CallGuard
+    from jcode.policy.permissions import PermissionChecker
+    from jcode.policy.sandbox import SandboxPolicy
+    from jcode.policy.secrets import SecretRedactor
+    from jcode.policy.tool_rules import ToolPolicyChecker
+    from jcode.state.workspace import Workspace
+    from jcode.tools.registry import ToolRegistry
+
 
 class ToolExecutor:
-    workspace: object
-    registry: object
-    permissions: object
-    tool_policy: object
-    sandbox: object
-    call_guard: object
-    redactor: object
+    workspace: Workspace
+    registry: ToolRegistry
+    permissions: PermissionChecker
+    tool_policy: ToolPolicyChecker
+    sandbox: SandboxPolicy
+    call_guard: CallGuard
+    redactor: SecretRedactor
 
     def __init__(self, *, workspace, registry, permissions, tool_policy, sandbox, call_guard, redactor):
         self.workspace = workspace
@@ -25,7 +37,7 @@ class ToolExecutor:
         self.call_guard = call_guard
         self.redactor = redactor
 
-    def execute(self, name: str, args: dict, *, working_memory, run_id: str = "", source: str = "model") -> ToolResult:
+    def execute(self, name: str, args: dict, *, working_memory: WorkingMemory, run_id: str = "", source: str = "model") -> ToolResult:
         request = ToolCallRequest(name=name, raw_args=dict(args or {}), run_id=run_id, source=source)
         tool = self.registry.get(request.name)
         if tool is None:

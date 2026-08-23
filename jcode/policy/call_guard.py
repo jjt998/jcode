@@ -4,6 +4,8 @@ import json
 
 
 class CallGuard:
+    seen: set[str]
+
     def __init__(self):
         self.seen: set[str] = set()
 

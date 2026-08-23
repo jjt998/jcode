@@ -4,6 +4,12 @@ from jcode.workers.result import WorkerResult
 
 
 class WorkerRuntime:
+    worker_id: str
+    prompt: str
+    messages: list[str]
+    status: str
+    result: str
+
     def __init__(self, worker_id: str, prompt: str):
         self.worker_id = worker_id
         self.prompt = prompt

@@ -4,6 +4,8 @@ import os
 
 
 class SecretRedactor:
+    values: set[str]
+
     def __init__(self, values: set[str]):
         self.values = {value for value in values if value}
 

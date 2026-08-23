@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from jcode.context.budget import estimate_tokens, tail_clip
 from jcode.context.sections import SECTION_ORDER
 from jcode.context.skills import render_skill_section
+
+if TYPE_CHECKING:
+    from jcode.memory.durable import DurableMemoryStore
+    from jcode.state.workspace import Workspace
 
 PREFIX = """You are JCode, a compact local coding agent.
 
@@ -28,6 +33,10 @@ class ContextBuildResult:
 
 
 class ContextBuilder:
+    workspace: Workspace
+    durable_memory: DurableMemoryStore
+    total_budget: int
+
     def __init__(self, workspace, durable_memory, total_budget: int = 60000):
         self.workspace = workspace
         self.durable_memory = durable_memory

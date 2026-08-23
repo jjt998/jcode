@@ -7,6 +7,8 @@ from jcode.evidence.events import event_record
 
 
 class RunStore:
+    root: Path
+
     def __init__(self, root: Path):
         self.root = root
         self.root.mkdir(parents=True, exist_ok=True)

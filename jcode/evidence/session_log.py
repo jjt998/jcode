@@ -7,6 +7,9 @@ from jcode.evidence.events import event_record
 
 
 class SessionEventBus:
+    path: Path
+    run_id: str
+
     def __init__(self, path: Path, run_id: str = ""):
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)

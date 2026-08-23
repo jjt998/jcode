@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from jcode.providers.base import ModelClient, ModelResponse
+
 
 class ModelRouter:
-    def __init__(self, client):
+    client: ModelClient
+
+    def __init__(self, client: ModelClient):
         self.client = client
 
-    def complete(self, context: str, *, max_tokens: int, temperature: float):
+    def complete(self, context: str, *, max_tokens: int, temperature: float) -> ModelResponse:
         return self.client.complete(
             [{"role": "user", "content": context}],
             model=self.client.model,

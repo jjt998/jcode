@@ -8,6 +8,8 @@ from jcode.state.workspace import now_iso
 
 
 class SessionStore:
+    root: Path
+
     def __init__(self, root: Path):
         self.root = root
         self.root.mkdir(parents=True, exist_ok=True)

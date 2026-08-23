@@ -8,6 +8,8 @@ from jcode.tools.workspace import list_files, read_file, search, write_file
 
 
 class ToolRegistry:
+    tools: dict[str, Tool]
+
     def __init__(self):
         self.tools: dict[str, Tool] = {}
 
