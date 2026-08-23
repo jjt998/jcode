@@ -16,10 +16,10 @@ class OpenAICompatibleClient:
 
     def complete(self, messages: list[dict], *, model: str, max_tokens: int, temperature: float) -> ModelResponse:
         if not self.api_key:
-            prompt = messages[-1].get("content", "") if messages else ""
+            context = messages[-1].get("content", "") if messages else ""
             return ModelResponse(
-                text="<final>JCode is configured without JCODE_API_KEY. The prompt was built and traced, but no provider request was sent.</final>",
-                input_tokens=estimate_tokens(prompt),
+                text="<final>JCode is configured without JCODE_API_KEY. The context was built and traced, but no provider request was sent.</final>",
+                input_tokens=estimate_tokens(context),
                 output_tokens=30,
             )
         payload = json.dumps({"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}).encode("utf-8")
