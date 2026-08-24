@@ -1,10 +1,10 @@
 # JCode
 
-JCode 是一个轻量级本地 Coding Agent，设计上借鉴 Pico，但刻意保留更小的代码体量和更直接的工程链路。
+JCode 是一个本地 Coding Agent，保留更小的代码体量和更直接的工程链路。
 
 它覆盖本地代码代理最核心的一条链路：命令行入口、运行时装配、ReAct 循环、上下文构建、模型调用、工具执行、子 Agent、策略治理、工作记忆、运行证据、Checkpoint 和最终回答。
 
-JCode 已包含受限 Dream 子 Agent、会话级 plan mode、Explore 子 Agent 和工具 Profile，但不包含 Pico 的 TUI、完整评测套件、复杂多 Provider 路由、大规模 benchmark、vision/media 工具等非核心能力。
+JCode 已包含受限 Dream 子 Agent、会话级 plan mode、Explore 子 Agent 和工具 Profile，但还不包含 TUI、完整评测套件、复杂多 Provider 路由、大规模 benchmark、vision/media 工具等非核心能力。
 
 ## 安装
 
@@ -64,6 +64,30 @@ jcode --resume latest "继续"
 jcode --session-id demo-session "实现一个小功能"
 ```
 
+## 工具概览
+
+JCode 现在提供这些正式入口：
+
+| 入口 | 作用 |
+| --- | --- |
+| `todo_add` | 新增会话级 todo。 |
+| `todo_update` | 更新已有 todo。 |
+| `todo_list` | 查看 todo 列表。 |
+| `ask_user` | 向用户发起阻塞式澄清。 |
+| `enter_plan_mode` | 进入 plan mode。 |
+| `exit_plan_mode` | 退出 plan mode。 |
+| `spawn_subagent` | 创建子任务。 |
+| `send_subagent_message` | 向子任务补充消息。 |
+| `wait_subagent` | 等待子任务完成。 |
+
+`worker` 和 `Explore` 都是子 agent 类型，但语义不同：
+
+| 类型 | 语义 | 工具面 | 写入能力 |
+| --- | --- | --- | --- |
+| `worker` | 普通子任务 | 可写 profile | 允许在显式 `write_scope` 内写入 |
+| `Explore` | 只读探索子任务 | readonly profile | 不允许写入 |
+| `plan mode` | 会话级规划模式 | plan profile | 只允许 `Explore`，并限制写入 active plan artifact |
+
 每次运行都会写入 `.jcode/` 目录：
 
 ```text
@@ -106,7 +130,7 @@ jcode.app.cli
 - `policy`：权限、工具规则、重复调用、sandbox、Final Gate 和敏感信息处理。
 - `state`：Session、TaskState、History、Checkpoint 和 Workspace。
 - `memory`：Working_Memory、Daily Log、Durable Memory、检索、安全过滤和轮次整理。
-- `workers`：轻量子 Agent 的创建、消息、等待、结果和 trace；plan mode 下只允许 Explore 子 Agent。
+- `workers`：子 Agent 的创建、消息、等待、结果和 trace；plan mode 下只允许 Explore 子 Agent。
 - `evidence`：运行 trace、session event、report、artifact 和审计数据。
 
 ## 代码约定
@@ -179,7 +203,7 @@ Checkpoint 保存在每次运行的 `checkpoint.json` 中，记录 session、run
 
 ## 子 Agent
 
-JCode 支持轻量子 Agent 工具：
+JCode 支持子 Agent 工具：
 
 - `spawn_subagent`：创建子任务，默认是普通 worker；plan mode 只允许 Explore。
 - `send_subagent_message`：向已有子任务补充消息。
@@ -206,4 +230,4 @@ JCode 的每次运行都可以审计：
 - `report.json`：运行汇总、事件计数、worker refs、memory audit 和最终回答长度。
 - `<session_id>.events.jsonl`：跨 run 的 session 事件流。
 
-这些文件用于回答两个问题：这次运行做了什么，以及为什么停在当前状态。
+
