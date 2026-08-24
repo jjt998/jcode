@@ -48,6 +48,7 @@ def render_runtime_mode_text(session: dict) -> str:
         f"- topic: {topic or '-'}",
         f"- active plan artifact: {plan_path or '-'}",
         "- You may inspect files, but writes must target only the active plan artifact.",
+        "- You may use todo_add, todo_update, todo_list, and ask_user.",
         "- You may launch Explore subagents, but not write-capable worker subagents.",
         "- Return a final answer only after the active plan artifact has been written.",
     ]

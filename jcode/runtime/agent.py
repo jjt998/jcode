@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from jcode.evidence.summaries import build_report
 from jcode.evidence.session_log import SessionEventBus
@@ -14,6 +14,7 @@ from jcode.state.checkpoint import CheckpointManager
 from jcode.state.history import append_history
 from jcode.state.resume import build_resume_context
 from jcode.state.task import TaskState
+from jcode.state.todo import TodoLedger
 from jcode.tools.base import ToolResult
 
 if TYPE_CHECKING:
@@ -52,6 +53,8 @@ class JCodeAgent:
     tool_profiles: dict[str, ToolSetProfile]
     active_tool_profile_name: str
     write_scope: list[str]
+    todo_ledger: TodoLedger
+    ask_user_callback: Callable[[str, list[str]], str] | None
     abort_requested: bool
 
     def __init__(
@@ -74,6 +77,7 @@ class JCodeAgent:
         tool_profiles,
         active_tool_profile_name: str = "default",
         write_scope: list[str] | None = None,
+        ask_user_callback=None,
     ):
         self.config = config
         self.workspace = workspace
@@ -94,6 +98,8 @@ class JCodeAgent:
         self.tool_profiles = tool_profiles
         self.active_tool_profile_name = active_tool_profile_name
         self.write_scope = list(write_scope or [])
+        self.todo_ledger = TodoLedger.from_dict(self.session.get("todo_ledger", {}))
+        self.ask_user_callback = ask_user_callback
         self.abort_requested = False
         self._sync_runtime_mode_from_session()
 
@@ -112,10 +118,49 @@ class JCodeAgent:
         return run_dream(self, quiet=quiet, session_ids=session_ids)
 
     def enter_plan_mode(self, topic: str, path: str | None = None) -> str:
-        return self.plan_mode.enter(topic, path=path)
+        plan_path = self.plan_mode.enter(topic, path=path)
+        return f"mode: plan\nplan path: {plan_path}"
 
-    def exit_plan_mode(self) -> None:
+    def exit_plan_mode(self) -> str:
         self.plan_mode.exit()
+        return "mode: default"
+
+    def todo_add(self, args: dict) -> str:
+        item = self.todo_ledger.add(
+            args["content"],
+            status=args.get("status", "pending"),
+            priority=args.get("priority", "normal"),
+            note=args.get("note", ""),
+        )
+        self.session["todo_ledger"] = self.todo_ledger.to_dict()
+        self.session_store.save(self.session)
+        self.session_events.emit("todo_added", todo_id=item.todo_id, status=item.status, priority=item.priority)
+        return f"added {item.todo_id} [{item.status}] {item.priority} - {item.content}"
+
+    def todo_update(self, args: dict) -> str:
+        item = self.todo_ledger.update(
+            args["todo_id"],
+            status=args.get("status"),
+            content=args.get("content"),
+            priority=args.get("priority"),
+            note=args.get("note"),
+        )
+        self.session["todo_ledger"] = self.todo_ledger.to_dict()
+        self.session_store.save(self.session)
+        self.session_events.emit("todo_updated", todo_id=item.todo_id, status=item.status, priority=item.priority)
+        return f"updated {item.todo_id} [{item.status}] {item.priority} - {item.content}"
+
+    def todo_list(self, args: dict | None = None) -> str:
+        return self.todo_ledger.render_list()
+
+    def ask_user(self, question: str, choices: list[str] | None = None) -> str:
+        choices = list(choices or [])
+        self.session_events.emit("ask_user_requested", question=str(question)[:500], choices=choices)
+        if self.ask_user_callback is None:
+            return "error: ask_user requires interactive mode"
+        answer = str(self.ask_user_callback(str(question), choices))
+        self.session_events.emit("ask_user_answered", question=str(question)[:500], answer=answer[:500])
+        return answer
 
     def ask(self, user_message: str) -> str:
         self.abort_requested = False
@@ -157,6 +202,7 @@ class JCodeAgent:
     def resume(self, session_id: str) -> None:
         self.session = self.session_store.load_requested(session_id, None, self.workspace.root)
         self.working_memory = type(self.working_memory).from_dict(self.session.get("working_memory", {}), self.workspace.root)
+        self.todo_ledger = TodoLedger.from_dict(self.session.get("todo_ledger", {}))
         self.working_memory.resume_context = build_resume_context(
             session=self.session,
             session_store=self.session_store,
@@ -255,6 +301,7 @@ class JCodeAgent:
                 runtime_mode=runtime_mode_name(self.session),
                 plan_path=runtime_mode_plan_path(self.session),
                 run_id=task_state.run_id,
+                runtime=self,
             )
 
         task_state.record_tool(action.tool_name, result)
@@ -318,6 +365,7 @@ class JCodeAgent:
             ),
         )
         self.session["working_memory"] = self.working_memory.to_dict()
+        self.session["todo_ledger"] = self.todo_ledger.to_dict()
         self.session.setdefault("runtime_mode", {"mode": "default"})
         self.session.setdefault("run_ids", []).append(task_state.run_id)
         self.session_store.save(self.session)

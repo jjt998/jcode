@@ -1,10 +1,25 @@
 from __future__ import annotations
 
 from jcode.tools.base import Tool
-from jcode.tools.patch import apply_text_patch
-from jcode.tools.schemas import ApplyPatchArgs, ListFilesArgs, ReadFileArgs, RunShellArgs, SearchArgs, WriteFileArgs
+from jcode.tools.ask_user import tool_ask_user
+from jcode.tools.plan import tool_enter_plan_mode, tool_exit_plan_mode
+from jcode.tools.schemas import (
+    ApplyPatchArgs,
+    AskUserArgs,
+    EnterPlanModeArgs,
+    ExitPlanModeArgs,
+    ListFilesArgs,
+    ReadFileArgs,
+    RunShellArgs,
+    SearchArgs,
+    TodoAddArgs,
+    TodoListArgs,
+    TodoUpdateArgs,
+    WriteFileArgs,
+)
 from jcode.tools.shell import run_shell
-from jcode.tools.workspace import list_files, read_file, search, write_file
+from jcode.tools.todos import tool_todo_add, tool_todo_list, tool_todo_update
+from jcode.tools.workspace import apply_text_patch, list_files, read_file, search, write_file
 
 
 class ToolRegistry:
@@ -28,4 +43,10 @@ def build_default_registry() -> ToolRegistry:
     registry.register(Tool("list_files", ListFilesArgs, list_files, read_only=True, description="List workspace files."))
     registry.register(Tool("search", SearchArgs, search, read_only=True, description="Search text in workspace files."))
     registry.register(Tool("run_shell", RunShellArgs, run_shell, read_only=False, risky=True, description="Run a shell command in the workspace."))
+    registry.register(Tool("todo_add", TodoAddArgs, tool_todo_add, read_only=False, description="Add an item to the session todo ledger."))
+    registry.register(Tool("todo_update", TodoUpdateArgs, tool_todo_update, read_only=False, description="Update an item in the session todo ledger."))
+    registry.register(Tool("todo_list", TodoListArgs, tool_todo_list, read_only=True, description="List the session todo ledger."))
+    registry.register(Tool("ask_user", AskUserArgs, tool_ask_user, read_only=False, description="Ask the interactive user a blocking clarification question."))
+    registry.register(Tool("enter_plan_mode", EnterPlanModeArgs, tool_enter_plan_mode, read_only=False, description="Enter plan mode for a named planning topic."))
+    registry.register(Tool("exit_plan_mode", ExitPlanModeArgs, tool_exit_plan_mode, read_only=False, description="Exit plan mode and return to default runtime mode."))
     return registry

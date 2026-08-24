@@ -20,8 +20,9 @@ def build_tool_profiles(registry: ToolRegistry) -> dict[str, ToolSetProfile]:
     tools = registry.tools
     all_tools = frozenset(tools)
     read_only = frozenset(name for name, tool in tools.items() if tool.read_only)
-    plan_tools = read_only | frozenset({"write_file", "apply_patch"})
-    worker_tools = all_tools - frozenset({"run_shell"})
+    shared_runtime = frozenset({"todo_add", "todo_update", "todo_list", "ask_user", "enter_plan_mode", "exit_plan_mode"})
+    plan_tools = read_only | shared_runtime | frozenset({"write_file", "apply_patch"})
+    worker_tools = all_tools - frozenset({"run_shell", "ask_user", "enter_plan_mode", "exit_plan_mode"})
     dream_tools = read_only | frozenset({"write_file", "apply_patch"})
     return {
         "default": ToolSetProfile("default", all_tools),

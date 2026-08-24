@@ -8,6 +8,8 @@ from jcode.policy.decisions import PolicyDecision
 from jcode.tools.base import ToolCallRequest, ToolInvocation, ToolResult
 from jcode.tools.workspace import read_file
 
+RUNTIME_TOOL_NAMES = {"todo_add", "todo_update", "todo_list", "ask_user", "enter_plan_mode", "exit_plan_mode"}
+
 if TYPE_CHECKING:
     from jcode.memory.working import WorkingMemory
     from jcode.policy.call_guard import CallGuard
@@ -50,6 +52,7 @@ class ToolExecutor:
         plan_path: str = "",
         run_id: str = "",
         source: str = "model",
+        runtime: object | None = None,
     ) -> ToolResult:
         request = ToolCallRequest(name=name, raw_args=dict(args or {}), run_id=run_id, source=source)
         tool = self.registry.get(request.name)
@@ -81,6 +84,8 @@ class ToolExecutor:
                 layer="call_guard",
             )
             return self._denied(decision, invocation=invocation)
+        if request.name in RUNTIME_TOOL_NAMES:
+            return self._execute_runtime_tool(runtime, invocation, parsed_args)
         try:
             policy = self.tool_policy.check(
                 tool,
@@ -125,6 +130,51 @@ class ToolExecutor:
                 {"decision": "executed", "workspace_changed": bool(result.changed_files)},
             )
         )
+        return result
+
+    def _execute_runtime_tool(self, runtime: object | None, invocation: ToolInvocation, parsed_args: dict) -> ToolResult:
+        if runtime is None:
+            decision = PolicyDecision.deny(
+                "runtime_context_required",
+                f"error: runtime context is required for {invocation.tool.name}",
+                layer="tool_execution",
+            )
+            return self._denied(decision, invocation=invocation)
+        try:
+            if invocation.tool.name == "todo_add":
+                text = runtime.todo_add(parsed_args)
+            elif invocation.tool.name == "todo_update":
+                text = runtime.todo_update(parsed_args)
+            elif invocation.tool.name == "todo_list":
+                text = runtime.todo_list(parsed_args)
+            elif invocation.tool.name == "ask_user":
+                text = runtime.ask_user(str(parsed_args.get("question", "")), choices=list(parsed_args.get("choices", []) or []))
+            elif invocation.tool.name == "enter_plan_mode":
+                text = runtime.enter_plan_mode(str(parsed_args.get("topic", "")), path=parsed_args.get("path"))
+            elif invocation.tool.name == "exit_plan_mode":
+                text = runtime.exit_plan_mode()
+            else:
+                decision = PolicyDecision.deny(
+                    "runtime_tool_unknown",
+                    f"error: unsupported runtime tool {invocation.tool.name}",
+                    layer="tool_execution",
+                )
+                return self._denied(decision, invocation=invocation)
+        except Exception as exc:
+            decision = PolicyDecision.deny(
+                "runtime_tool_failed",
+                f"error: runtime tool {invocation.tool.name} failed: {exc}",
+                layer="tool_execution",
+                metadata={"error_type": type(exc).__name__},
+            )
+            return self._denied(decision, invocation=invocation)
+        text = str(text)
+        text = self.redactor.redact(text)
+        status = "error" if text.startswith("error:") else "success"
+        error_type = None if status == "success" else "runtime_tool_failed"
+        result = ToolResult(status, text, error_type=error_type)
+        result.decision = "executed"
+        result.metadata.update(self._metadata(invocation, [PolicyDecision.allow("runtime_tool_ok", layer="tool_execution")], {"decision": "executed", "runtime_tool": True}))
         return result
 
     def _check_profile(self, invocation: ToolInvocation, tool_profile: ToolSetProfile | None) -> PolicyDecision:

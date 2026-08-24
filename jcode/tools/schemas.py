@@ -36,6 +36,39 @@ class RunShellArgs(BaseModel):
     timeout: int = Field(default=60, ge=1, le=600)
 
 
+class TodoAddArgs(BaseModel):
+    content: str = Field(min_length=1)
+    status: str = "pending"
+    priority: str = "normal"
+    note: str = ""
+
+
+class TodoUpdateArgs(BaseModel):
+    todo_id: str = Field(min_length=1)
+    status: str | None = None
+    content: str | None = None
+    priority: str | None = None
+    note: str | None = None
+
+
+class TodoListArgs(BaseModel):
+    pass
+
+
+class AskUserArgs(BaseModel):
+    question: str = Field(min_length=1)
+    choices: list[str] = Field(default_factory=list)
+
+
+class EnterPlanModeArgs(BaseModel):
+    topic: str = Field(min_length=1)
+    path: str | None = None
+
+
+class ExitPlanModeArgs(BaseModel):
+    pass
+
+
 class SpawnSubagentArgs(BaseModel):
     prompt: str = Field(min_length=1)
     subagent_type: str = "worker"
