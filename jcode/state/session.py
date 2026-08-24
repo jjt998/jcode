@@ -43,6 +43,7 @@ class SessionStore:
             "working_memory": {},
             "run_ids": [],
             "event_seq": 0,
+            "runtime_mode": {"mode": "default"},
         }
 
     def save(self, session: dict) -> Path:

@@ -38,6 +38,8 @@ class RunShellArgs(BaseModel):
 
 class SpawnSubagentArgs(BaseModel):
     prompt: str = Field(min_length=1)
+    subagent_type: str = "worker"
+    write_scope: list[str] = Field(default_factory=list)
 
 
 class SendSubagentMessageArgs(BaseModel):

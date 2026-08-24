@@ -16,13 +16,14 @@ class ToolPolicyChecker:
     def __init__(self, workspace):
         self.workspace = workspace
 
-    def check(self, tool: Tool, args: dict, working_memory: WorkingMemory) -> PolicyDecision:
+    def check(self, tool: Tool, args: dict, working_memory: WorkingMemory, *, runtime_mode: str = "default", plan_path: str = "") -> PolicyDecision:
         path = args.get("path") or args.get("file")
         if path:
             self.workspace.resolve_path(path)
         if tool.name in {"write_file", "apply_patch"}:
             rel = str(path or "").replace("\\", "/")
-            if rel and rel not in working_memory.file_freshness:
+            plan_mode_write = runtime_mode == "plan" and bool(plan_path) and rel == str(plan_path).replace("\\", "/")
+            if rel and rel not in working_memory.file_freshness and not plan_mode_write:
                 return PolicyDecision.deny("read_before_write", f"error: read {rel} before modifying it", layer="tool_policy")
         if tool.name == "apply_patch" and args.get("old_text") == args.get("new_text"):
             return PolicyDecision.deny("empty_patch", "error: patch old_text and new_text are identical", layer="tool_policy")

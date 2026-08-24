@@ -64,7 +64,7 @@ def build_agent(config: AppConfig) -> JCodeAgent:
         session_events.emit("resume_checkpoint_evaluated", **working_memory.resume_context)
     workers = WorkerManager(workspace, state_dir / "workers", executor, router, config, session_events=session_events)
     builder = ContextBuilder(workspace=workspace, durable_memory=memory_store)
-    return JCodeAgent(
+    agent = JCodeAgent(
         config=config,
         workspace=workspace,
         session=session,
@@ -83,3 +83,6 @@ def build_agent(config: AppConfig) -> JCodeAgent:
         active_tool_profile_name="default",
         write_scope=[],
     )
+    if config.plan_topic or config.plan_path:
+        agent.enter_plan_mode(config.plan_topic or "plan", config.plan_path)
+    return agent

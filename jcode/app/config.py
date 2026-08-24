@@ -21,6 +21,8 @@ class AppConfig:
     max_steps: int
     max_new_tokens: int
     temperature: float
+    plan_topic: str | None = None
+    plan_path: str | None = None
     auto_dream: bool = False
     dream_interval_hours: float = 24.0
     dream_min_sessions: int = 5
@@ -61,6 +63,8 @@ def load_config(args) -> AppConfig:
         max_steps=int(args.max_steps or runtime_raw.get("max_steps") or 50),
         max_new_tokens=int(args.max_new_tokens or runtime_raw.get("max_new_tokens") or 8192),
         temperature=float(args.temperature),
+        plan_topic=str(getattr(args, "plan_topic", None) or runtime_raw.get("plan_topic") or "") or None,
+        plan_path=str(getattr(args, "plan_path", None) or runtime_raw.get("plan_path") or "") or None,
         auto_dream=_as_bool(memory_raw.get("auto_dream", False)),
         dream_interval_hours=float(memory_raw.get("dream_interval_hours", 24.0)),
         dream_min_sessions=int(memory_raw.get("dream_min_sessions", 5)),

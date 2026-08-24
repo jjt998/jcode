@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from jcode.evidence.summaries import build_report
 from jcode.evidence.session_log import SessionEventBus
 from jcode.memory.consolidation import maintain_after_turn
 from jcode.policy.decisions import PolicyDecision
+from jcode.runtime.plan import PlanModeController, runtime_mode_name, runtime_mode_plan_path
 from jcode.runtime.actions import parse_model_action
 from jcode.runtime.transitions import ABORTED, MODEL_ERROR, STEP_LIMIT_REACHED, VALID_FINAL
 from jcode.state.checkpoint import CheckpointManager
@@ -34,6 +36,7 @@ class JCodeAgent:
     config: AppConfig
     workspace: Workspace
     session: dict
+    session_path: Path | None
     session_store: SessionStore
     run_store: RunStore
     memory_store: DurableMemoryStore
@@ -45,6 +48,7 @@ class JCodeAgent:
     worker_manager: WorkerManager
     final_gate: FinalGate
     redactor: SecretRedactor
+    plan_mode: PlanModeController
     tool_profiles: dict[str, ToolSetProfile]
     active_tool_profile_name: str
     write_scope: list[str]
@@ -75,6 +79,7 @@ class JCodeAgent:
         self.workspace = workspace
         self.session = session
         self.session_store = session_store
+        self.session_path = self.session_store.root / f"{self.session.get('id', '')}.json"
         self.run_store = run_store
         self.memory_store = memory_store
         self.session_events = session_events
@@ -85,10 +90,12 @@ class JCodeAgent:
         self.worker_manager = worker_manager
         self.final_gate = final_gate
         self.redactor = redactor
+        self.plan_mode = PlanModeController(self)
         self.tool_profiles = tool_profiles
         self.active_tool_profile_name = active_tool_profile_name
         self.write_scope = list(write_scope or [])
         self.abort_requested = False
+        self._sync_runtime_mode_from_session()
 
     @property
     def active_tool_profile(self) -> ToolSetProfile:
@@ -103,6 +110,12 @@ class JCodeAgent:
         from jcode.memory.consolidation import run_dream
 
         return run_dream(self, quiet=quiet, session_ids=session_ids)
+
+    def enter_plan_mode(self, topic: str, path: str | None = None) -> str:
+        return self.plan_mode.enter(topic, path=path)
+
+    def exit_plan_mode(self) -> None:
+        self.plan_mode.exit()
 
     def ask(self, user_message: str) -> str:
         self.abort_requested = False
@@ -153,11 +166,16 @@ class JCodeAgent:
         )
         self.session_events = SessionEventBus(self.session_events.path.parent / f"{self.session['id']}.events.jsonl")
         self.worker_manager.session_events = self.session_events
+        self.plan_mode = PlanModeController(self)
+        self._sync_runtime_mode_from_session()
         self.session_events.emit("session_resumed", **self.working_memory.resume_context)
         self.session_events.emit("resume_checkpoint_evaluated", **self.working_memory.resume_context)
 
     def abort(self) -> None:
         self.abort_requested = True
+
+    def refresh_prefix(self, force: bool = False) -> None:
+        return None
 
     def _begin_run(self, user_message: str):
         task_state = TaskState.create(user_message)
@@ -203,7 +221,7 @@ class JCodeAgent:
         return action
 
     def _handle_final_action(self, action, task_state, run_dir, checkpoint) -> tuple[bool, str]:
-        decision = self.final_gate.check(action.content, task_state, self.working_memory)
+        decision = self.final_gate.check(action.content, task_state, self.working_memory, session=self.session, workspace=self.workspace)
         self._record_trace(run_dir, "final_readiness_decision", task_state, **decision)
         if decision["allowed"]:
             self._append_history("assistant", action.content, task_state)
@@ -226,28 +244,7 @@ class JCodeAgent:
     def _handle_tool_action(self, action, task_state, run_dir, checkpoint) -> None:
         self._record_trace(run_dir, "tool_requested", task_state, name=action.tool_name, args=action.tool_args or {})
         if action.tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"}:
-            if self.active_tool_profile_name == "default":
-                result = self.worker_manager.run_tool(action.tool_name, action.tool_args or {})
-            else:
-                decision = PolicyDecision.deny(
-                    "tool_profile_denied",
-                    f"error: tool {action.tool_name} is not allowed by profile {self.active_tool_profile_name}",
-                    layer="tool_profile",
-                    metadata={"tool_profile": self.active_tool_profile_name},
-                )
-                result = ToolResult(
-                    "denied",
-                    decision.message,
-                    error_type=decision.reason,
-                    metadata={
-                        "policy": [decision.to_dict()],
-                        "decision": decision.layer,
-                        "tool_name": action.tool_name,
-                        "source": "model",
-                        "run_id": task_state.run_id,
-                    },
-                    decision=decision.decision,
-                )
+            result = self._handle_subagent_tool(action.tool_name, action.tool_args or {}, task_state)
         else:
             result = self.tool_executor.execute(
                 action.tool_name,
@@ -255,6 +252,8 @@ class JCodeAgent:
                 working_memory=self.working_memory,
                 tool_profile=self.active_tool_profile,
                 write_scope=self.write_scope,
+                runtime_mode=runtime_mode_name(self.session),
+                plan_path=runtime_mode_plan_path(self.session),
                 run_id=task_state.run_id,
             )
 
@@ -319,7 +318,92 @@ class JCodeAgent:
             ),
         )
         self.session["working_memory"] = self.working_memory.to_dict()
+        self.session.setdefault("runtime_mode", {"mode": "default"})
         self.session.setdefault("run_ids", []).append(task_state.run_id)
         self.session_store.save(self.session)
         self.run_store.write_task_state(run_dir, task_state)
         return final_text
+
+    def _handle_subagent_tool(self, tool_name: str, args: dict, task_state) -> ToolResult:
+        subagent_type = str(args.get("subagent_type", "worker") or "worker").strip() or "worker"
+        write_scope = list(args.get("write_scope", []) or [])
+        prompt = str(args.get("prompt", "") or "")
+        if subagent_type not in {"worker", "Explore"}:
+            decision = PolicyDecision.deny(
+                "tool_profile_denied",
+                f"error: tool {tool_name} requested invalid subagent type {subagent_type}",
+                layer="tool_profile",
+                metadata={"tool_profile": self.active_tool_profile_name},
+            )
+            return ToolResult(
+                "denied",
+                decision.message,
+                error_type=decision.reason,
+                metadata={"policy": [decision.to_dict()], "decision": decision.layer, "tool_name": tool_name, "source": "model", "run_id": task_state.run_id},
+                decision=decision.decision,
+            )
+        if self.plan_mode.mode == "plan" and subagent_type != "Explore":
+            decision = PolicyDecision.deny(
+                "tool_profile_denied",
+                f"error: plan mode only allows Explore subagents, not {subagent_type}",
+                layer="tool_profile",
+                metadata={"tool_profile": self.active_tool_profile_name},
+            )
+            return ToolResult(
+                "denied",
+                decision.message,
+                error_type=decision.reason,
+                metadata={"policy": [decision.to_dict()], "decision": decision.layer, "tool_name": tool_name, "source": "model", "run_id": task_state.run_id},
+                decision=decision.decision,
+            )
+        if tool_name == "spawn_subagent":
+            return self.worker_manager.spawn(prompt, subagent_type=subagent_type, write_scope=write_scope)
+        if tool_name == "send_subagent_message":
+            worker_id = str(args.get("worker_id", ""))
+            if self.plan_mode.mode == "plan":
+                worker = self.worker_manager.workers.get(worker_id)
+                if worker is not None and worker.subagent_type != "Explore":
+                    decision = PolicyDecision.deny(
+                        "tool_profile_denied",
+                        f"error: plan mode only allows Explore subagents, not {worker.subagent_type}",
+                        layer="tool_profile",
+                        metadata={"tool_profile": self.active_tool_profile_name},
+                    )
+                    return ToolResult(
+                        "denied",
+                        decision.message,
+                        error_type=decision.reason,
+                        metadata={"policy": [decision.to_dict()], "decision": decision.layer, "tool_name": tool_name, "source": "model", "run_id": task_state.run_id},
+                        decision=decision.decision,
+                    )
+            return self.worker_manager.send(worker_id, str(args.get("message", "")))
+        if tool_name == "wait_subagent":
+            worker_id = str(args.get("worker_id", ""))
+            if self.plan_mode.mode == "plan":
+                worker = self.worker_manager.workers.get(worker_id)
+                if worker is not None and worker.subagent_type != "Explore":
+                    decision = PolicyDecision.deny(
+                        "tool_profile_denied",
+                        f"error: plan mode only allows Explore subagents, not {worker.subagent_type}",
+                        layer="tool_profile",
+                        metadata={"tool_profile": self.active_tool_profile_name},
+                    )
+                    return ToolResult(
+                        "denied",
+                        decision.message,
+                        error_type=decision.reason,
+                        metadata={"policy": [decision.to_dict()], "decision": decision.layer, "tool_name": tool_name, "source": "model", "run_id": task_state.run_id},
+                        decision=decision.decision,
+                    )
+            return self.worker_manager.wait(worker_id)
+        return ToolResult("denied", f"unknown subagent tool {tool_name}", error_type="unknown_tool")
+
+    def _sync_runtime_mode_from_session(self) -> None:
+        mode = runtime_mode_name(self.session)
+        if mode == "plan":
+            self.active_tool_profile_name = "plan"
+            plan_path = runtime_mode_plan_path(self.session)
+            self.write_scope = [plan_path] if plan_path else []
+        else:
+            self.active_tool_profile_name = "default"
+            self.write_scope = []

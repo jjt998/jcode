@@ -17,6 +17,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", default=None, help="Provider model override")
     parser.add_argument("--resume", default=None, help="Session id to resume or latest")
     parser.add_argument("--session-id", default=None, help="Create or resume a fixed session id")
+    parser.add_argument("--plan-topic", default=None, help="Enter plan mode with the given topic")
+    parser.add_argument("--plan-path", default=None, help="Override the active plan artifact path")
     parser.add_argument("--approval", choices=("ask", "auto", "never"), default=None)
     parser.add_argument("--sandbox", choices=("off", "best_effort", "required"), default=None)
     parser.add_argument("--max-steps", type=int, default=None)

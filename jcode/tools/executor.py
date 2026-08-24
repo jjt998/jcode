@@ -46,6 +46,8 @@ class ToolExecutor:
         working_memory: WorkingMemory,
         tool_profile: ToolSetProfile | None = None,
         write_scope: list[str] | None = None,
+        runtime_mode: str = "default",
+        plan_path: str = "",
         run_id: str = "",
         source: str = "model",
     ) -> ToolResult:
@@ -80,7 +82,13 @@ class ToolExecutor:
             )
             return self._denied(decision, invocation=invocation)
         try:
-            policy = self.tool_policy.check(tool, parsed_args, working_memory)
+            policy = self.tool_policy.check(
+                tool,
+                parsed_args,
+                working_memory,
+                runtime_mode=runtime_mode,
+                plan_path=plan_path,
+            )
         except Exception as exc:
             decision = PolicyDecision.deny("path_escape", f"error: {exc}", layer="tool_policy", metadata={"error_type": type(exc).__name__})
             return self._denied(decision, invocation=invocation)

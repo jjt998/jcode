@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from jcode.context.budget import estimate_tokens, tail_clip
 from jcode.context.sections import SECTION_ORDER
 from jcode.context.skills import render_skill_section
+from jcode.runtime.plan import render_runtime_mode_text
 
 if TYPE_CHECKING:
     from jcode.memory.durable import DurableMemoryStore
@@ -48,7 +49,7 @@ class ContextBuilder:
         sections = {
             "prefix": PREFIX.strip(),
             "skill": render_skill_section(),
-            "working_memory": working_memory.render() + f"\n- workspace_root: {self.workspace.root}",
+            "working_memory": self._render_working_memory(session, working_memory),
             "history": history,
             "current_request": "Current user request:\n" + user_message,
         }
@@ -62,6 +63,13 @@ class ContextBuilder:
             "estimated_input_tokens": estimate_tokens(context),
         }
         return ContextBuildResult(context=context, metadata=metadata)
+
+    def _render_working_memory(self, session: dict, working_memory) -> str:
+        text = working_memory.render() + f"\n- workspace_root: {self.workspace.root}"
+        runtime_mode_text = render_runtime_mode_text(session)
+        if runtime_mode_text:
+            text += "\n" + runtime_mode_text
+        return text
 
     def _render_history(self, history: list[dict], budget: int) -> str:
         lines = []

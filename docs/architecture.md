@@ -12,6 +12,7 @@ app
 
 - `app` 只负责 CLI、配置读取和默认对象装配，不承载运行逻辑。
 - `runtime` 由 `JCodeAgent` 持有主循环，负责 run 生命周期、动作解析、工具分发、终态收口和恢复后的运行衔接。
+- `runtime_mode` 是 session 级状态；当前支持 `default` 与 `plan`，并由 `JCodeAgent` 的 plan controller 驱动工具面和 final gate。
 - `context` 只负责模型上下文拼装、预算估算和上下文区块渲染。
 - `providers` 只负责模型协议适配和模型响应包装.
 - `tools` 只负责工具定义、参数校验后的执行和工具结果返回；工具注册表不持有 workspace。
@@ -19,6 +20,7 @@ app
 - `state` 负责 session、task、history、checkpoint、workspace fingerprint 和 resume context 的持久形状。
 - `memory` 负责 Working_Memory、Daily Log、Durable Memory、检索、安全过滤和轮次整理。
 - `workers` 负责轻量子任务生命周期，父 Agent 只消费 worker 的状态、摘要和 artifact。
+- `workers` 也承载 Explore / worker 两种子 agent 语义；plan mode 只允许 Explore。
 - `evidence` 负责 trace、session event、artifact 和 report，作为审计事实来源。
 
 ## 禁止事项

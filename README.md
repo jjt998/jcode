@@ -4,7 +4,7 @@ JCode 是一个轻量级本地 Coding Agent，设计上借鉴 Pico，但刻意�
 
 它覆盖本地代码代理最核心的一条链路：命令行入口、运行时装配、ReAct 循环、上下文构建、模型调用、工具执行、子 Agent、策略治理、工作记忆、运行证据、Checkpoint 和最终回答。
 
-JCode 已包含受限 Dream 子 Agent 和工具 Profile，但不包含 Pico 的 TUI、完整评测套件、复杂多 Provider 路由、大规模 benchmark、vision/media 工具等非核心能力。
+JCode 已包含受限 Dream 子 Agent、会话级 plan mode、Explore 子 Agent 和工具 Profile，但不包含 Pico 的 TUI、完整评测套件、复杂多 Provider 路由、大规模 benchmark、vision/media 工具等非核心能力。
 
 ## 安装
 
@@ -106,7 +106,7 @@ jcode.app.cli
 - `policy`：权限、工具规则、重复调用、sandbox、Final Gate 和敏感信息处理。
 - `state`：Session、TaskState、History、Checkpoint 和 Workspace。
 - `memory`：Working_Memory、Daily Log、Durable Memory、检索、安全过滤和轮次整理。
-- `workers`：轻量子 Agent 的创建、消息、等待、结果和 trace。
+- `workers`：轻量子 Agent 的创建、消息、等待、结果和 trace；plan mode 下只允许 Explore 子 Agent。
 - `evidence`：运行 trace、session event、report、artifact 和审计数据。
 
 ## 代码约定
@@ -181,7 +181,7 @@ Checkpoint 保存在每次运行的 `checkpoint.json` 中，记录 session、run
 
 JCode 支持轻量子 Agent 工具：
 
-- `spawn_subagent`：创建子任务。
+- `spawn_subagent`：创建子任务，默认是普通 worker；plan mode 只允许 Explore。
 - `send_subagent_message`：向已有子任务补充消息。
 - `wait_subagent`：等待子任务完成并收集结果。
 

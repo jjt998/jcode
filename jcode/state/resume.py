@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from jcode.state.checkpoint import evaluate_checkpoint_path
+from jcode.runtime.plan import runtime_mode_name, runtime_mode_plan_path, runtime_mode_state
 
 
 def build_resume_context(*, session: dict, session_store, run_store, workspace, resume_requested: str | None) -> dict:
@@ -28,4 +29,7 @@ def build_resume_context(*, session: dict, session_store, run_store, workspace, 
         "workspace_fingerprint": current_fingerprint,
         "checkpoint_workspace_fingerprint": checkpoint_fingerprint,
         "workspace_mismatch": bool(checkpoint_fingerprint and checkpoint_fingerprint != current_fingerprint),
+        "runtime_mode": runtime_mode_name(session),
+        "plan_topic": str(runtime_mode_state(session).get("topic", "") or ""),
+        "plan_path": runtime_mode_plan_path(session),
     }
