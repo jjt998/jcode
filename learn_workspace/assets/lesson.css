@@ -1,0 +1,99 @@
+html {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  line-height: 1.65;
+  color: #1f2937;
+  background: #f7f7f4;
+}
+
+main {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+}
+
+h1,
+h2 {
+  line-height: 1.2;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin: 0 0 12px;
+}
+
+h2 {
+  font-size: 22px;
+  margin-top: 34px;
+}
+
+.subtitle {
+  margin: 0 0 28px;
+  color: #4b5563;
+  font-size: 17px;
+}
+
+.note,
+.check {
+  border-left: 4px solid #2563eb;
+  background: #ffffff;
+  padding: 14px 16px;
+  margin: 18px 0;
+}
+
+.check {
+  border-left-color: #059669;
+}
+
+code,
+pre {
+  font-family: Consolas, "Courier New", monospace;
+}
+
+code {
+  background: #eef2f7;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+pre {
+  overflow-x: auto;
+  background: #111827;
+  color: #f9fafb;
+  padding: 16px;
+  border-radius: 6px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+  border: 1px solid #e5e7eb;
+  padding: 10px 12px;
+}
+
+th {
+  background: #eef2f7;
+}
+
+.quiz {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  padding: 16px;
+  border-radius: 6px;
+}
+
+details {
+  margin-top: 12px;
+}

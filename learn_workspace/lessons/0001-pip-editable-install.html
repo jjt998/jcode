@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>pip install -e . 在 JCode 中做了什么</title>
+    <link rel="stylesheet" href="../assets/lesson.css">
+  </head>
+  <body>
+    <main>
+      <h1>pip install -e . 在 JCode 中做了什么</h1>
+      <p class="subtitle">一次看懂：指定解释器、pip、editable install、pyproject.toml、依赖和命令行入口之间的关系。</p>
+
+      <h2>你执行的命令</h2>
+      <pre><code>&amp; 'D:\jt\ANACONDA\python.exe' -m pip install -e .</code></pre>
+      <p>这条命令的意思是：用 <code>D:\jt\ANACONDA\python.exe</code> 这个 Python 解释器，启动同一个环境里的 <code>pip</code> 模块，把当前目录 <code>.</code> 这个项目以 editable 模式安装进去。</p>
+
+      <div class="note">
+        在 PowerShell 里，开头的 <code>&amp;</code> 是调用运算符。因为 Python 路径里被引号包起来了，PowerShell 需要 <code>&amp;</code> 明确告诉它：这是一个要执行的程序路径。
+      </div>
+
+      <h2>逐段拆开</h2>
+      <table>
+        <tr>
+          <th>片段</th>
+          <th>作用</th>
+        </tr>
+        <tr>
+          <td><code>&amp;</code></td>
+          <td>PowerShell 的调用运算符，用来执行后面的路径。</td>
+        </tr>
+        <tr>
+          <td><code>'D:\jt\ANACONDA\python.exe'</code></td>
+          <td>明确指定使用 Anaconda 的 Python，而不是依赖系统 PATH 里的 <code>python</code>。</td>
+        </tr>
+        <tr>
+          <td><code>-m pip</code></td>
+          <td>让这个 Python 运行它环境内的 <code>pip</code> 模块。好处是 pip 和 Python 环境一定对应。</td>
+        </tr>
+        <tr>
+          <td><code>install</code></td>
+          <td>执行安装动作。</td>
+        </tr>
+        <tr>
+          <td><code>-e</code></td>
+          <td>editable install，可编辑安装。安装结果会指向源码目录，而不是复制一份源码到 site-packages。</td>
+        </tr>
+        <tr>
+          <td><code>.</code></td>
+          <td>把当前工作目录当作 Python 项目根目录。这里应该是 <code>D:\1technical_stack_study\agent_study\agent_projects\jcode</code>。</td>
+        </tr>
+      </table>
+
+      <h2>pip 会读取什么</h2>
+      <p>在 JCode 项目里，pip 会读取根目录的 <code>pyproject.toml</code>。这个文件声明了构建系统、包名、版本、依赖和命令行入口。</p>
+      <pre><code>[build-system]
+requires = ["setuptools&gt;=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jcode"
+version = "0.1.0"
+requires-python = "&gt;=3.10"
+dependencies = ["pydantic&gt;=2.0.0"]
+
+[project.scripts]
+jcode = "jcode.app.cli:main"</code></pre>
+
+      <h2>具体会发生什么</h2>
+      <p>第一，pip 会确认当前 Python 版本满足 <code>&gt;=3.10</code>。你这里用的是 Anaconda Python 3.12，所以满足。</p>
+      <p>第二，pip 会准备构建后端。这个项目使用 <code>setuptools.build_meta</code>，需要 <code>setuptools&gt;=61.0</code> 和 <code>wheel</code>。</p>
+      <p>第三，pip 会安装项目依赖。JCode 的核心依赖只有 <code>pydantic&gt;=2.0.0</code>。如果当前环境没有合适版本，pip 会尝试下载并安装；如果已经有满足版本，就会复用。</p>
+      <p>第四，pip 会以 editable 模式注册 JCode。以后你改源码，通常不需要重新安装；下次运行时 Python 会直接看到源码目录的新内容。</p>
+      <p>第五，pip 会尝试生成命令行脚本 <code>jcode</code>。README 里的运行方式 <code>jcode "hi"</code> 就依赖这个入口。</p>
+
+      <h2>结合当前项目的关键坑</h2>
+      <p>README 说安装后可以运行：</p>
+      <pre><code>jcode "hi"
+python -m jcode --help</code></pre>
+      <p>但当前源码目录实际叫 <code>src</code>，里面有 <code>src\__main__.py</code> 和 <code>src\app\cli.py</code>；代码内部导入也写的是 <code>from src.app...</code>。</p>
+      <p>与此同时，<code>pyproject.toml</code> 却写着：</p>
+      <pre><code>[project.scripts]
+jcode = "jcode.app.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["jcode*"]</code></pre>
+      <p>这表示 setuptools 会寻找名为 <code>jcode</code> 或 <code>jcode.*</code> 的包。但当前项目里没有这样的包，只有一个名为 <code>src</code> 的包。</p>
+
+      <div class="check">
+        所以这条安装命令本身的语义是正确的；真正不匹配的是项目的打包配置和源码布局。它们一个在说“包叫 jcode”，另一个实际长成了“包叫 src”。
+      </div>
+
+      <h2>安装后你可能看到的结果</h2>
+      <p>理想情况下，pip 会完成安装，并在 Anaconda 环境的 Scripts 目录下生成 <code>jcode.exe</code> 或等价启动脚本。</p>
+      <p>但这个启动脚本会尝试导入 <code>jcode.app.cli:main</code>。因为当前没有 <code>jcode</code> 包，它运行时很可能报 <code>No module named jcode</code>。</p>
+      <p>当前源码实际可以通过下面这个方式运行：</p>
+      <pre><code>&amp; 'D:\jt\ANACONDA\python.exe' -m src --help
+&amp; 'D:\jt\ANACONDA\python.exe' -m src "hi"</code></pre>
+
+      <h2>一句话心智模型</h2>
+      <p><code>pip install -e .</code> 不是“运行项目”，而是“把这个目录登记成当前 Python 环境里的一个可导入、可命令行调用的开发中项目”。JCode 的安装登记动作会参考 <code>pyproject.toml</code>；当前问题是登记表上写的包名和真实目录名对不上。</p>
+
+      <h2>小练习</h2>
+      <div class="quiz">
+        <p>闭眼回忆一下：<code>-e</code> 最大的特点是什么？</p>
+        <details>
+          <summary>查看答案</summary>
+          <p>它让安装结果指向源码目录，所以修改源码后通常不用重新安装。</p>
+        </details>
+        <p>再想一下：为什么建议用 <code>python.exe -m pip</code>，而不是直接用 <code>pip</code>？</p>
+        <details>
+          <summary>查看答案</summary>
+          <p>这样能保证 pip 属于这个指定的 Python 环境，避免装到另一个 Python 里。</p>
+        </details>
+      </div>
+
+      <h2>推荐阅读</h2>
+      <p>后续可以看 Python Packaging User Guide 里的 editable installs 和 pyproject.toml 相关章节。先把这个项目里的“源码布局”和“打包配置”对应关系看懂，就已经抓住主线了。</p>
+      <p>如果某一步仍然含糊，可以继续问我；我们可以顺着安装日志一行一行拆。</p>
+    </main>
+  </body>
+</html>

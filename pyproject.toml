@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 dependencies = ["pydantic>=2.0.0"]
 
 [project.scripts]
-jcode = "jcode.app.cli:main"
+jcode = "src.app.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["jcode*"]
+include = ["src*"]
