@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JCode Web</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sessions" aria-label="Sessions">
+        <div class="brand">
+          <div>
+            <p class="eyebrow">local agent</p>
+            <h1>JCode</h1>
+          </div>
+          <button class="icon-button" id="refreshSessions" title="刷新会话" aria-label="刷新会话">↻</button>
+        </div>
+        <button class="new-session" id="newSession">新建会话</button>
+        <div class="session-list" id="sessionList"></div>
+      </aside>
+
+      <main class="conversation" aria-label="Conversation">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">workspace</p>
+            <h2 id="sessionTitle">选择会话</h2>
+          </div>
+          <div class="run-state" id="runState">idle</div>
+        </header>
+
+        <section class="messages" id="messages" aria-live="polite"></section>
+
+        <section class="approval hidden" id="approvalPanel">
+          <div>
+            <p class="eyebrow">approval</p>
+            <h3 id="approvalQuestion"></h3>
+            <div class="choices" id="approvalChoices"></div>
+          </div>
+          <div class="approval-actions">
+            <input id="approvalInput" placeholder="输入你的回复" />
+            <button id="sendApproval">继续</button>
+          </div>
+        </section>
+
+        <form class="composer" id="composer">
+          <textarea id="messageInput" rows="3" placeholder="给 JCode 一个任务"></textarea>
+          <div class="composer-actions">
+            <button type="button" class="secondary" id="stopRun">停止</button>
+            <button type="submit" id="sendMessage">发送</button>
+          </div>
+        </form>
+      </main>
+
+      <aside class="timeline" aria-label="Run timeline">
+        <header class="timeline-header">
+          <div>
+            <p class="eyebrow">trace</p>
+            <h2>工具日志</h2>
+          </div>
+          <span id="currentRun">no run</span>
+        </header>
+        <div class="event-list" id="eventList"></div>
+      </aside>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

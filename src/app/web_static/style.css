@@ -1,0 +1,487 @@
+:root {
+  --ink: #17201c;
+  --muted: #66736d;
+  --paper: #f7f6f0;
+  --panel: #fcfbf6;
+  --line: #d8d3c4;
+  --rail: #23352f;
+  --rail-ink: #eef4eb;
+  --copper: #b86134;
+  --signal: #247b68;
+  --violet: #5a537e;
+  --danger: #a13f43;
+  --shadow: 0 18px 50px rgba(31, 35, 32, 0.12);
+  color-scheme: light;
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    linear-gradient(90deg, rgba(23, 32, 28, 0.035) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(23, 32, 28, 0.025) 1px, transparent 1px),
+    var(--paper);
+  background-size: 28px 28px;
+  color: var(--ink);
+}
+
+button,
+textarea,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(420px, 1fr) minmax(320px, 460px);
+  min-height: 100vh;
+}
+
+.sessions {
+  background: var(--rail);
+  color: var(--rail-ink);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.brand,
+.topbar,
+.timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--copper);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+h1 {
+  font-size: 34px;
+  font-weight: 800;
+}
+
+h2 {
+  font-size: 22px;
+  font-weight: 760;
+}
+
+h3 {
+  font-size: 16px;
+}
+
+.icon-button,
+.new-session,
+.session-item,
+.composer button,
+.approval-actions button,
+.choices button {
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.icon-button {
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--rail-ink);
+}
+
+.new-session {
+  width: 100%;
+  padding: 11px 12px;
+  background: var(--copper);
+  color: #fffaf5;
+  font-weight: 700;
+}
+
+.session-list {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.session-item {
+  width: 100%;
+  padding: 12px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--rail-ink);
+  display: grid;
+  gap: 5px;
+}
+
+.session-item.active {
+  background: #eef4eb;
+  color: var(--ink);
+  box-shadow: inset 4px 0 0 var(--copper);
+}
+
+.session-id {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.session-meta,
+.session-status {
+  color: currentColor;
+  opacity: 0.68;
+  font-size: 12px;
+}
+
+.conversation {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  min-width: 0;
+  border-right: 1px solid var(--line);
+}
+
+.topbar {
+  padding: 22px 26px;
+  background: rgba(252, 251, 246, 0.86);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+}
+
+.run-state {
+  min-width: 96px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--signal);
+  background: #fff;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+  text-align: center;
+}
+
+.run-state[data-status="failed"],
+.run-state[data-status="aborted"],
+.run-state[data-status="error"] {
+  color: var(--danger);
+}
+
+.messages {
+  padding: 26px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.message {
+  max-width: 78%;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 8px 20px rgba(31, 35, 32, 0.06);
+}
+
+.message.user {
+  align-self: flex-end;
+  border-color: rgba(36, 123, 104, 0.35);
+}
+
+.message span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+}
+
+.message p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.56;
+}
+
+.empty-state,
+.empty {
+  color: var(--muted);
+}
+
+.empty-state {
+  margin: auto;
+  display: grid;
+  gap: 8px;
+  text-align: center;
+}
+
+.empty-state strong {
+  color: var(--ink);
+  font-size: 24px;
+}
+
+.approval {
+  margin: 0 26px 18px;
+  padding: 16px;
+  border: 1px solid rgba(184, 97, 52, 0.45);
+  border-left: 6px solid var(--copper);
+  border-radius: 8px;
+  background: #fff8ef;
+  box-shadow: var(--shadow);
+}
+
+.approval.hidden {
+  display: none;
+}
+
+.choices {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.choices button {
+  padding: 7px 10px;
+  background: #fff;
+  border-color: var(--line);
+}
+
+.approval-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+}
+
+.approval-actions input {
+  min-width: 0;
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.approval-actions button {
+  padding: 10px 14px;
+  background: var(--ink);
+  color: #fff;
+}
+
+.composer {
+  padding: 18px 26px 22px;
+  border-top: 1px solid var(--line);
+  background: rgba(252, 251, 246, 0.92);
+}
+
+.composer textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 86px;
+  max-height: 220px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.composer-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.composer button {
+  min-width: 88px;
+  padding: 10px 16px;
+  background: var(--signal);
+  color: white;
+  font-weight: 700;
+}
+
+.composer .secondary {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--danger);
+}
+
+.timeline {
+  background: #f0efe6;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+}
+
+.timeline-header {
+  padding: 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.timeline-header span {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+}
+
+.event-list {
+  overflow: auto;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.event {
+  position: relative;
+  padding: 12px 12px 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.event::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: var(--violet);
+}
+
+.event-tool_requested::before,
+.event-tool_executed::before {
+  background: var(--signal);
+}
+
+.event-run_failed::before,
+.event-client_error::before {
+  background: var(--danger);
+}
+
+.event-approval_required::before {
+  background: var(--copper);
+}
+
+.event-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.event-name {
+  font-weight: 750;
+}
+
+.event-time,
+.event-type {
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+}
+
+.event-type {
+  margin-top: 3px;
+}
+
+.event pre {
+  max-height: 240px;
+  margin: 10px 0 0;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 6px;
+  background: #202823;
+  color: #e7efe8;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+button:focus-visible,
+textarea:focus-visible,
+input:focus-visible {
+  outline: 3px solid rgba(184, 97, 52, 0.35);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1080px) {
+  .shell {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+
+  .timeline {
+    grid-column: 1 / -1;
+    min-height: 360px;
+    border-top: 1px solid var(--line);
+  }
+}
+
+@media (max-width: 760px) {
+  .shell {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sessions {
+    max-height: 260px;
+  }
+
+  .conversation {
+    min-height: 620px;
+  }
+
+  .message {
+    max-width: 100%;
+  }
+
+  .approval-actions {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .event,
+  .message,
+  .approval {
+    animation: rise 160ms ease-out;
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

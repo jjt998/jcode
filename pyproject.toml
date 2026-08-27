@@ -7,10 +7,14 @@ name = "jcode"
 version = "0.1.0"
 description = "JCode: a compact local coding agent inspired by Pico"
 requires-python = ">=3.10"
-dependencies = ["pydantic>=2.0.0"]
+dependencies = ["pydantic>=2.0.0", "fastapi", "uvicorn"]
 
 [project.scripts]
 jcode = "src.app.cli:main"
+jcode-web = "src.app.web:main"
 
 [tool.setuptools.packages.find]
 include = ["src*"]
+
+[tool.setuptools.package-data]
+"src.app" = ["web_static/*"]
