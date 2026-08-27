@@ -32,3 +32,7 @@ Example commands:
 ## Git Workflow
 
 After coding or documentation changes, do not create git commits unless the user explicitly asks for a commit in that turn.
+
+## Local Test Services
+
+If you start a local service while testing, stop that service before finishing the turn. This includes web servers, dev servers, API servers, background workers, and other long-running local processes.
