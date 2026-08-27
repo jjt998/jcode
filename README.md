@@ -155,7 +155,7 @@ jcode.app.cli
 
 - `app`：命令行参数、配置读取和运行时装配。
 - `runtime`：Agent 主循环、模型动作解析、终态收口和异常停止。
-- `context`：模型上下文分段构建、预算估算、技能提示注入。
+- `context`：模型上下文分段构建、prefix 渲染、动态工具定义注入、项目规则注入、预算估算和技能提示注入。
 - `tools`：工具注册、参数校验、工作区读写、shell、patch 和子任务工具。
 - `policy`：权限、工具规则、重复调用、sandbox、Final Gate 和敏感信息处理。
 - `state`：Session、TaskState、History、Checkpoint 和 Workspace。
@@ -181,13 +181,15 @@ current_request
 
 其中：
 
-- `prefix` 放稳定身份、输出协议和安全规则。
+- `prefix` 放稳定系统提示词，包括系统规则、输出协议、动态工具定义、工作区 `JCODE.md` 项目规则和安全规则。
 - `skill` 放技能相关提示。
 - `working_memory` 放 `Working_Memory` 渲染结果，包括当前任务目标、最近文件、文件 freshness、恢复上下文、检索到的长期记忆、子 Agent 结果和工具观察。
 - `history` 放当前 session 的历史对话和工具结果。
 - `current_request` 放本轮用户请求。
 
-变化较快的事实不会塞进稳定前缀，而是进入 `working_memory` 或 `history`。
+`prefix` 的工具定义来自运行时 `ToolRegistry`，并动态渲染工具名、说明、读写风险标记和 Pydantic 参数 schema，避免模型猜测不存在的工具名。`prefix` 还会读取当前工作区根目录的 `JCODE.md` 作为项目规则；如果文件不存在，则项目规则层渲染为 `(none)`。
+
+变化较快的事实不会塞进稳定前缀，而是进入 `working_memory` 或 `history`。工具定义和 `JCODE.md` 虽然由运行时渲染，但它们属于本轮稳定规则输入，不属于工作记忆。
 
 ## 工具安全链
 

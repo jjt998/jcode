@@ -13,7 +13,7 @@ app
 - `app` 只负责 CLI、配置读取和默认对象装配，不承载运行逻辑。
 - `runtime` 由 `JCodeAgent` 持有主循环，负责 run 生命周期、动作解析、工具分发、终态收口和恢复后的运行衔接。
 - `runtime_mode` 是 session 级状态；当前支持 `default` 与 `plan`，并由 `JCodeAgent` 的 plan controller 驱动工具面和 final gate。
-- `context` 只负责模型上下文拼装、预算估算和上下文区块渲染。
+- `context` 只负责模型上下文拼装、prefix 渲染、动态工具定义注入、项目规则注入、预算估算和上下文区块渲染。
 - `providers` 只负责模型协议适配和模型响应包装。
 - `tools` 只负责工具定义、参数校验后的执行和工具结果返回；工具注册表不持有 workspace。
 - `policy` 负责权限、工具规则、sandbox、重复调用和 final gate，策略检查不得长期持有会被 resume 替换的 working memory。
@@ -28,6 +28,8 @@ app
 - 禁止重新引入独立 `Engine` 或 `completion` 这类只接收整个 `agent` 再反向访问所有依赖的假边界。
 - 禁止让 `JCodeAgent` 之外的长期对象持有可被 resume 替换的 `working_memory`；需要时通过方法参数传入当前实例。
 - 禁止在 `ToolRegistry` 上动态挂载 `workspace` 或其他运行态对象；registry 只保存工具定义。
+- 禁止手写维护 prefix 内的工具清单；工具定义必须从 `ToolRegistry` 动态渲染，参数形状必须来自工具的 Pydantic schema。
+- 禁止把工作区项目规则写进 `.jcode.toml` 或 Working_Memory；项目规则入口固定为 workspace 根目录下的 `JCODE.md`，并由 prefix 渲染层读取。
 - 禁止只在 `__init__` 中动态创建实例属性；类实例属性必须在类体中显式声明类型。
 - 禁止把运行证据、session history、working memory、checkpoint 混成同一个事实来源：history 面向上下文，trace 面向审计，working memory 面向当前推理，checkpoint 面向恢复。
 - 禁止把 Durable Memory 的晋升结果长期保存在 Working_Memory；晋升结果属于 memory audit、trace/report 或 Durable Memory 文件。
@@ -36,6 +38,8 @@ app
 
 ## 工具与策略合同
 
+- prefix 中的工具定义层必须包含明确约束：`se only the tools listed below. Do not invent tool names.`
+- prefix 中的工具定义层由 `ToolRegistry` 动态生成，至少包含工具名、说明、`read_only`、`risky` 和参数 schema。
 - 工具执行入口先构造 `ToolCallRequest`，再形成 `ToolInvocation`，之后按 validation、call guard、tool policy、permission、sandbox、execution 的顺序推进。
 - 工具 profile 是工具执行面的第一层能力收束；默认提供 `default`、`readonly`、`worker`、`dream` 四个命名 profile。
 - Profile gate 发生在参数校验后、具体策略检查前；拒绝统一写入 `ToolResult.metadata["policy"]`，稳定原因码为 `tool_profile_denied`。
@@ -44,6 +48,36 @@ app
 - `ToolResult.metadata["policy"]` 保存本次工具调用经过的策略决策，便于 trace/report 审计。
 - `ToolResult.status` 继续保持现有兼容值，`ToolResult.decision` 表示治理决策，`ToolResult.ok` 提供成功判断。
 - 工具注册表只保存工具定义；workspace、working memory、run id 等运行态数据只能通过执行入口传递。
+
+## 上下文与 Prefix 合同
+
+JCode 的顶层上下文顺序固定为：
+
+```text
+prefix
+skill
+working_memory
+history
+current_request
+```
+
+`prefix` 是系统提示词层，用于放置本轮稳定规则输入。它由 `src.context.prefix.render_prefix()` 生成，内部顺序固定为：
+
+```text
+System rules
+Output protocol
+Tool definitions
+Project rules from JCODE.md
+Stable safety rules
+```
+
+- `System rules` 定义 JCode 的稳定身份和角色边界。
+- `Output protocol` 定义 `<tool ...>` 与 `<final>` 两种模型输出协议。
+- `Tool definitions` 从 `ToolRegistry` 动态渲染，不允许手写复制工具列表。
+- `Project rules from JCODE.md` 读取当前 workspace 根目录的 `JCODE.md`；文件不存在时渲染为 `(none)`。
+- `Stable safety rules` 放路径、读写、重复调用、sandbox 和证据总结等稳定安全约束。
+
+变化较快的事实进入 `working_memory` 或 `history`；工具定义和 `JCODE.md` 虽然在运行时渲染，但它们属于本轮稳定规则输入，不属于 Working_Memory。
 
 ## 分层记忆合同
 
