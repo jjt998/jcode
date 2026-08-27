@@ -1,7 +1,7 @@
 provider = "openai"
 
 [providers.openai]
-base_url = "https://api.openai.com/"
+base_url = "https://api.deepseek.com"
 api_key = "sk-fa31d15031cb4e03802e9e100a3e92ac"
 model = "deepseek-v4-flash"
 

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>安装后如何启动和使用 JCode</title>
+    <link rel="stylesheet" href="../assets/lesson.css">
+  </head>
+  <body>
+    <main>
+      <h1>安装后如何启动和使用 JCode</h1>
+      <p class="subtitle">核心问题：安装完成后，你得到的不是一个正在运行的服务，而是一个已经登记到 Python 环境里的命令行工具。</p>
+
+      <h2>先进入项目根目录</h2>
+      <pre><code>cd D:\1technical_stack_study\agent_study\agent_projects\jcode</code></pre>
+      <p>JCode 会读取当前工作目录下的项目文件和配置。它还会在运行时写入 <code>.jcode/</code> 目录，用来保存 run trace、session、memory、checkpoint 和 report。</p>
+
+      <h2>当前源码布局下的启动方式</h2>
+      <p>按当前项目实际结构，源码包名是 <code>src</code>，所以最可靠的启动方式是：</p>
+      <pre><code>&amp; 'D:\jt\ANACONDA\envs_dirs\jcode\python.exe' -m src --help
+&amp; 'D:\jt\ANACONDA\envs_dirs\jcode\python.exe' -m src "hi"</code></pre>
+
+      <p>常用方式：</p>
+      <pre><code>&amp; 'D:\jt\ANACONDA\envs_dirs\jcode\python.exe' -m src --cwd . "帮我查看项目结构"
+&amp; 'D:\jt\ANACONDA\envs_dirs\jcode\python.exe' -m src --resume latest "继续"
+&amp; 'D:\jt\ANACONDA\envs_dirs\jcode\python.exe' -m src --session-id demo-session "实现一个小功能"</code></pre>
+
+      <div class="note">
+        README 里写的是 <code>jcode "hi"</code> 和 <code>python -m jcode --help</code>。这代表项目作者希望包名是 <code>jcode</code>。但当前文件实际在 <code>src</code> 包下，因此现阶段应优先使用 <code>python -m src</code>。
+      </div>
+
+      <h2>如果打包配置修好以后</h2>
+      <p>如果以后把源码包和 <code>pyproject.toml</code> 对齐，让包名真的变成 <code>jcode</code>，那么安装后就可以按 README 使用：</p>
+      <pre><code>jcode "hi"
+python -m jcode --help</code></pre>
+
+      <p>在 PowerShell 中，如果 <code>jcode</code> 命令找不到，但安装确实成功，通常是当前 shell 还没刷新 PATH。可以重开一个 PowerShell，或者直接用完整 Python 命令。</p>
+
+      <h2>为什么安装后可以这么用</h2>
+      <p><code>pip install -e .</code> 会把当前项目登记到这个 Python 环境中。登记完成后，Python 解释器就知道：当你导入或运行这个包时，应该去项目源码目录里找代码。</p>
+
+      <p>editable install 的特别之处是：它不是把源码复制一份到环境目录，而是建立一个指向源码目录的开发安装关系。因此你修改源码后，下一次启动通常会直接用新代码。</p>
+
+      <p>如果 <code>pyproject.toml</code> 里配置了命令行入口，例如：</p>
+      <pre><code>[project.scripts]
+jcode = "jcode.app.cli:main"</code></pre>
+
+      <p>pip 还会在该 Python 环境的 Scripts 目录下生成一个命令脚本。这个脚本的职责很简单：当你输入 <code>jcode</code> 时，它会导入 <code>jcode.app.cli</code>，然后调用里面的 <code>main()</code> 函数。</p>
+
+      <h2>JCode 启动后做什么</h2>
+      <p>结合项目说明，启动后会进入这条主链路：</p>
+      <pre><code>命令行入口
+-> app.bootstrap 装配运行时
+-> runtime.agent 进入 Agent 主循环
+-> 构建上下文
+-> 调用模型或跳过真实请求
+-> 执行工具
+-> 写入 .jcode/ 运行证据
+-> 输出最终回答</code></pre>
+
+      <p>如果你配置了 <code>.jcode.toml</code> 或环境变量里的 API key，它会尝试真实调用模型服务。如果没有 API key，README 说明它仍会构建上下文并写入运行证据，但不会发送真实模型请求。</p>
+
+      <h2>最小使用流程</h2>
+      <table>
+        <tr>
+          <th>目标</th>
+          <th>命令</th>
+        </tr>
+        <tr>
+          <td>查看帮助</td>
+          <td><code>&amp; 'D:\jt\ANACONDA\envs_dirs\jcode\python.exe' -m src --help</code></td>
+        </tr>
+        <tr>
+          <td>发起一次任务</td>
+          <td><code>&amp; 'D:\jt\ANACONDA\envs_dirs\jcode\python.exe' -m src "hi"</code></td>
+        </tr>
+        <tr>
+          <td>指定工作目录</td>
+          <td><code>&amp; 'D:\jt\ANACONDA\envs_dirs\jcode\python.exe' -m src --cwd . "帮我查看项目结构"</code></td>
+        </tr>
+        <tr>
+          <td>继续最近会话</td>
+          <td><code>&amp; 'D:\jt\ANACONDA\envs_dirs\jcode\python.exe' -m src --resume latest "继续"</code></td>
+        </tr>
+      </table>
+
+      <h2>小练习</h2>
+      <div class="quiz">
+        <p>安装后输入 <code>jcode</code> 能启动，本质上是因为 pip 做了哪件事？</p>
+        <details>
+          <summary>查看答案</summary>
+          <p>pip 根据 <code>pyproject.toml</code> 生成了命令行入口脚本，这个脚本会导入目标模块并调用入口函数。</p>
+        </details>
+        <p>当前项目为什么先推荐 <code>python -m src</code>？</p>
+        <details>
+          <summary>查看答案</summary>
+          <p>因为当前实际源码包名是 <code>src</code>，而不是 README 和脚本入口中期待的 <code>jcode</code>。</p>
+        </details>
+      </div>
+    </main>
+  </body>
+</html>
