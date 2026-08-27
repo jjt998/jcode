@@ -12,6 +12,7 @@ from typing import Any
 from src.app.bootstrap import build_agent
 from src.app.config import AppConfig, load_config
 from src.app.web_projects import WebProject, WebProjectStore
+from src.app.web_turns import build_session_turns
 from src.state.session import SessionStore
 from src.state.workspace import Workspace, now_iso
 
@@ -146,6 +147,15 @@ class WebRunManager:
         session["active_run_id"] = self.session_active.get(self._session_key(project.id, session_id), "")
         session["active_status"] = self._active_status(project.id, session_id)
         return session
+
+    def get_session_turns(self, session_id: str, project_id: str = "default") -> dict:
+        project = self.project_store.get(project_id)
+        session = self.get_session(session_id, project.id)
+        turns = build_session_turns(project.id, project.root, session)
+        active_id = self.session_active.get(self._session_key(project.id, session_id), "")
+        if active_id and active_id in self.runs:
+            turns["active_run"] = self.runs[active_id].snapshot()
+        return turns
 
     def create_session(self, project_id: str = "default") -> dict:
         project = self.project_store.get(project_id)

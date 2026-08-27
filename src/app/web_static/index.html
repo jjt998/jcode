@@ -37,19 +37,7 @@
           <div class="run-state" id="runState">idle</div>
         </header>
 
-        <section class="messages" id="messages" aria-live="polite"></section>
-
-        <section class="approval hidden" id="approvalPanel">
-          <div>
-            <p class="eyebrow">approval</p>
-            <h3 id="approvalQuestion"></h3>
-            <div class="choices" id="approvalChoices"></div>
-          </div>
-          <div class="approval-actions">
-            <input id="approvalInput" placeholder="输入你的回复" />
-            <button id="sendApproval">继续</button>
-          </div>
-        </section>
+        <section class="messages" id="turnList" aria-live="polite"></section>
 
         <form class="composer" id="composer">
           <textarea id="messageInput" rows="3" placeholder="给 JCode 一个任务"></textarea>
@@ -59,17 +47,6 @@
           </div>
         </form>
       </main>
-
-      <aside class="timeline" aria-label="Run timeline">
-        <header class="timeline-header">
-          <div>
-            <p class="eyebrow">trace</p>
-            <h2>工具日志</h2>
-          </div>
-          <span id="currentRun">no run</span>
-        </header>
-        <div class="event-list" id="eventList"></div>
-      </aside>
     </div>
 
     <script src="/static/app.js"></script>

@@ -73,6 +73,13 @@ def create_app(manager: WebRunManager) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="session not found") from exc
 
+    @app.get("/api/projects/{project_id}/sessions/{session_id}/turns")
+    def get_project_session_turns(project_id: str, session_id: str):
+        try:
+            return manager.get_session_turns(session_id, project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="session not found") from exc
+
     @app.post("/api/projects/{project_id}/sessions/{session_id}/messages")
     def send_project_message(project_id: str, session_id: str, request: MessageRequest):
         try:

@@ -242,7 +242,7 @@ class JCodeAgent:
 
     def _build_context(self, user_message: str, task_state, run_dir):
         context_result = self.context_builder.build(self.session, self.working_memory, user_message)
-        self._record_trace(run_dir, "context_built", task_state, **context_result.metadata)
+        self._record_trace(run_dir, "context_built", task_state, **context_result.metadata, context=context_result.context)
         return context_result
 
     def _call_model(self, context_result, task_state, run_dir):
@@ -257,6 +257,14 @@ class JCodeAgent:
             task_state,
             estimated_input_tokens=response.input_tokens,
             estimated_output_tokens=response.output_tokens,
+        )
+        self._record_trace(
+            run_dir,
+            "model_responded",
+            task_state,
+            estimated_input_tokens=response.input_tokens,
+            estimated_output_tokens=response.output_tokens,
+            response_text=self.redactor.redact(response.text),
         )
         return response
 
@@ -329,7 +337,7 @@ class JCodeAgent:
             error_type=result.error_type,
             changed_files=result.changed_files,
             metadata=result.metadata,
-            result=self.redactor.redact(result.text[:1000]),
+            result=self.redactor.redact(result.text),
         )
         self._create_checkpoint(checkpoint, task_state, run_dir, "tool_executed")
         self.run_store.write_task_state(run_dir, task_state)

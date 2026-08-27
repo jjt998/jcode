@@ -28,3 +28,7 @@ Example commands:
 & 'D:\jt\ANACONDA\envs_dirs\jcode\python.exe' -m pip install -e .
 & 'D:\jt\ANACONDA\envs_dirs\jcode\python.exe' -m src --help
 ```
+
+## Git Workflow
+
+After coding or documentation changes, do not create git commits unless the user explicitly asks for a commit in that turn.
