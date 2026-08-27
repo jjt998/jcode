@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from src.context.budget import estimate_tokens, tail_clip
+from src.context.prefix import render_prefix
 from src.context.sections import SECTION_ORDER
 from src.context.skills import render_skill_section
 from src.runtime.plan import render_runtime_mode_text
@@ -11,20 +12,7 @@ from src.runtime.plan import render_runtime_mode_text
 if TYPE_CHECKING:
     from src.memory.durable import DurableMemoryStore
     from src.state.workspace import Workspace
-
-PREFIX = """You are JCode, a compact local coding agent.
-
-Output protocol:
-- To call a tool, return exactly: <tool name="tool_name">{"arg": "value"}</tool>
-- To finish, return exactly: <final>answer</final>
-
-Stable safety rules:
-- Stay inside the workspace.
-- Read files before writing them.
-- Do not repeat identical tool calls.
-- Shell and write actions may require approval and sandbox checks.
-- Summarize evidence from tools before finalizing.
-"""
+    from src.tools.registry import ToolRegistry
 
 
 @dataclass
@@ -36,18 +24,20 @@ class ContextBuildResult:
 class ContextBuilder:
     workspace: Workspace
     durable_memory: DurableMemoryStore
+    registry: ToolRegistry
     total_budget: int
 
-    def __init__(self, workspace, durable_memory, total_budget: int = 60000):
+    def __init__(self, workspace, durable_memory, registry, total_budget: int = 60000):
         self.workspace = workspace
         self.durable_memory = durable_memory
+        self.registry = registry
         self.total_budget = total_budget
 
     def build(self, session: dict, working_memory, user_message: str) -> ContextBuildResult:
         working_memory.set_retrieval(user_message, self.durable_memory.retrieve(user_message))
         history = self._render_history(session.get("history", []), budget=12000)
         sections = {
-            "prefix": PREFIX.strip(),
+            "prefix": render_prefix(self.workspace, self.registry),
             "skill": render_skill_section(),
             "working_memory": self._render_working_memory(session, working_memory),
             "history": history,

@@ -68,17 +68,31 @@ jcode --session-id demo-session "实现一个小功能"
 
 JCode MVP1 提供单用户本地 Web 控制台，用于查看会话、发送任务和观察工具执行日志。
 
+首次使用或依赖变更后，先在项目根目录安装：
+
+```powershell
+& 'D:\jt\ANACONDA\envs_dirs\jcode\python.exe' -m pip install -e .
+```
+
+安装后可以使用命令入口启动：
+
 ```powershell
 jcode-web --cwd .
 ```
 
-或使用项目指定解释器：
+也可以直接使用项目指定解释器启动：
 
 ```powershell
 & 'D:\jt\ANACONDA\envs_dirs\jcode\python.exe' -m src.app.web --cwd .
 ```
 
-默认监听 `127.0.0.1:8765`。Web 模式默认只面向本机单用户使用，不作为远程多用户平台。
+启动后在浏览器打开：
+
+```text
+http://127.0.0.1:8765
+```
+
+Web 模式默认只监听 `127.0.0.1:8765`，只面向本机单用户使用，不作为远程多用户平台。
 
 ## 工具概览
 
