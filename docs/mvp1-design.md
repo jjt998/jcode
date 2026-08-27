@@ -5,7 +5,9 @@ MVP1 的目标是把 JCode 从当前 CLI-only 形态扩展为单用户本地 Web
 ## 目标
 
 - 提供单用户本地网页，用于运行 JCode。
+- 提供项目列表。一个项目对应一个本地仓库目录，项目被选中后，工作区就是该仓库。
 - 提供会话列表，用户在哪个会话发起聊天，就默认恢复哪个会话。
+- 会话列表按项目隔离，只展示当前项目仓库 `.jcode/sessions/` 下已经存在的会话。
 - 提供聊天输入、历史消息和最终回答展示。
 - 将 `.jcode/runs/<run_id>/trace.jsonl` 和 session events 转成前端可消费的实时事件流。
 - 把工具执行日志作为 Web 产品的核心视图，而不是隐藏调试信息。
@@ -40,12 +42,13 @@ src/app/bootstrap.py
 src/runtime/agent.py
 ```
 
-Web 层只负责装配和运行管理：
+Web 层只负责项目选择、装配和运行管理：
 
 ```text
 Browser UI
 -> FastAPI Web API
 -> WebRunManager
+-> selected WebProject root
 -> build_agent(config)
 -> JCodeAgent.ask()
 -> .jcode/runs/<run_id>/trace.jsonl
@@ -59,6 +62,7 @@ MVP1 必须保持一个边界：Web 不重新实现 Agent，不绕过 `JCodeAgen
 
 ```text
 src/app/web.py
+src/app/web_projects.py
 src/app/web_server.py
 src/app/web_runs.py
 src/app/web_events.py
@@ -69,6 +73,7 @@ src/app/web_static/
 ```
 
 - `web.py`：Web 模式入口，类似 CLI 的 `main()`。
+- `web_projects.py`：维护 Web 控制台项目列表；一个项目对应一个本地仓库目录。
 - `web_server.py`：FastAPI app、HTTP 路由和静态文件托管。
 - `web_runs.py`：管理后台运行线程、运行状态、审批等待和中止请求。
 - `web_events.py`：读取 trace 和 session events，并转成 SSE 事件。
@@ -120,11 +125,63 @@ MVP1 默认只绑定 localhost。
 
 ## HTTP API
 
+### 项目列表
+
+```http
+GET /api/projects
+```
+
+返回：
+
+```json
+[
+  {
+    "id": "default",
+    "name": "jcode",
+    "root": "D:\\1technical_stack_study\\agent_study\\agent_projects\\jcode",
+    "has_git": true,
+    "session_count": 7,
+    "active_runs": []
+  }
+]
+```
+
+### 创建项目
+
+```http
+POST /api/projects
+```
+
+请求：
+
+```json
+{
+  "root": "D:\\1technical_stack_study\\agent_study\\agent_projects\\jcode",
+  "name": "jcode"
+}
+```
+
+行为：
+
+- 校验 `root` 是存在的本地目录。
+- 将该目录保存为 Web 项目。
+- 后续在该项目下创建或恢复会话时，JCode 工作区就是该目录。
+
+### 项目会话列表
+
+```http
+GET /api/projects/{project_id}/sessions
+```
+
+返回该项目仓库 `.jcode/sessions/` 下的所有已存在会话。
+
 ### 会话列表
 
 ```http
 GET /api/sessions
 ```
+
+该接口保留为兼容入口，等价于读取 `default` 项目的会话。MVP1 前端应优先使用项目作用域接口。
 
 返回：
 
@@ -160,19 +217,19 @@ GET /api/sessions/{session_id}
 ### 新建会话
 
 ```http
-POST /api/sessions
+POST /api/projects/{project_id}/sessions
 ```
 
 行为：
 
-- 创建一个空 session。
+- 在指定项目仓库的 `.jcode/sessions/` 下创建一个空 session。
 - 返回 session 基本信息。
 - 前端自动选中新 session。
 
 ### 发送消息
 
 ```http
-POST /api/sessions/{session_id}/messages
+POST /api/projects/{project_id}/sessions/{session_id}/messages
 ```
 
 请求：
@@ -186,7 +243,7 @@ POST /api/sessions/{session_id}/messages
 行为：
 
 - 后端使用该 `session_id` 构建 agent。
-- 默认恢复该 session。
+- 后端使用项目 root 作为 `cwd`，默认恢复该 session。
 - 后台运行 `agent.ask(message)`。
 - HTTP 请求立即返回，不等待最终回答。
 
@@ -233,7 +290,7 @@ failed
 ### 运行事件流
 
 ```http
-GET /api/runs/{run_id}/events
+GET /api/projects/{project_id}/runs/{run_id}/events
 ```
 
 使用 SSE：
@@ -390,13 +447,15 @@ run_failed
 MVP1 推荐三栏布局：
 
 ```text
-左侧：Session 列表
+左侧：Project / Session 列表
 中间：Chat / Final Answer
 右侧：Run Timeline / Tool Logs
 ```
 
 左侧：
 
+- 创建项目。
+- 项目列表。
 - 新建会话。
 - 会话列表。
 - 最近更新时间。
@@ -425,16 +484,17 @@ MVP1 推荐三栏布局：
 
 ## 会话恢复
 
-Web UI 不直接暴露 CLI 的 `--resume latest` 语义给用户。
+Web UI 不直接暴露 CLI 的 `--resume latest` 语义给用户。项目是会话恢复的第一层上下文。
 
 规则：
 
-- 用户打开页面时，默认选中最近更新的 session。
-- 用户点击某个 session 后，后续消息都在该 session 下发送。
-- 后端总是以该 session id 恢复 agent。
-- 新建会话后，后续消息进入新 session。
+- 用户打开页面时，默认选中最近更新的项目。
+- 选中项目后，前端加载该项目仓库下已有 session。
+- 用户点击某个 session 后，后续消息都在该项目的该 session 下发送。
+- 后端总是以项目 root 作为 `cwd`，并以该 session id 恢复 agent。
+- 新建会话后，session 创建在当前项目仓库的 `.jcode/sessions/` 下。
 
-`latest` 只作为页面初始化时的默认选择策略。
+`latest` 只作为页面初始化时的默认项目和默认 session 选择策略。
 
 ## 中止语义
 
@@ -511,7 +571,7 @@ MVP1 处理方式：
 
 MVP1 处理方式：
 
-- 同一 session 同一时间只允许一个 active run。
+- 同一项目的同一 session 同一时间只允许一个 active run。
 - 若 session 已有 running、waiting_approval 或 aborting 状态，发送消息返回冲突。
 - 前端提示用户等待完成或先中止当前 run。
 

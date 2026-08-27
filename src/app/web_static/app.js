@@ -1,4 +1,6 @@
 const state = {
+  projects: [],
+  projectId: "",
   sessions: [],
   sessionId: "",
   activeRunId: "",
@@ -7,10 +9,15 @@ const state = {
 };
 
 const els = {
+  projectList: document.querySelector("#projectList"),
+  projectForm: document.querySelector("#projectForm"),
+  projectPath: document.querySelector("#projectPath"),
+  projectName: document.querySelector("#projectName"),
   sessionList: document.querySelector("#sessionList"),
   newSession: document.querySelector("#newSession"),
-  refreshSessions: document.querySelector("#refreshSessions"),
+  refreshAll: document.querySelector("#refreshAll"),
   sessionTitle: document.querySelector("#sessionTitle"),
+  projectRoot: document.querySelector("#projectRoot"),
   runState: document.querySelector("#runState"),
   messages: document.querySelector("#messages"),
   composer: document.querySelector("#composer"),
@@ -49,8 +56,54 @@ function setRunStatus(status) {
   els.runState.dataset.status = status || "idle";
 }
 
+async function loadProjects(selectLatest = false) {
+  state.projects = await api("/api/projects");
+  renderProjects();
+  if (!state.projectId && state.projects.length && selectLatest) {
+    await selectProject(state.projects[0].id);
+  }
+}
+
+function renderProjects() {
+  els.projectList.innerHTML = "";
+  if (!state.projects.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "还没有项目";
+    els.projectList.append(empty);
+    return;
+  }
+  for (const project of state.projects) {
+    const button = document.createElement("button");
+    button.className = "project-item";
+    if (project.id === state.projectId) button.classList.add("active");
+    button.innerHTML = `
+      <span class="project-name">${escapeHtml(project.name)}</span>
+      <span class="project-root">${escapeHtml(project.root)}</span>
+      <span class="project-meta">${project.session_count || 0} sessions${project.has_git ? " · git" : ""}</span>
+    `;
+    button.addEventListener("click", () => selectProject(project.id));
+    els.projectList.append(button);
+  }
+}
+
+async function selectProject(projectId) {
+  const project = await api(`/api/projects/${encodeURIComponent(projectId)}`);
+  state.projectId = project.id;
+  state.sessionId = "";
+  state.activeRunId = "";
+  els.projectRoot.textContent = project.root;
+  els.sessionTitle.textContent = project.name;
+  setRunStatus("idle");
+  clearApproval();
+  clearEvents();
+  renderProjects();
+  await loadSessions(true);
+}
+
 async function loadSessions(selectLatest = false) {
-  state.sessions = await api("/api/sessions");
+  if (!state.projectId) return;
+  state.sessions = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions`);
   renderSessions();
   if (!state.sessionId && state.sessions.length && selectLatest) {
     await selectSession(state.sessions[0].id);
@@ -62,7 +115,7 @@ function renderSessions() {
   if (!state.sessions.length) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = "还没有会话";
+    empty.textContent = state.projectId ? "这个项目还没有会话" : "先选择项目";
     els.sessionList.append(empty);
     return;
   }
@@ -81,14 +134,16 @@ function renderSessions() {
 }
 
 async function selectSession(sessionId) {
-  const session = await api(`/api/sessions/${encodeURIComponent(sessionId)}`);
+  const session = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions/${encodeURIComponent(sessionId)}`);
   state.sessionId = session.id;
   state.activeRunId = session.active_run_id || session.latest_run_id || "";
   els.sessionTitle.textContent = session.id;
+  els.projectRoot.textContent = session.project_root || "";
   renderSessions();
   renderHistory(session.history || []);
   setRunStatus(session.active_status || "idle");
   clearApproval();
+  clearEvents();
   if (state.activeRunId) {
     connectEvents(state.activeRunId);
   }
@@ -121,11 +176,10 @@ function addMessage(role, content) {
 function connectEvents(runId) {
   if (!runId) return;
   if (state.eventSource) state.eventSource.close();
-  state.events.clear();
-  els.eventList.innerHTML = "";
+  clearEvents();
   state.activeRunId = runId;
   els.currentRun.textContent = runId;
-  const source = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events`);
+  const source = new EventSource(`/api/projects/${encodeURIComponent(state.projectId)}/runs/${encodeURIComponent(runId)}/events`);
   state.eventSource = source;
   const names = [
     "web_run_started",
@@ -155,6 +209,12 @@ function connectEvents(runId) {
   source.onerror = () => {
     setRunStatus("disconnected");
   };
+}
+
+function clearEvents() {
+  state.events.clear();
+  els.eventList.innerHTML = "";
+  els.currentRun.textContent = "no run";
 }
 
 function handleRunEvent(name, event) {
@@ -230,18 +290,37 @@ function clearApproval() {
   els.approvalInput.value = "";
 }
 
+els.projectForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const root = els.projectPath.value.trim();
+  if (!root) return;
+  const project = await api("/api/projects", {
+    method: "POST",
+    body: JSON.stringify({ root, name: els.projectName.value.trim() || null }),
+  });
+  els.projectPath.value = "";
+  els.projectName.value = "";
+  await loadProjects(false);
+  await selectProject(project.id);
+});
+
 els.newSession.addEventListener("click", async () => {
-  const session = await api("/api/sessions", { method: "POST" });
+  if (!state.projectId) return;
+  const session = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions`, { method: "POST" });
   await loadSessions(false);
   await selectSession(session.id);
 });
 
-els.refreshSessions.addEventListener("click", () => loadSessions(false).catch(console.error));
+els.refreshAll.addEventListener("click", async () => {
+  await loadProjects(false);
+  await loadSessions(false);
+});
 
 els.composer.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!state.projectId) return;
   if (!state.sessionId) {
-    const session = await api("/api/sessions", { method: "POST" });
+    const session = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions`, { method: "POST" });
     await loadSessions(false);
     await selectSession(session.id);
   }
@@ -251,7 +330,7 @@ els.composer.addEventListener("submit", async (event) => {
   els.messageInput.value = "";
   setRunStatus("running");
   try {
-    const run = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/messages`, {
+    const run = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions/${encodeURIComponent(state.sessionId)}/messages`, {
       method: "POST",
       body: JSON.stringify({ message }),
     });
@@ -292,6 +371,6 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-loadSessions(true).catch((error) => {
+loadProjects(true).catch((error) => {
   appendEvent("client_error", { created_at: new Date().toISOString(), error_type: "startup_failed", result: error.message });
 });

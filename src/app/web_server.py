@@ -20,6 +20,11 @@ class ApprovalRequest(BaseModel):
     answer: str
 
 
+class ProjectRequest(BaseModel):
+    root: str
+    name: str | None = None
+
+
 def create_app(manager: WebRunManager) -> FastAPI:
     app = FastAPI(title="JCode Web", version="0.1.0")
     static_dir = Path(__file__).parent / "web_static"
@@ -29,25 +34,80 @@ def create_app(manager: WebRunManager) -> FastAPI:
     def index():
         return FileResponse(static_dir / "index.html")
 
+    @app.get("/api/projects")
+    def list_projects():
+        return manager.list_projects()
+
+    @app.post("/api/projects")
+    def create_project(request: ProjectRequest):
+        try:
+            return manager.create_project(request.root, name=request.name)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/projects/{project_id}")
+    def get_project(project_id: str):
+        try:
+            return manager.project_summary(manager.project_store.get(project_id))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="project not found") from exc
+
+    @app.get("/api/projects/{project_id}/sessions")
+    def list_project_sessions(project_id: str):
+        try:
+            return manager.list_sessions(project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="project not found") from exc
+
+    @app.post("/api/projects/{project_id}/sessions")
+    def create_project_session(project_id: str):
+        try:
+            return manager.create_session(project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="project not found") from exc
+
+    @app.get("/api/projects/{project_id}/sessions/{session_id}")
+    def get_project_session(project_id: str, session_id: str):
+        try:
+            return manager.get_session(session_id, project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="session not found") from exc
+
+    @app.post("/api/projects/{project_id}/sessions/{session_id}/messages")
+    def send_project_message(project_id: str, session_id: str, request: MessageRequest):
+        try:
+            run = manager.start_run(session_id, request.message, project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="project or session not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return run.snapshot()
+
+    @app.get("/api/projects/{project_id}/runs/{run_id}/events")
+    async def project_run_events(project_id: str, run_id: str):
+        return await stream_run_events(project_id, run_id)
+
     @app.get("/api/sessions")
     def list_sessions():
-        return manager.list_sessions()
+        return manager.list_sessions("default")
 
     @app.post("/api/sessions")
     def create_session():
-        return manager.create_session()
+        return manager.create_session("default")
 
     @app.get("/api/sessions/{session_id}")
     def get_session(session_id: str):
         try:
-            return manager.get_session(session_id)
+            return manager.get_session(session_id, "default")
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="session not found") from exc
 
     @app.post("/api/sessions/{session_id}/messages")
     def send_message(session_id: str, request: MessageRequest):
         try:
-            run = manager.start_run(session_id, request.message)
+            run = manager.start_run(session_id, request.message, "default")
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except RuntimeError as exc:
@@ -80,10 +140,16 @@ def create_app(manager: WebRunManager) -> FastAPI:
 
     @app.get("/api/runs/{run_id}/events")
     async def run_events(run_id: str):
+        return await stream_run_events("default", run_id)
+
+    async def stream_run_events(project_id: str, run_id: str):
         try:
             run = manager.get_run(run_id)
         except KeyError as exc:
-            run_dir = manager.state_dir / "runs" / run_id
+            try:
+                run_dir = manager.historical_run_dir(project_id, run_id)
+            except KeyError:
+                raise HTTPException(status_code=404, detail="project not found") from exc
             if not run_dir.exists():
                 raise HTTPException(status_code=404, detail="run not found") from exc
 

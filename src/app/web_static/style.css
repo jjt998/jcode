@@ -96,7 +96,10 @@ h3 {
 
 .icon-button,
 .new-session,
+.project-item,
 .session-item,
+.project-form input,
+.project-form button,
 .composer button,
 .approval-actions button,
 .choices button {
@@ -117,6 +120,74 @@ h3 {
   background: var(--copper);
   color: #fffaf5;
   font-weight: 700;
+}
+
+.project-form {
+  display: grid;
+  gap: 8px;
+}
+
+.project-form input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 11px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--rail-ink);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.project-form input::placeholder {
+  color: rgba(238, 244, 235, 0.58);
+}
+
+.project-form button {
+  padding: 10px 12px;
+  background: transparent;
+  color: var(--rail-ink);
+  border-color: rgba(255, 255, 255, 0.22);
+  font-weight: 700;
+}
+
+.project-list {
+  max-height: 260px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.project-item {
+  width: 100%;
+  padding: 12px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--rail-ink);
+  display: grid;
+  gap: 5px;
+}
+
+.project-item.active {
+  background: #eef4eb;
+  color: var(--ink);
+  box-shadow: inset 4px 0 0 var(--signal);
+}
+
+.project-name {
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.project-root,
+.project-meta {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+  opacity: 0.68;
+  overflow-wrap: anywhere;
+}
+
+.divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .session-list {
@@ -152,6 +223,18 @@ h3 {
 .session-status {
   color: currentColor;
   opacity: 0.68;
+  font-size: 12px;
+}
+
+#projectRoot {
+  display: block;
+  margin-top: 7px;
+  max-width: min(70vw, 720px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
   font-size: 12px;
 }
 

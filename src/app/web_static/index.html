@@ -11,12 +11,19 @@
       <aside class="sessions" aria-label="Sessions">
         <div class="brand">
           <div>
-            <p class="eyebrow">local agent</p>
+            <p class="eyebrow">local projects</p>
             <h1>JCode</h1>
           </div>
-          <button class="icon-button" id="refreshSessions" title="刷新会话" aria-label="刷新会话">↻</button>
+          <button class="icon-button" id="refreshAll" title="刷新" aria-label="刷新">↻</button>
         </div>
-        <button class="new-session" id="newSession">新建会话</button>
+        <form class="project-form" id="projectForm">
+          <input id="projectPath" placeholder="仓库路径" />
+          <input id="projectName" placeholder="项目名，可选" />
+          <button type="submit">创建项目</button>
+        </form>
+        <div class="project-list" id="projectList"></div>
+        <div class="divider"></div>
+        <button class="new-session" id="newSession">在项目中新建会话</button>
         <div class="session-list" id="sessionList"></div>
       </aside>
 
@@ -25,6 +32,7 @@
           <div>
             <p class="eyebrow">workspace</p>
             <h2 id="sessionTitle">选择会话</h2>
+            <span id="projectRoot"></span>
           </div>
           <div class="run-state" id="runState">idle</div>
         </header>
