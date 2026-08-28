@@ -179,7 +179,8 @@ class ContextManager:
             "summary_text": "",
             "trigger": "",
         }
-
+        if level >= 1:
+            pass
         if level >= 2:
             selected_budgets["skill"] = max(
                 MIN_SECTION_BUDGETS["skill"],
