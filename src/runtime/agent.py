@@ -19,7 +19,7 @@ from src.tools.base import ToolResult
 
 if TYPE_CHECKING:
     from src.app.config import AppConfig
-    from src.context.builder import ContextBuilder
+    from src.context.manager import ContextManager
     from src.evidence.store import RunStore
     from src.memory.durable import DurableMemoryStore
     from src.memory.working import WorkingMemory
@@ -43,7 +43,7 @@ class JCodeAgent:
     memory_store: DurableMemoryStore
     session_events: SessionEventBus
     working_memory: WorkingMemory
-    context_builder: ContextBuilder
+    context_manager: ContextManager
     model_router: ModelRouter
     tool_executor: ToolExecutor
     worker_manager: WorkerManager
@@ -68,7 +68,7 @@ class JCodeAgent:
         memory_store,
         session_events,
         working_memory,
-        context_builder,
+        context_manager,
         model_router,
         tool_executor,
         worker_manager,
@@ -88,7 +88,7 @@ class JCodeAgent:
         self.memory_store = memory_store
         self.session_events = session_events
         self.working_memory = working_memory
-        self.context_builder = context_builder
+        self.context_manager = context_manager
         self.model_router = model_router
         self.tool_executor = tool_executor
         self.worker_manager = worker_manager
@@ -241,8 +241,12 @@ class JCodeAgent:
         return task_state, run_dir, checkpoint
 
     def _build_context(self, user_message: str, task_state, run_dir):
-        context_result = self.context_builder.build(self.session, self.working_memory, user_message)
-        self._record_trace(run_dir, "context_built", task_state, **context_result.metadata, context=context_result.context)
+        context_result = self.context_manager.build(self.session, self.working_memory, user_message)
+        self.session["ctx_info"] = context_result.ctx_info
+        self.session_store.save(self.session)
+        self.working_memory.set_compact_summary(str(context_result.ctx_info.get("history", {}).get("compact_summary", "")).strip())
+        self.session_events.emit("context_built", run_id=task_state.run_id, ctx_info=context_result.ctx_info, context=context_result.context)
+        self._record_trace(run_dir, "context_built", task_state, ctx_info=context_result.ctx_info, context=context_result.context)
         return context_result
 
     def _call_model(self, context_result, task_state, run_dir):
@@ -370,6 +374,7 @@ class JCodeAgent:
                 workers=self.worker_manager.worker_refs(),
                 memory=memory_audit,
                 resume=self.working_memory.resume_context,
+                ctx_info=self.session.get("ctx_info", {}),
             ),
         )
         self.session["working_memory"] = self.working_memory.to_dict()

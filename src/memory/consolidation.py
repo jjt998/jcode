@@ -164,7 +164,7 @@ def _build_dream_agent(agent):
         memory_store=agent.memory_store,
         session_events=session_events,
         working_memory=working_memory,
-        context_builder=agent.context_builder,
+        context_manager=agent.context_manager,
         model_router=agent.model_router,
         tool_executor=agent.tool_executor,
         worker_manager=worker_manager,

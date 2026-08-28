@@ -17,6 +17,7 @@ class WorkingMemory:
     last_retrieval_query: str = ""
     subagent_results: list[str] = field(default_factory=list)
     safety_notes: list[str] = field(default_factory=list)
+    compact_summary: str = ""
 
     @classmethod
     def from_dict(cls, data: dict, workspace_root: Path) -> "WorkingMemory":
@@ -25,6 +26,7 @@ class WorkingMemory:
         retrieval = data.get("retrieval", {}) if isinstance(data.get("retrieval"), dict) else {}
         tools = data.get("tools", {}) if isinstance(data.get("tools"), dict) else {}
         safety = data.get("safety", {}) if isinstance(data.get("safety"), dict) else {}
+        compact = data.get("compact", {}) if isinstance(data.get("compact"), dict) else {}
         return cls(
             workspace_root=workspace_root,
             task_goal=str(task.get("goal", data.get("task_goal", ""))),
@@ -37,6 +39,7 @@ class WorkingMemory:
             last_retrieval_query=str(retrieval.get("last_query", data.get("last_retrieval_query", ""))),
             subagent_results=list(tools.get("subagent_results", data.get("subagent_results", []))),
             safety_notes=list(safety.get("notes", data.get("safety_notes", []))),
+            compact_summary=str(compact.get("summary", data.get("compact_summary", ""))),
         )
 
     def to_dict(self) -> dict:
@@ -62,6 +65,10 @@ class WorkingMemory:
             "safety": {
                 "notes": self.safety_notes[-20:],
             },
+            "compact": {
+                "summary": self.compact_summary,
+            },
+            "compact_summary": self.compact_summary,
         }
 
     def note_file_read(self, relpath: str, freshness: str) -> None:
@@ -78,6 +85,9 @@ class WorkingMemory:
 
     def note_safety(self, text: str) -> None:
         self.safety_notes.append(text[:1000])
+
+    def set_compact_summary(self, text: str) -> None:
+        self.compact_summary = str(text or "")
 
     def render(self) -> str:
         lines = ["Working_Memory:"]
@@ -103,6 +113,9 @@ class WorkingMemory:
             lines.append("- subagent_results:\n" + "\n".join(f"  - {x}" for x in self.subagent_results[-5:]))
         if self.tool_observations:
             lines.append("- recent_tool_observations:\n" + "\n".join(f"  - {x}" for x in self.tool_observations[-5:]))
+        lines.append("[compact]")
+        if self.compact_summary:
+            lines.append("- summary:\n" + "\n".join(f"  - {x}" for x in self.compact_summary.splitlines()[:8]))
         lines.append("[safety]")
         if self.safety_notes:
             lines.append("- safety_notes:\n" + "\n".join(f"  - {x}" for x in self.safety_notes[-5:]))

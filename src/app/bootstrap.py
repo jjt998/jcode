@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.app.config import AppConfig
-from src.context.builder import ContextBuilder
+from src.context.manager import ContextManager
 from src.evidence.store import RunStore
 from src.evidence.session_log import SessionEventBus
 from src.memory.durable import DurableMemoryStore
@@ -63,7 +63,7 @@ def build_agent(config: AppConfig) -> JCodeAgent:
         session_events.emit("session_resumed", **working_memory.resume_context)
         session_events.emit("resume_checkpoint_evaluated", **working_memory.resume_context)
     workers = WorkerManager(workspace, state_dir / "workers", executor, router, config, session_events=session_events)
-    builder = ContextBuilder(workspace=workspace, durable_memory=memory_store, registry=registry)
+    manager = ContextManager(workspace=workspace, durable_memory=memory_store, registry=registry)
     agent = JCodeAgent(
         config=config,
         workspace=workspace,
@@ -73,7 +73,7 @@ def build_agent(config: AppConfig) -> JCodeAgent:
         memory_store=memory_store,
         session_events=session_events,
         working_memory=working_memory,
-        context_builder=builder,
+        context_manager=manager,
         model_router=router,
         tool_executor=executor,
         worker_manager=workers,

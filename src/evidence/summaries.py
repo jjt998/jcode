@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-def build_report(task_state, stop_reason: str, final_text: str, *, trace=None, session_id="", workers=None, memory=None, resume=None) -> dict:
+def build_report(task_state, stop_reason: str, final_text: str, *, trace=None, session_id="", workers=None, memory=None, resume=None, ctx_info=None) -> dict:
     trace = list(trace or [])
     event_counts: dict[str, int] = {}
     for item in trace:
@@ -22,4 +22,5 @@ def build_report(task_state, stop_reason: str, final_text: str, *, trace=None, s
         "workers": list(workers or []),
         "memory": dict(memory or {}),
         "resume": dict(resume or {}),
+        "ctx_info": dict(ctx_info or {}),
     }
