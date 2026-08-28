@@ -245,6 +245,20 @@ class JCodeAgent:
         self.session["ctx_info"] = context_result.ctx_info
         self.session_store.save(self.session)
         self.working_memory.set_compact_summary(str(context_result.ctx_info.get("history", {}).get("compact_summary", "")).strip())
+        if context_result.compact_audit:
+            self._record_trace(
+                run_dir,
+                "compact_history_audit",
+                task_state,
+                compact=context_result.ctx_info.get("compact", {}),
+                summary_mode=context_result.compact_audit.get("mode", ""),
+                summary_source=context_result.compact_audit.get("source", ""),
+                status=context_result.compact_audit.get("status", ""),
+                fallback_reason=context_result.compact_audit.get("fallback_reason", ""),
+                summary_prompt=context_result.compact_audit.get("prompt", ""),
+                summary_response=context_result.compact_audit.get("response", ""),
+                summary_text=context_result.compact_audit.get("summary_text", ""),
+            )
         self.session_events.emit("context_built", run_id=task_state.run_id, ctx_info=context_result.ctx_info, context=context_result.context)
         self._record_trace(run_dir, "context_built", task_state, ctx_info=context_result.ctx_info, context=context_result.context)
         return context_result

@@ -10,6 +10,7 @@ from src.context.budget import estimate_tokens, tail_clip
 from src.context.skills import render_skill_section
 from src.runtime.plan import render_runtime_mode_text
 from src.state.workspace import now_iso
+from src.providers.router import ModelRouter
 
 
 SECTION_ORDER = ("prefix", "skill", "working_memory", "history", "current_request")
@@ -56,6 +57,7 @@ class ContextBuildResult:
     ctx_info: dict
     should_compact: bool = False
     compact_trigger: str | None = None
+    compact_audit: dict | None = None
 
 
 @dataclass
@@ -78,12 +80,14 @@ class ContextManager:
     workspace: object
     durable_memory: object
     registry: object
+    model_router: ModelRouter | None
     total_budget: int
 
-    def __init__(self, workspace, durable_memory, registry, total_budget: int = 60000):
+    def __init__(self, workspace, durable_memory, registry, model_router: ModelRouter | None = None, total_budget: int = 60000):
         self.workspace = workspace
         self.durable_memory = durable_memory
         self.registry = registry
+        self.model_router = model_router
         self.total_budget = int(total_budget)
 
     def build(self, session: dict, working_memory, user_message: str) -> ContextBuildResult:
@@ -93,7 +97,7 @@ class ContextManager:
         initial_section_texts = self._build_section_texts(session, working_memory, user_message)
         initial_prompt = self._build_prompt(initial_section_texts)
         initial_pressure = self._build_pressure(initial_prompt, self._budget_tokens())
-        compressed_section_texts, compression_info = self._compress_section_texts_by_pressure(
+        compressed_section_texts, compression_info, compact_audit = self._compress_section_texts_by_pressure(
             session=session,
             working_memory=working_memory,
             user_message=user_message,
@@ -124,6 +128,7 @@ class ContextManager:
             ctx_info=ctx_info,
             should_compact=bool(compression_info.get("compact", {}).get("should_compact", False)),
             compact_trigger=str(compression_info.get("compact", {}).get("trigger", "") or "") or None,
+            compact_audit=compact_audit,
         )
 
     def _build_section_texts(self, session: dict, working_memory, user_message: str) -> dict:
@@ -163,24 +168,25 @@ class ContextManager:
         user_message: str,
         section_texts: dict,
         pressure: dict,
-    ) -> tuple[dict, dict]:
+    ) -> tuple[dict, dict, dict | None]:
         level = int(pressure.get("level", 0))
         budgets = self._base_budgets()
         selected_budgets = dict(budgets)
         recent_turn_window = self._history_window_for_level(level)
+        compact_audit = None
         compact_info = {
             "status": "idle",
             "mode": "none",
             "summary_mode": "",
+            "summary_source": "",
             "retain_turns": 2,
             "before": {},
             "after": {},
             "summary_item": {},
             "summary_text": "",
             "trigger": "",
+            "fallback_reason": "",
         }
-        if level >= 1:
-            pass
         if level >= 2:
             selected_budgets["skill"] = max(
                 MIN_SECTION_BUDGETS["skill"],
@@ -194,7 +200,7 @@ class ContextManager:
 
         include_older_turns = level < 4
         if level == 4:
-            compact_info = self.compact_history(session, working_memory, retain_turns=2, summary_mode="deterministic")
+            compact_info, compact_audit = self.compact_history(session, working_memory, retain_turns=2, summary_mode="llm")
             compact_info["trigger"] = "semantic_summary"
             compact_info["should_compact"] = True
             compact_info["eligible"] = True
@@ -224,7 +230,7 @@ class ContextManager:
             "compression_records": compression_records,
             "history_records": (rendered["history"].details or {}).get("compression_records", []),
             "compact": compact_info,
-        }
+        }, compact_audit
 
     def _build_ctx_info(
         self,
@@ -326,6 +332,8 @@ class ContextManager:
                 "eligible": False,
                 "should_compact": False,
                 "trigger": "",
+                "summary_source": "",
+                "fallback_reason": "",
                 "retain_turns": 2,
                 "before": {},
                 "after": {},
@@ -369,20 +377,24 @@ class ContextManager:
         ctx_info["compact"]["should_compact"] = bool(compression_info.get("compact", {}).get("should_compact", False))
         ctx_info["compact"]["trigger"] = str(compression_info.get("compact", {}).get("trigger", "") or "")
         ctx_info["compact"]["status"] = str(compression_info.get("compact", {}).get("status", "idle"))
+        ctx_info["compact"]["summary_source"] = str(compression_info.get("compact", {}).get("summary_source", ""))
+        ctx_info["compact"]["fallback_reason"] = str(compression_info.get("compact", {}).get("fallback_reason", ""))
         return ctx_info
 
-    def compact_history(self, session: dict, working_memory, *, retain_turns: int = 2, summary_mode: str = "deterministic") -> dict:
+    def compact_history(self, session: dict, working_memory, *, retain_turns: int = 2, summary_mode: str = "llm") -> tuple[dict, dict]:
         history = [item for item in session.get("history", []) if item.get("kind") != "compact_summary"]
         turns = self._group_turns(history)
         ordered_turn_ids = list(turns)
         if not ordered_turn_ids:
-            return {
+            compact_info = {
                 "status": "noop",
                 "summary_mode": summary_mode,
+                "summary_source": "",
                 "retain_turns": int(retain_turns),
                 "before": {"turn_count": 0, "item_count": 0},
                 "after": {"turn_count": 0, "item_count": 0},
             }
+            return compact_info, None
 
         retain_turns = max(1, int(retain_turns))
         keep_turn_ids = ordered_turn_ids[-retain_turns:]
@@ -400,7 +412,7 @@ class ContextManager:
             compress_old_tools=False,
             include_older_turns=True,
         )
-        summary_text = self._summarize_compacted_history(compacted_items, session=session, summary_mode=summary_mode)
+        summary_text, summary_audit = self._summarize_compacted_history(compacted_items, session=session, summary_mode=summary_mode)
         session["event_seq"] = int(session.get("event_seq", 0)) + 1
         summary_item = {
             "role": "system",
@@ -426,6 +438,7 @@ class ContextManager:
                 "status": "applied",
                 "mode": "semantic",
                 "summary_mode": summary_mode,
+                "summary_source": str(summary_audit.get("source", "deterministic")),
                 "retain_turns": retain_turns,
                 "before": {
                     "turn_count": len(ordered_turn_ids),
@@ -441,10 +454,11 @@ class ContextManager:
                 },
                 "summary_item": summary_item,
                 "summary_text": summary_text,
+                "fallback_reason": str(summary_audit.get("fallback_reason", "")),
             }
         }
         session["ctx_info"] = dict(session.get("ctx_info", {}), **ctx_info)
-        return ctx_info["compact"]
+        return ctx_info["compact"], summary_audit
 
     def _render_sections(
         self,
@@ -705,9 +719,35 @@ class ContextManager:
             return 3
         return 2
 
-    def _summarize_compacted_history(self, items: list[dict], *, session: dict, summary_mode: str) -> str:
+    def _summarize_compacted_history(self, items: list[dict], *, session: dict, summary_mode: str) -> tuple[str, dict]:
         if summary_mode == "llm":
-            summary_mode = "deterministic"
+            summary_text, audit = self._summarize_compacted_history_llm(items, session=session)
+            if summary_text:
+                return summary_text, audit
+            summary_text = self._summarize_compacted_history_deterministic(items, session=session)
+            audit = dict(audit or {})
+            audit.update(
+                {
+                    "source": "deterministic",
+                    "mode": "llm",
+                    "status": "fallback",
+                    "summary_text": summary_text,
+                }
+            )
+            audit.setdefault("fallback_reason", "llm_summary_unavailable")
+            return summary_text, audit
+        summary_text = self._summarize_compacted_history_deterministic(items, session=session)
+        return summary_text, {
+            "source": "deterministic",
+            "mode": summary_mode,
+            "status": "success",
+            "fallback_reason": "",
+            "summary_text": summary_text,
+            "prompt": "",
+            "response": "",
+        }
+
+    def _summarize_compacted_history_deterministic(self, items: list[dict], *, session: dict) -> str:
         goal = self._latest_user_message(items) or self._latest_user_message(session.get("history", [])) or "Continue the current task."
         constraints = self._collect_sentences(items, ("must", "only", "keep", "cannot", "don't", "do not", "avoid", "preserve", "不能", "必须", "只", "保持"))
         files_read = self._collect_paths(items, "read_file")
@@ -728,6 +768,93 @@ class ContextManager:
             lines.extend(["", "## Blockers", *[f"- {item}" for item in blockers]])
         lines.extend(["", "## Next Steps", *[f"- {item}" for item in next_steps]])
         return "\n".join(lines).strip()
+
+    def _summarize_compacted_history_llm(self, items: list[dict], *, session: dict) -> tuple[str, dict]:
+        if self.model_router is None:
+            return "", {
+                "source": "deterministic",
+                "mode": "llm",
+                "status": "fallback",
+                "fallback_reason": "model_router_missing",
+                "prompt": "",
+                "response": "",
+                "summary_text": "",
+            }
+        client = getattr(self.model_router, "client", None)
+        if getattr(client, "api_key", "") == "":
+            return "", {
+                "source": "deterministic",
+                "mode": "llm",
+                "status": "fallback",
+                "fallback_reason": "missing_api_key",
+                "prompt": "",
+                "response": "",
+                "summary_text": "",
+            }
+        prompt = self._build_compact_summary_prompt(items, session=session)
+        try:
+            response = self.model_router.complete(prompt, max_tokens=900, temperature=0.0)
+            text = str(response.text or "").strip()
+            if not text:
+                return "", {
+                    "source": "deterministic",
+                    "mode": "llm",
+                    "status": "fallback",
+                    "fallback_reason": "empty_llm_response",
+                    "prompt": prompt,
+                    "response": "",
+                    "summary_text": "",
+                }
+            return text, {
+                "source": "llm",
+                "mode": "llm",
+                "status": "success",
+                "fallback_reason": "",
+                "prompt": prompt,
+                "response": text,
+                "summary_text": text,
+            }
+        except Exception as exc:
+            return "", {
+                "source": "deterministic",
+                "mode": "llm",
+                "status": "fallback",
+                "fallback_reason": f"{type(exc).__name__}: {exc}",
+                "prompt": prompt,
+                "response": "",
+                "summary_text": "",
+            }
+
+    def _build_compact_summary_prompt(self, items: list[dict], *, session: dict) -> str:
+        transcript = self._render_history_text(
+            items,
+            recent_turn_window=max(1, len(self._group_turns(items))),
+            compress_old_tools=False,
+            include_older_turns=True,
+        )[0]
+        return "\n".join(
+            [
+                "You are summarizing old context for a coding agent.",
+                "Return Markdown only, with these sections in this exact order:",
+                "## Goal",
+                "## Constraints",
+                "## Files Read",
+                "## Files Modified",
+                "## Key Decisions",
+                "## Blockers",
+                "## Next Steps",
+                "Rules:",
+                "- Be concise and factual.",
+                "- Preserve file paths, constraints, decisions, blockers, and next steps.",
+                "- If a section has no content, still include the heading with '- none'.",
+                "- Do not mention that this is a summary prompt.",
+                "",
+                f"Current goal: {self._latest_user_message(session.get('history', [])) or 'Continue the current task.'}",
+                "",
+                "Transcript to summarize:",
+                transcript,
+            ]
+        ).strip()
 
     def _collect_sentences(self, items: list[dict], patterns: tuple[str, ...]) -> list[str]:
         found: list[str] = []
