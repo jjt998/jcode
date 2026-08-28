@@ -31,6 +31,10 @@ const STREAM_EVENTS = [
   "web_run_started",
   "jcode_run_bound",
   "run_started",
+  "compact_evaluated",
+  "compact_triggered",
+  "compact_completed",
+  "compact_fallback",
   "context_built",
   "model_requested",
   "model_responded",
@@ -322,6 +326,10 @@ function eventTitle(event) {
     web_run_started: "开始运行",
     jcode_run_bound: "绑定 Run",
     run_started: "运行开始",
+    compact_evaluated: "压缩评估",
+    compact_triggered: "压缩触发",
+    compact_completed: "压缩完成",
+    compact_fallback: "压缩回退",
     context_built: "Context 拼凑",
     model_requested: "模型请求",
     model_responded: "模型原始返回",
@@ -345,6 +353,7 @@ function eventTitle(event) {
 
 function eventContent(event) {
   if (event.event === "context_built") return event.context || fallbackJson(event);
+  if (event.event === "compact_evaluated" || event.event === "compact_triggered" || event.event === "compact_completed" || event.event === "compact_fallback") return fallbackJson(event);
   if (event.event === "model_responded") return event.response_text || fallbackJson(event);
   if (event.event === "model_parsed") return formatJson(event.action || event);
   if (event.event === "tool_requested") return formatJson(event.args || event);

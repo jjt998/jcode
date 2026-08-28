@@ -108,7 +108,11 @@ class DummyRunStore:
 
 
 class DummySessionEvents:
+    def __init__(self):
+        self.events = []
+
     def emit(self, *args, **kwargs):
+        self.events.append({"args": args, "kwargs": kwargs})
         return None
 
 
@@ -327,7 +331,11 @@ def test_compact_history_uses_llm_summary_and_records_trace(tmp_path):
 
     fake_result = ContextBuildResult(
         context="ctx",
-        ctx_info={"history": {"compact_summary": ""}, "compact": {"status": "applied"}},
+        ctx_info={
+            "history": {"compact_summary": ""},
+            "compact": {"status": "applied", "should_compact": True, "trigger": "semantic_summary", "summary_source": "llm", "fallback_reason": "", "retain_turns": 2},
+            "pressure": {"level": 4, "range": "95+"},
+        },
         compact_audit={
             "source": "llm",
             "mode": "llm",
@@ -344,6 +352,9 @@ def test_compact_history_uses_llm_summary_and_records_trace(tmp_path):
 
     audit_events = [event for event in run_store.traces if event["event"] == "compact_history_audit"]
     assert audit_events
+    compact_events = [event for event in run_store.traces if event["event"] in {"compact_evaluated", "compact_triggered", "compact_completed"}]
+    assert [event["event"] for event in compact_events] == ["compact_evaluated", "compact_triggered", "compact_completed"]
+    assert [event["args"][0] for event in session_events.events[:3]] == ["compact_evaluated", "compact_triggered", "compact_completed"]
     assert audit_events[0]["summary_source"] == "llm"
     assert audit_events[0]["summary_prompt"]
     assert audit_events[0]["summary_response"]

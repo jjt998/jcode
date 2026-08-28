@@ -245,12 +245,14 @@ class JCodeAgent:
         self.session["ctx_info"] = context_result.ctx_info
         self.session_store.save(self.session)
         self.working_memory.set_compact_summary(str(context_result.ctx_info.get("history", {}).get("compact_summary", "")).strip())
+        compact_info = dict(context_result.ctx_info.get("compact", {}) or {})
+        self._emit_compact_context_events(run_dir, task_state, context_result, compact_info)
         if context_result.compact_audit:
             self._record_trace(
                 run_dir,
                 "compact_history_audit",
                 task_state,
-                compact=context_result.ctx_info.get("compact", {}),
+                compact=compact_info,
                 summary_mode=context_result.compact_audit.get("mode", ""),
                 summary_source=context_result.compact_audit.get("source", ""),
                 status=context_result.compact_audit.get("status", ""),
@@ -262,6 +264,43 @@ class JCodeAgent:
         self.session_events.emit("context_built", run_id=task_state.run_id, ctx_info=context_result.ctx_info, context=context_result.context)
         self._record_trace(run_dir, "context_built", task_state, ctx_info=context_result.ctx_info, context=context_result.context)
         return context_result
+
+    def _emit_compact_context_events(self, run_dir, task_state, context_result, compact_info: dict) -> None:
+        event_payload = {
+            "ctx_info": context_result.ctx_info,
+            "pressure_level": context_result.ctx_info.get("pressure", {}).get("level", 0),
+            "pressure_range": context_result.ctx_info.get("pressure", {}).get("range", ""),
+            "should_compact": bool(compact_info.get("should_compact", False)),
+            "compact_trigger": compact_info.get("trigger", ""),
+            "compact_status": compact_info.get("status", "idle"),
+            "summary_source": compact_info.get("summary_source", ""),
+            "fallback_reason": compact_info.get("fallback_reason", ""),
+            "retain_turns": compact_info.get("retain_turns", 0),
+        }
+        self.session_events.emit("compact_evaluated", run_id=task_state.run_id, **event_payload)
+        self._record_trace(run_dir, "compact_evaluated", task_state, **event_payload)
+        if not event_payload["should_compact"] and compact_info.get("status") not in {"applied"}:
+            return
+
+        triggered_payload = {
+            **event_payload,
+            "compact_trigger": compact_info.get("trigger", "") or "pressure_threshold",
+        }
+        self.session_events.emit("compact_triggered", run_id=task_state.run_id, **triggered_payload)
+        self._record_trace(run_dir, "compact_triggered", task_state, **triggered_payload)
+
+        if context_result.compact_audit:
+            summary_payload = {
+                **triggered_payload,
+                "summary_mode": context_result.compact_audit.get("mode", ""),
+                "summary_source": context_result.compact_audit.get("source", ""),
+                "status": context_result.compact_audit.get("status", ""),
+                "fallback_reason": context_result.compact_audit.get("fallback_reason", ""),
+                "summary_text": context_result.compact_audit.get("summary_text", ""),
+            }
+            event_name = "compact_fallback" if context_result.compact_audit.get("status") == "fallback" else "compact_completed"
+            self.session_events.emit(event_name, run_id=task_state.run_id, **summary_payload)
+            self._record_trace(run_dir, event_name, task_state, **summary_payload)
 
     def _call_model(self, context_result, task_state, run_dir):
         response = self.model_router.complete(
