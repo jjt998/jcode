@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from subprocess import CompletedProcess
+import re
 
 import pytest
 
 from src.context.manager import ContextManager
 from src.memory.working import WorkingMemory
+from src.tools.registry import build_default_registry
 from src.state.workspace import Workspace
 
 
@@ -110,6 +112,68 @@ def test_context_manager_builds_ctx_info_and_cache(tmp_path):
     assert result.ctx_info["history"]["turn_count"] == 1
     assert "Workspace runtime" in result.context
     assert "Workspace docs" in result.context
+
+
+def test_default_registry_includes_subagent_tools():
+    registry = build_default_registry()
+    assert {"spawn_subagent", "send_subagent_message", "wait_subagent"}.issubset(set(registry.tools))
+
+
+def test_context_manager_microcompresses_history_by_tool_name(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    registry = DummyRegistry()
+    manager = ContextManager(workspace=workspace, durable_memory=object(), registry=registry)
+    session = {
+        "history": [
+            {"role": "user", "content": "turn 1", "run_id": "turn-1", "turn_id": "turn-1"},
+            {"role": "tool", "name": "read_file", "args": {"path": "docs/a.txt"}, "content": "FIRST READ", "tool_status": "success", "run_id": "turn-1", "turn_id": "turn-1"},
+            {"role": "assistant", "content": "turn 1 done", "run_id": "turn-1", "turn_id": "turn-1"},
+            {"role": "user", "content": "turn 2", "run_id": "turn-2", "turn_id": "turn-2"},
+            {"role": "tool", "name": "read_file", "args": {"path": "docs/a.txt"}, "content": "SECOND READ", "tool_status": "success", "run_id": "turn-2", "turn_id": "turn-2"},
+            {"role": "assistant", "content": "turn 2 done", "run_id": "turn-2", "turn_id": "turn-2"},
+            {"role": "user", "content": "turn 3", "run_id": "turn-3", "turn_id": "turn-3"},
+            {
+                "role": "tool",
+                "name": "run_shell",
+                "args": {"command": "echo hi"},
+                "content": "stdout:\nline1\n\nline2\nline3\nline4\nstderr:\nerr1\nexit_code: 0",
+                "tool_status": "success",
+                "run_id": "turn-3",
+                "turn_id": "turn-3",
+            },
+            {"role": "assistant", "content": "turn 3 done", "run_id": "turn-3", "turn_id": "turn-3"},
+            {"role": "user", "content": "turn 4", "run_id": "turn-4", "turn_id": "turn-4"},
+            {"role": "tool", "name": "search", "args": {"query": "foo"}, "content": "search result: " + ("x" * 160), "tool_status": "success", "run_id": "turn-4", "turn_id": "turn-4"},
+            {"role": "tool", "name": "read_file", "args": {"path": "artifacts/result.txt"}, "content": "artifacts/result.txt\n" + ("z" * 1500), "tool_status": "success", "run_id": "turn-4", "turn_id": "turn-4", "artifacts": ["artifacts/result.txt"]},
+            {"role": "assistant", "content": "turn 4 done", "run_id": "turn-4", "turn_id": "turn-4"},
+            {"role": "user", "content": "turn 5", "run_id": "turn-5", "turn_id": "turn-5"},
+            {"role": "tool", "name": "write_file", "args": {"path": "b.txt", "content": "written"}, "content": "wrote b.txt", "tool_status": "success", "run_id": "turn-5", "turn_id": "turn-5"},
+            {"role": "assistant", "content": "turn 5 done", "run_id": "turn-5", "turn_id": "turn-5"},
+            {"role": "user", "content": "turn 6", "run_id": "turn-6", "turn_id": "turn-6"},
+            {"role": "assistant", "content": "turn 6 done", "run_id": "turn-6", "turn_id": "turn-6"},
+        ],
+        "event_seq": 6,
+    }
+    working_memory = WorkingMemory.from_dict({}, tmp_path)
+
+    section_texts = manager._build_section_texts(session, working_memory, "new request")
+    compressed_section_texts, info = manager._compress_section_texts_by_pressure(
+        session=session,
+        working_memory=working_memory,
+        user_message="new request",
+        section_texts=section_texts,
+        pressure={"ratio": 0.72, "level": 2, "tier": "tier2", "range": "70-80", "source": "estimated", "input_tokens": 10, "budget_tokens": 10},
+    )
+
+    history = compressed_section_texts["history"]
+    assert "FIRST READ" in history
+    assert "SECOND READ" not in history
+    assert "line1" in history and "line4" not in history
+    assert "search result:" in history and ("x" * 120) not in history
+    assert "artifacts/result.txt" in history and ("z" * 100) not in history
+    assert "wrote b.txt" in history
+    assert info["recent_turn_window"] == 2
+    assert info["history_records"]
 
 
 def test_compact_history_inserts_summary_and_next_build_skips_it(tmp_path):

@@ -325,6 +325,7 @@ class JCodeAgent:
             tool_status=result.status,
             error_type=result.error_type,
             changed_files=result.changed_files,
+            artifacts=result.artifacts,
             metadata=result.metadata,
         )
         self.working_memory.observe_tool(f"{action.tool_name}: {result.status}: {result.text[:500]}")

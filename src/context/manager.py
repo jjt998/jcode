@@ -90,55 +90,285 @@ class ContextManager:
         user_message = str(user_message)
         self._sync_compact_summary_from_history(session, working_memory)
 
-        section_texts = self._build_section_texts(session, working_memory, user_message)
-        budgets = self._base_budgets()
-
-        rendered, ctx_info = self._render_with_budget_plan(
+        initial_section_texts = self._build_section_texts(session, working_memory, user_message)
+        initial_prompt = self._build_prompt(initial_section_texts)
+        initial_pressure = self._build_pressure(initial_prompt, self._budget_tokens())
+        compressed_section_texts, compression_info = self._compress_section_texts_by_pressure(
             session=session,
             working_memory=working_memory,
-            section_texts=section_texts,
-            budgets=budgets,
+            user_message=user_message,
+            section_texts=initial_section_texts,
+            pressure=initial_pressure,
         )
-        context = self._assemble_context(rendered)
-        total_chars = len(context)
-        total_estimated_tokens = estimate_tokens(context)
-
-        pressure = self._build_pressure(total_estimated_tokens, ctx_info["budget"]["total_budget_tokens"])
-        budget_info = ctx_info["budget"]
-        budget_info["total_chars"] = total_chars
-        budget_info["total_estimated_tokens"] = total_estimated_tokens
-        budget_info["pressure_ratio"] = pressure["ratio"]
-        budget_info["pressure_level"] = pressure["level"]
-
-        cache_info = self._build_cache_info(session, rendered["prefix"].rendered)
-        ctx_info["pressure"] = pressure
-        ctx_info["cache"] = cache_info
-        ctx_info["workspace"]["workspace_hash"] = cache_info["workspace_hash"]
-        ctx_info["prefix"]["hash"] = cache_info["prefix_hash"]
-        ctx_info["prefix"]["cache_key"] = cache_info["prompt_cache_key"]
-        ctx_info["history"]["compact_summary"] = working_memory.compact_summary
-        ctx_info["memory"] = {
-            "retrieval": {
-                "enabled": False,
-                "items": [],
-                "query": user_message,
-            },
-            "compact_summary": working_memory.compact_summary,
-        }
-        ctx_info["compact"]["eligible"] = pressure["level"] == 4
-        ctx_info["compact"]["trigger"] = "semantic_summary" if pressure["level"] == 4 else ""
-        ctx_info["compact"]["should_compact"] = pressure["level"] == 4
-        ctx_info["compact"]["status"] = "pending" if pressure["level"] == 4 else "idle"
+        final_prompt = self._build_prompt(compressed_section_texts)
+        final_pressure = self._build_pressure(final_prompt, self._budget_tokens())
+        cache_info = self._build_cache_info(session, compressed_section_texts["prefix"])
+        ctx_info = self._build_ctx_info(
+            session=session,
+            working_memory=working_memory,
+            user_message=user_message,
+            initial_section_texts=initial_section_texts,
+            compressed_section_texts=compressed_section_texts,
+            initial_prompt=initial_prompt,
+            final_prompt=final_prompt,
+            initial_pressure=initial_pressure,
+            final_pressure=final_pressure,
+            compression_info=compression_info,
+            cache_info=cache_info,
+        )
 
         session["ctx_info"] = ctx_info
-        session["ctx_info"]["cache"] = cache_info
 
         return ContextBuildResult(
-            context=context,
+            context=final_prompt,
             ctx_info=ctx_info,
-            should_compact=bool(pressure["level"] == 4),
-            compact_trigger="semantic_summary" if pressure["level"] == 4 else None,
+            should_compact=bool(compression_info.get("compact", {}).get("should_compact", False)),
+            compact_trigger=str(compression_info.get("compact", {}).get("trigger", "") or "") or None,
         )
+
+    def _build_section_texts(self, session: dict, working_memory, user_message: str) -> dict:
+        rendered = self._render_sections(
+            session=session,
+            working_memory=working_memory,
+            user_message=user_message,
+            budgets=self._base_budgets(),
+            recent_turn_window=5,
+            compress_old_tools=True,
+            include_older_turns=True,
+        )
+        return {section: rendered[section].rendered for section in SECTION_ORDER}
+
+    def _build_prompt(self, section_texts: dict) -> str:
+        return "\n\n".join(str(section_texts.get(section, "")).strip() for section in SECTION_ORDER).strip()
+
+    def _build_pressure(self, prompt: str, budget_tokens: int) -> dict:
+        input_tokens = estimate_tokens(prompt)
+        ratio = round(max(0, int(input_tokens)) / max(1, int(budget_tokens)), 4)
+        level, range_text, tier = self._pressure_level(ratio)
+        return {
+            "ratio": ratio,
+            "level": level,
+            "tier": tier,
+            "range": range_text,
+            "source": "estimated",
+            "input_tokens": int(input_tokens),
+            "budget_tokens": int(budget_tokens),
+        }
+
+    def _compress_section_texts_by_pressure(
+        self,
+        *,
+        session: dict,
+        working_memory,
+        user_message: str,
+        section_texts: dict,
+        pressure: dict,
+    ) -> tuple[dict, dict]:
+        level = int(pressure.get("level", 0))
+        budgets = self._base_budgets()
+        selected_budgets = dict(budgets)
+        recent_turn_window = self._history_window_for_level(level)
+        compact_info = {
+            "status": "idle",
+            "mode": "none",
+            "summary_mode": "",
+            "retain_turns": 2,
+            "before": {},
+            "after": {},
+            "summary_item": {},
+            "summary_text": "",
+            "trigger": "",
+        }
+
+        if level >= 2:
+            selected_budgets["skill"] = max(
+                MIN_SECTION_BUDGETS["skill"],
+                int(budgets["skill"] * (0.7 if level == 2 else 0.5)),
+            )
+        if level >= 3:
+            selected_budgets["working_memory"] = max(
+                MIN_SECTION_BUDGETS["working_memory"],
+                int(budgets["working_memory"] * 0.7),
+            )
+
+        include_older_turns = level < 4
+        if level == 4:
+            compact_info = self.compact_history(session, working_memory, retain_turns=2, summary_mode="deterministic")
+            compact_info["trigger"] = "semantic_summary"
+            compact_info["should_compact"] = True
+            compact_info["eligible"] = True
+
+        rendered = self._render_sections(
+            session=session,
+            working_memory=working_memory,
+            user_message=user_message,
+            budgets=selected_budgets,
+            recent_turn_window=recent_turn_window,
+            compress_old_tools=True,
+            include_older_turns=include_older_turns,
+        )
+        compressed_section_texts = {section: rendered[section].rendered for section in SECTION_ORDER}
+        compression_records = self._build_compression_records(
+            initial_section_texts=section_texts,
+            compressed_section_texts=compressed_section_texts,
+            initial_budgets=budgets,
+            compressed_budgets=selected_budgets,
+            history_details=rendered["history"].details or {},
+        )
+        return compressed_section_texts, {
+            "level": level,
+            "recent_turn_window": recent_turn_window,
+            "selected_budgets": selected_budgets,
+            "initial_budgets": budgets,
+            "compression_records": compression_records,
+            "history_records": (rendered["history"].details or {}).get("compression_records", []),
+            "compact": compact_info,
+        }
+
+    def _build_ctx_info(
+        self,
+        *,
+        session: dict,
+        working_memory,
+        user_message: str,
+        initial_section_texts: dict,
+        compressed_section_texts: dict,
+        initial_prompt: str,
+        final_prompt: str,
+        initial_pressure: dict,
+        final_pressure: dict,
+        compression_info: dict,
+        cache_info: dict,
+    ) -> dict:
+        initial_rendered = self._render_sections(
+            session=session,
+            working_memory=working_memory,
+            user_message=user_message,
+            budgets=self._base_budgets(),
+            recent_turn_window=5,
+            compress_old_tools=True,
+            include_older_turns=True,
+        )
+        final_budgets = compression_info.get("selected_budgets", self._base_budgets())
+        final_rendered = self._render_sections(
+            session=session,
+            working_memory=working_memory,
+            user_message=user_message,
+            budgets=final_budgets,
+            recent_turn_window=int(compression_info.get("recent_turn_window", 5)),
+            compress_old_tools=True,
+            include_older_turns=int(compression_info.get("level", 0)) < 4,
+        )
+        initial_total_chars = len(initial_prompt)
+        final_total_chars = len(final_prompt)
+        initial_total_tokens = estimate_tokens(initial_prompt)
+        final_total_tokens = estimate_tokens(final_prompt)
+        selected_budgets = dict(compression_info.get("selected_budgets", {}))
+        budget_sections = {
+            section: (None if section == CURRENT_REQUEST_SECTION else int(selected_budgets.get(section, 0)))
+            for section in SECTION_ORDER
+        }
+        initial_budget_sections = {
+            section: (None if section == CURRENT_REQUEST_SECTION else int(self._base_budgets().get(section, 0)))
+            for section in SECTION_ORDER
+        }
+        ctx_info = {
+            "workspace": self._workspace_info(),
+            "prefix": {
+                "hash": cache_info["prefix_hash"],
+                "cache_key": cache_info["prompt_cache_key"],
+                "sections": {
+                    key: value
+                    for key, value in {
+                        section: {
+                            "raw_chars": initial_rendered[section].raw_chars,
+                            "rendered_chars": initial_rendered[section].rendered_chars,
+                            "budget_chars": initial_rendered[section].budget_chars,
+                        }
+                        for section in ("prefix", "skill")
+                    }.items()
+                },
+            },
+            "budget": {
+                "total_budget_chars": self.total_budget,
+                "total_budget_tokens": self._budget_tokens(),
+                "section_ratios": dict(SECTION_RATIO_HINTS),
+                "section_order": list(SECTION_ORDER),
+                "initial_section_budgets": initial_budget_sections,
+                "section_budgets": budget_sections,
+                "sections": {
+                    section: {
+                        "raw_chars": final_rendered[section].raw_chars,
+                        "rendered_chars": final_rendered[section].rendered_chars,
+                        "budget_chars": final_rendered[section].budget_chars,
+                    }
+                    for section in SECTION_ORDER
+                },
+                "total_chars": final_total_chars,
+                "total_estimated_tokens": final_total_tokens,
+                "initial_total_chars": initial_total_chars,
+                "initial_total_estimated_tokens": initial_total_tokens,
+            },
+            "pressure": final_pressure,
+            "pressure_initial": initial_pressure,
+            "history": {
+                "turn_count": len(self._group_turns([item for item in session.get("history", []) if item.get("kind") != "compact_summary"])),
+                "rendered_turn_count": final_rendered["history"].details.get("rendered_turn_count", 0) if final_rendered["history"].details else 0,
+                "recent_turn_window": final_rendered["history"].details.get("recent_turn_window", 5) if final_rendered["history"].details else 5,
+                "turns": final_rendered["history"].details.get("turns", []) if final_rendered["history"].details else [],
+                "compact_summary": working_memory.compact_summary,
+                "compression_records": (final_rendered["history"].details or {}).get("compression_records", []),
+            },
+            "compact": compression_info.get("compact", {
+                "status": "idle",
+                "mode": "none",
+                "eligible": False,
+                "should_compact": False,
+                "trigger": "",
+                "retain_turns": 2,
+                "before": {},
+                "after": {},
+                "summary_item": {},
+                "summary_text": "",
+            }),
+            "cache": cache_info,
+            "memory": {
+                "retrieval": {
+                    "enabled": False,
+                    "items": [],
+                    "query": user_message,
+                },
+                "compact_summary": working_memory.compact_summary,
+            },
+            "compression": {
+                "initial": {
+                    "prompt_chars": initial_total_chars,
+                    "prompt_tokens": initial_total_tokens,
+                    "section_texts": {
+                        section: {
+                            "before_preview": self._preview_text(initial_section_texts.get(section, "")),
+                            "after_preview": self._preview_text(compressed_section_texts.get(section, "")),
+                            "before_chars": len(initial_section_texts.get(section, "")),
+                            "after_chars": len(compressed_section_texts.get(section, "")),
+                        }
+                        for section in SECTION_ORDER
+                    },
+                },
+                "final": {
+                    "prompt_chars": final_total_chars,
+                    "prompt_tokens": final_total_tokens,
+                },
+                "records": compression_info.get("compression_records", []),
+            },
+        }
+        ctx_info["workspace"]["workspace_hash"] = cache_info["workspace_hash"]
+        ctx_info["budget"]["section_diffs"] = compression_info.get("compression_records", [])
+        ctx_info["budget"]["reductions"] = compression_info.get("compression_records", [])
+        ctx_info["compact"]["eligible"] = bool(final_pressure.get("level", 0) == 4 or compression_info.get("compact", {}).get("status") == "applied")
+        ctx_info["compact"]["should_compact"] = bool(compression_info.get("compact", {}).get("should_compact", False))
+        ctx_info["compact"]["trigger"] = str(compression_info.get("compact", {}).get("trigger", "") or "")
+        ctx_info["compact"]["status"] = str(compression_info.get("compact", {}).get("status", "idle"))
+        return ctx_info
 
     def compact_history(self, session: dict, working_memory, *, retain_turns: int = 2, summary_mode: str = "deterministic") -> dict:
         history = [item for item in session.get("history", []) if item.get("kind") != "compact_summary"]
@@ -163,7 +393,12 @@ class ContextManager:
             else:
                 compacted_items.extend(items)
 
-        before_text = self._render_history_text(history, recent_turn_window=max(2, retain_turns), clip_old_tools=False)
+        before_text, _ = self._render_history_text(
+            history,
+            recent_turn_window=max(2, retain_turns),
+            compress_old_tools=False,
+            include_older_turns=True,
+        )
         summary_text = self._summarize_compacted_history(compacted_items, session=session, summary_mode=summary_mode)
         session["event_seq"] = int(session.get("event_seq", 0)) + 1
         summary_item = {
@@ -179,7 +414,12 @@ class ContextManager:
         session["history"] = [summary_item, *kept_items]
         working_memory.set_compact_summary(summary_text)
 
-        after_text = self._render_history_text(session["history"], recent_turn_window=max(2, retain_turns), clip_old_tools=False)
+        after_text, _ = self._render_history_text(
+            session["history"],
+            recent_turn_window=max(2, retain_turns),
+            compress_old_tools=False,
+            include_older_turns=True,
+        )
         ctx_info = {
             "compact": {
                 "status": "applied",
@@ -205,149 +445,36 @@ class ContextManager:
         session["ctx_info"] = dict(session.get("ctx_info", {}), **ctx_info)
         return ctx_info["compact"]
 
-    def _render_with_budget_plan(self, *, session: dict, working_memory, section_texts: dict, budgets: dict) -> tuple[dict[str, _SectionRender], dict]:
-        pressure_level = 0
-        history_windows = [5]
-        candidate_budgets = dict(budgets)
-
-        rendered = self._render_sections(section_texts, session, working_memory, candidate_budgets, history_windows[0])
-        prompt = self._assemble_context(rendered)
-        pressure = self._build_pressure(estimate_tokens(prompt), self._budget_tokens())
-        pressure_level = pressure["level"]
-
-        if pressure_level == 1:
-            history_windows = [5, 3]
-            rendered = self._render_sections(section_texts, session, working_memory, candidate_budgets, history_windows[-1])
-            prompt = self._assemble_context(rendered)
-            pressure = self._build_pressure(estimate_tokens(prompt), self._budget_tokens())
-            pressure_level = pressure["level"]
-
-        if pressure_level >= 2:
-            candidate_budgets["working_memory"] = max(
-                MIN_SECTION_BUDGETS["working_memory"],
-                int(candidate_budgets["working_memory"] * 0.7),
-            )
-            history_windows = [2]
-            rendered = self._render_sections(section_texts, session, working_memory, candidate_budgets, history_windows[0])
-            prompt = self._assemble_context(rendered)
-            pressure = self._build_pressure(estimate_tokens(prompt), self._budget_tokens())
-            pressure_level = pressure["level"]
-
-        if pressure_level >= 3:
-            candidate_budgets["skill"] = max(
-                MIN_SECTION_BUDGETS["skill"],
-                int(candidate_budgets["skill"] * 0.5),
-            )
-            rendered = self._render_sections(section_texts, session, working_memory, candidate_budgets, 2)
-            prompt = self._assemble_context(rendered)
-            pressure = self._build_pressure(estimate_tokens(prompt), self._budget_tokens())
-            pressure_level = pressure["level"]
-
-        reductions = []
-        while len(prompt) > self.total_budget:
-            overflow = len(prompt) - self.total_budget
-            reduced = False
-            for section in REDUCTION_ORDER:
-                current_budget = int(candidate_budgets.get(section, 0))
-                floor = int(MIN_SECTION_BUDGETS.get(section, 0))
-                if current_budget <= floor:
-                    continue
-                new_budget = max(floor, current_budget - overflow)
-                if new_budget >= current_budget:
-                    continue
-                candidate_budgets[section] = new_budget
-                reductions.append(
-                    {
-                        "section": section,
-                        "before_chars": current_budget,
-                        "after_chars": new_budget,
-                        "overflow_chars": overflow,
-                    }
-                )
-                rendered = self._render_sections(section_texts, session, working_memory, candidate_budgets, 2 if pressure_level >= 2 else 5)
-                prompt = self._assemble_context(rendered)
-                reduced = True
-                break
-            if not reduced:
-                break
-
-        ctx_info = {
-            "workspace": self._workspace_info(),
-            "prefix": {
-                "hash": "",
-                "cache_key": "",
-                "sections": {},
-            },
-            "budget": {
-                "total_budget_chars": self.total_budget,
-                "total_budget_tokens": self._budget_tokens(),
-                "section_ratios": dict(SECTION_RATIO_HINTS),
-                "section_order": list(SECTION_ORDER),
-                "section_budgets": {
-                    section: (None if section == CURRENT_REQUEST_SECTION else int(candidate_budgets.get(section, 0)))
-                    for section in SECTION_ORDER
-                },
-                "sections": {},
-                "reductions": reductions,
-            },
-            "pressure": {
-                "ratio": 0.0,
-                "level": 0,
-                "tier": "tier0_observe",
-                "range": "0-60",
-                "recent_turn_window": 5,
-            },
-            "history": {
-                "turn_count": 0,
-                "rendered_turn_count": 0,
-                "recent_turn_window": 5,
-                "turns": [],
-                "compact_summary": working_memory.compact_summary,
-            },
-            "compact": {
-                "status": "idle",
-                "mode": "none",
-                "eligible": False,
-                "should_compact": False,
-                "trigger": "",
-                "retain_turns": 2,
-                "before": {},
-                "after": {},
-            },
-            "cache": {},
-            "memory": {},
-        }
-        for name, render in rendered.items():
-            ctx_info["budget"]["sections"][name] = {
-                "raw_chars": render.raw_chars,
-                "rendered_chars": render.rendered_chars,
-                "budget_chars": render.budget_chars,
-            }
-        ctx_info["prefix"]["sections"] = {
-            key: value for key, value in ctx_info["budget"]["sections"].items() if key in {"prefix", "skill"}
-        }
-        filtered_history = [item for item in session.get("history", []) if item.get("kind") != "compact_summary"]
-        ctx_info["history"] = {
-            **ctx_info["history"],
-            "turn_count": len(self._group_turns(filtered_history)),
-            "rendered_turn_count": rendered["history"].details.get("rendered_turn_count", 0) if rendered["history"].details else 0,
-            "recent_turn_window": rendered["history"].details.get("recent_turn_window", 5) if rendered["history"].details else 5,
-            "turns": rendered["history"].details.get("turns", []) if rendered["history"].details else [],
-        }
-        return rendered, ctx_info
-
-    def _render_sections(self, section_texts: dict, session: dict, working_memory, budgets: dict, recent_turn_window: int) -> dict[str, _SectionRender]:
+    def _render_sections(
+        self,
+        *,
+        session: dict,
+        working_memory,
+        user_message: str,
+        budgets: dict,
+        recent_turn_window: int,
+        compress_old_tools: bool,
+        include_older_turns: bool,
+    ) -> dict[str, _SectionRender]:
         rendered: dict[str, _SectionRender] = {}
         history_render = self._render_history_section(
             session,
             recent_turn_window=recent_turn_window,
             budget_chars=int(budgets.get("history", self._base_budgets()["history"])),
+            compress_old_tools=compress_old_tools,
+            include_older_turns=include_older_turns,
         )
+        section_texts = {
+            "prefix": self._render_prefix(),
+            "skill": render_skill_section(),
+            "working_memory": self._render_working_memory(session, working_memory),
+            "history": history_render.raw,
+            CURRENT_REQUEST_SECTION: f"Current user request:\n{user_message}",
+        }
         for section in SECTION_ORDER:
             if section == "prefix":
                 raw = section_texts[section]
-                budget_chars = int(budgets.get(section, 0))
-                rendered[section] = _SectionRender(raw=raw, rendered=tail_clip(raw, budget_chars), budget_chars=budget_chars, details={})
+                rendered[section] = _SectionRender(raw=raw, rendered=raw, budget_chars=None, details={})
             elif section == "skill":
                 raw = section_texts[section]
                 budget_chars = int(budgets.get(section, 0))
@@ -365,9 +492,22 @@ class ContextManager:
                 rendered[section] = _SectionRender(raw=raw, rendered=raw, budget_chars=None, details={})
         return rendered
 
-    def _render_history_section(self, session: dict, *, recent_turn_window: int, budget_chars: int) -> _SectionRender:
+    def _render_history_section(
+        self,
+        session: dict,
+        *,
+        recent_turn_window: int,
+        budget_chars: int,
+        compress_old_tools: bool,
+        include_older_turns: bool,
+    ) -> _SectionRender:
         history = [item for item in session.get("history", []) if item.get("kind") != "compact_summary"]
-        raw = self._render_history_text(history, recent_turn_window=recent_turn_window, clip_old_tools=True)
+        raw, compression_records = self._render_history_text(
+            history,
+            recent_turn_window=recent_turn_window,
+            compress_old_tools=compress_old_tools,
+            include_older_turns=include_older_turns,
+        )
         turns = self._group_turns(history)
         details = {
             "turns": [
@@ -377,49 +517,192 @@ class ContextManager:
             "turn_count": len(turns),
             "rendered_turn_count": min(len(turns), recent_turn_window),
             "recent_turn_window": recent_turn_window,
+            "compression_records": compression_records,
+            "include_older_turns": include_older_turns,
         }
         return _SectionRender(raw=raw, rendered=tail_clip(raw, budget_chars), budget_chars=budget_chars, details=details)
 
-    def _render_history_text(self, history: list[dict], *, recent_turn_window: int, clip_old_tools: bool) -> str:
+    def _render_history_text(
+        self,
+        history: list[dict],
+        *,
+        recent_turn_window: int,
+        compress_old_tools: bool,
+        include_older_turns: bool,
+    ) -> tuple[str, list[dict]]:
         turns = self._group_turns(history)
         if not turns:
-            return "Transcript:\n- empty"
+            return "Transcript:\n- empty", []
         recent_turn_ids = set(list(turns.keys())[-max(1, int(recent_turn_window)):])
         lines = ["Transcript:"]
+        records: list[dict] = []
+        seen_old_read_paths: set[str] = set()
         for turn_id, items in turns.items():
+            if turn_id not in recent_turn_ids and not include_older_turns:
+                continue
             lines.append(f"Turn {turn_id}:")
             for item in items:
                 if item.get("kind") == "compact_summary":
                     continue
                 if turn_id in recent_turn_ids:
-                    lines.extend(self._render_history_item(item, 900))
+                    lines.extend(self._render_history_item(item, None))
                 else:
-                    if item.get("role") == "tool" and clip_old_tools:
-                        lines.append(self._summarize_old_tool_item(item))
+                    if item.get("role") == "tool" and compress_old_tools:
+                        compressed_lines, record = self._compress_old_tool_history_item(item, seen_old_read_paths)
+                        lines.extend(compressed_lines)
+                        if record:
+                            records.append(record)
                     else:
-                        lines.extend(self._render_history_item(item, 120))
-        return "\n".join(lines)
+                        lines.extend(self._render_history_item(item, None))
+        return "\n".join(lines), records
 
-    def _render_history_item(self, item: dict, line_limit: int) -> list[str]:
+    def _render_history_item(self, item: dict, line_limit: int | None) -> list[str]:
         if item.get("kind") == "compact_summary":
             return []
         if item.get("role") == "tool":
             prefix = f"[tool:{item.get('name', '')}] {json.dumps(item.get('args', {}), sort_keys=True)}"
-            content = tail_clip(str(item.get("content", "")), max(20, line_limit))
+            content = str(item.get("content", ""))
+            if line_limit is not None:
+                content = tail_clip(content, max(20, int(line_limit)))
             return [prefix, content]
-        return [f"[{item.get('role', '')}] {tail_clip(str(item.get('content', '')), line_limit)}"]
+        content = str(item.get("content", ""))
+        if line_limit is not None:
+            content = tail_clip(content, max(20, int(line_limit)))
+        return [f"[{item.get('role', '')}] {content}"]
 
-    def _summarize_old_tool_item(self, item: dict) -> str:
-        if item.get("name") == "run_shell":
-            command = str(item.get("args", {}).get("command", "")).strip() or "shell"
-            content = str(item.get("content", "")).splitlines()
-            preview = " | ".join(line.strip() for line in content if line.strip())[:200]
-            return f"{command} -> {preview or '(empty)'}"
-        if item.get("name") in {"write_file", "patch_file"}:
-            path = str(item.get("args", {}).get("path", "")).strip() or "workspace"
-            return f"{item.get('name', 'tool')} -> {path}"
-        content = tail_clip(str(item.get("content", "")), 120)
-        return f"{item.get('name', 'tool')} -> {content}"
+    def _compress_old_tool_history_item(self, item: dict, seen_old_read_paths: set[str]) -> tuple[list[str], dict | None]:
+        name = str(item.get("name", ""))
+        prefix = f"[tool:{name}] {json.dumps(item.get('args', {}), sort_keys=True)}"
+        content = str(item.get("content", ""))
+        if not self._can_compress_tool_history_item(item):
+            return self._render_history_item(item, None), None
+
+        artifact_path = self._artifact_path_from_content(content)
+        if artifact_path:
+            record = self._compression_record_for_item(item, "artifact_path_only", len(content), artifact_path)
+            return [prefix, artifact_path], record
+
+        if name == "read_file":
+            path = str(item.get("args", {}).get("path", "")).strip()
+            if path and path in seen_old_read_paths:
+                replacement = f"[read_file:{path}] duplicate old read omitted"
+                record = self._compression_record_for_item(item, "read_file_duplicate_omitted", len(content), replacement)
+                return [prefix, replacement], record
+            if path:
+                seen_old_read_paths.add(path)
+            return self._render_history_item(item, None), None
+
+        if name == "run_shell":
+            lines = self._run_shell_preview_lines(content)
+            replacement = "\n".join(lines) if lines else "(empty)"
+            record = self._compression_record_for_item(item, "run_shell_first_three_non_empty_lines", len(content), replacement)
+            return [prefix, replacement], record
+
+        replacement = content[:80]
+        record = self._compression_record_for_item(item, "tool_first_80_chars", len(content), replacement)
+        return [prefix, replacement], record
+
+    def _can_compress_tool_history_item(self, item: dict) -> bool:
+        name = str(item.get("name", ""))
+        status = str(item.get("tool_status", item.get("status", "")))
+        if status and status not in {"success", "partial_success"}:
+            return False
+        if name in {
+            "write_file",
+            "apply_patch",
+            "todo_add",
+            "todo_update",
+            "todo_list",
+            "ask_user",
+            "enter_plan_mode",
+            "exit_plan_mode",
+            "spawn_subagent",
+            "send_subagent_message",
+            "wait_subagent",
+        }:
+            return False
+        return True
+
+    def _artifact_path_from_content(self, content: str) -> str:
+        for line in str(content).splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.lower().startswith("artifact"):
+                match = re.search(r"(artifacts/[^\s]+)", stripped)
+                if match:
+                    return match.group(1)
+                if ":" in stripped:
+                    return stripped.split(":", 1)[1].strip()
+                return stripped
+            if stripped.startswith("artifacts/"):
+                return stripped
+        return ""
+
+    def _run_shell_preview_lines(self, content: str) -> list[str]:
+        lines: list[str] = []
+        for raw_line in str(content).splitlines():
+            line = raw_line.strip()
+            if not line or line in {"stdout:", "stderr:", "exit_code:"}:
+                continue
+            lines.append(line)
+            if len(lines) >= 3:
+                break
+        return lines
+
+    def _compression_record_for_item(self, item: dict, rule: str, before_chars: int, after_text: str) -> dict:
+        content = str(item.get("content", ""))
+        return {
+            "turn_id": str(item.get("turn_id", "")),
+            "role": str(item.get("role", "")),
+            "tool_name": str(item.get("name", "")),
+            "rule": rule,
+            "before_chars": int(before_chars),
+            "after_chars": len(str(after_text)),
+            "before_preview": self._preview_text(content),
+            "after_preview": self._preview_text(after_text),
+        }
+
+    def _build_compression_records(
+        self,
+        *,
+        initial_section_texts: dict,
+        compressed_section_texts: dict,
+        initial_budgets: dict,
+        compressed_budgets: dict,
+        history_details: dict,
+    ) -> list[dict]:
+        records: list[dict] = []
+        for section in SECTION_ORDER:
+            before = str(initial_section_texts.get(section, ""))
+            after = str(compressed_section_texts.get(section, ""))
+            record = {
+                "section": section,
+                "before_chars": len(before),
+                "after_chars": len(after),
+                "before_preview": self._preview_text(before),
+                "after_preview": self._preview_text(after),
+                "budget_before": None if section == CURRENT_REQUEST_SECTION else int(initial_budgets.get(section, 0)),
+                "budget_after": None if section == CURRENT_REQUEST_SECTION else int(compressed_budgets.get(section, 0)),
+                "changed": before != after,
+            }
+            if section == "history":
+                record["tool_records"] = list(history_details.get("compression_records", []))
+            records.append(record)
+        return records
+
+    def _preview_text(self, value: str, limit: int = 240) -> str:
+        text = str(value or "").replace("\r\n", "\n").strip()
+        if len(text) <= limit:
+            return text
+        return text[:limit].rstrip() + f"...[{len(text) - limit} chars]"
+
+    def _history_window_for_level(self, level: int) -> int:
+        if level <= 0:
+            return 5
+        if level == 1:
+            return 3
+        return 2
 
     def _summarize_compacted_history(self, items: list[dict], *, session: dict, summary_mode: str) -> str:
         if summary_mode == "llm":
@@ -581,22 +864,6 @@ class ContextManager:
             text += "\n" + runtime_mode_text
         text += "\n" + self.workspace.runtime_text()
         return text
-
-    def _assemble_context(self, rendered: dict[str, _SectionRender]) -> str:
-        return "\n\n".join(rendered[section].rendered for section in SECTION_ORDER).strip()
-
-    def _build_pressure(self, input_tokens: int, budget_tokens: int) -> dict:
-        ratio = round(max(0, int(input_tokens)) / max(1, int(budget_tokens)), 4)
-        level, range_text, tier = self._pressure_level(ratio)
-        return {
-            "ratio": ratio,
-            "level": level,
-            "tier": tier,
-            "range": range_text,
-            "source": "estimated",
-            "input_tokens": int(input_tokens),
-            "budget_tokens": int(budget_tokens),
-        }
 
     def _pressure_level(self, ratio: float) -> tuple[int, str, str]:
         if ratio < 0.60:
