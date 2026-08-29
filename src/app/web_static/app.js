@@ -42,6 +42,10 @@ const STREAM_EVENTS = [
   "model_parsed",
   "tool_requested",
   "tool_executed",
+  "tool_sequence_requested",
+  "tool_sequence_step_requested",
+  "tool_sequence_completed",
+  "tool_sequence_aborted",
   "subagent_completed",
   "checkpoint_created",
   "final_readiness_decision",
@@ -357,6 +361,10 @@ function eventTitle(event) {
     model_parsed: "模型解析结果",
     tool_requested: `工具请求${tool ? `: ${tool}` : ""}`,
     tool_executed: `工具结果${tool ? `: ${tool}` : ""}`,
+    tool_sequence_requested: "工具序列请求",
+    tool_sequence_step_requested: `工具序列步骤${tool ? `: ${tool}` : ""}`,
+    tool_sequence_completed: "工具序列完成",
+    tool_sequence_aborted: "工具序列中止",
     subagent_completed: `子任务结果${tool ? `: ${tool}` : ""}`,
     checkpoint_created: "Checkpoint",
     final_readiness_decision: "Final gate",
@@ -378,6 +386,7 @@ function eventContent(event) {
   if (event.event === "model_responded") return event.response_text || fallbackJson(event);
   if (event.event === "model_parsed") return formatJson(event.action || event);
   if (event.event === "tool_requested") return formatJson(event.args || event);
+  if (event.event === "tool_sequence_requested" || event.event === "tool_sequence_step_requested" || event.event === "tool_sequence_completed" || event.event === "tool_sequence_aborted") return fallbackJson(event);
   if (event.event === "tool_executed" || event.event === "subagent_completed") return event.result || fallbackJson(event);
   if (event.event === "web_run_completed") return event.final_text || fallbackJson(event);
   return fallbackJson(event);

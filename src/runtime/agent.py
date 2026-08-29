@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -192,6 +194,9 @@ class JCodeAgent:
                 if handled:
                     return self._finish_run(task_state, run_dir, final_text, VALID_FINAL)
                 continue
+            if action.kind == "tools":
+                self._handle_tool_sequence_action(action, task_state, run_dir, checkpoint)
+                continue
             if action.kind != "tool":
                 self._handle_invalid_action(action, task_state)
                 continue
@@ -327,7 +332,15 @@ class JCodeAgent:
 
     def _parse_action(self, response, task_state, run_dir):
         action = parse_model_action(response.text)
-        task_state.last_action = {"kind": action.kind, "tool_name": action.tool_name, "content": action.content[:200]}
+        if action.kind == "tools":
+            task_state.last_action = {
+                "kind": action.kind,
+                "tool_name": "",
+                "content": f"{len(action.tool_calls)} tools",
+                "tool_names": [call.name for call in action.tool_calls],
+            }
+        else:
+            task_state.last_action = {"kind": action.kind, "tool_name": action.tool_name, "content": action.content[:200]}
         self._record_trace(run_dir, "model_parsed", task_state, action=task_state.last_action)
         return action
 
@@ -353,13 +366,105 @@ class JCodeAgent:
         self.working_memory.observe_tool(action.content)
 
     def _handle_tool_action(self, action, task_state, run_dir, checkpoint) -> None:
-        self._record_trace(run_dir, "tool_requested", task_state, name=action.tool_name, args=action.tool_args or {})
-        if action.tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"}:
-            result = self._handle_subagent_tool(action.tool_name, action.tool_args or {}, task_state)
+        self._execute_tool_call(
+            action.tool_name,
+            action.tool_args or {},
+            task_state,
+            run_dir,
+            checkpoint,
+        )
+
+    def _handle_tool_sequence_action(self, action, task_state, run_dir, checkpoint) -> None:
+        sequence_id = f"{task_state.run_id}-seq-{task_state.step_index:03d}-{uuid.uuid4().hex[:6]}"
+        calls = list(action.tool_calls or [])
+        total_steps = len(calls)
+        started_at = time.monotonic()
+        results: list[dict] = []
+        self._record_trace(
+            run_dir,
+            "tool_sequence_requested",
+            task_state,
+            sequence_id=sequence_id,
+            step_count=total_steps,
+            tool_names=[call.name for call in calls],
+        )
+        for index, call in enumerate(calls, start=1):
+            if self.abort_requested:
+                self._record_trace(
+                    run_dir,
+                    "tool_sequence_aborted",
+                    task_state,
+                    sequence_id=sequence_id,
+                    step_index=index,
+                    step_count=total_steps,
+                    completed_steps=len(results),
+                    results=list(results),
+                )
+                return
+            step_meta = {
+                "sequence_id": sequence_id,
+                "sequence_index": index,
+                "sequence_length": total_steps,
+            }
+            step_started_at = time.monotonic()
+            self._record_trace(
+                run_dir,
+                "tool_sequence_step_requested",
+                task_state,
+                name=call.name,
+                args=call.args,
+                **step_meta,
+            )
+            result = self._execute_tool_call(
+                call.name,
+                call.args,
+                task_state,
+                run_dir,
+                checkpoint,
+                trace_meta=step_meta,
+                history_meta=step_meta,
+            )
+            results.append(
+                {
+                    "name": call.name,
+                    "status": result.status,
+                    "error_type": result.error_type,
+                    "changed_files": list(result.changed_files),
+                    "artifacts": list(result.artifacts),
+                    "duration_ms": int((time.monotonic() - step_started_at) * 1000),
+                }
+            )
+        self._record_trace(
+            run_dir,
+            "tool_sequence_completed",
+            task_state,
+            sequence_id=sequence_id,
+            step_count=total_steps,
+            completed_steps=len(results),
+            duration_ms=int((time.monotonic() - started_at) * 1000),
+            results=results,
+        )
+
+    def _execute_tool_call(
+        self,
+        tool_name: str,
+        tool_args: dict,
+        task_state,
+        run_dir,
+        checkpoint,
+        *,
+        trace_meta: dict | None = None,
+        history_meta: dict | None = None,
+    ) -> ToolResult:
+        trace_meta = dict(trace_meta or {})
+        history_meta = dict(history_meta or {})
+        self._record_trace(run_dir, "tool_requested", task_state, name=tool_name, args=tool_args, **trace_meta)
+        if tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"}:
+            result = self._handle_subagent_tool(tool_name, tool_args, task_state)
         else:
             result = self.tool_executor.execute(
-                action.tool_name,
-                action.tool_args or {},
+                tool_name,
+                tool_args,
                 working_memory=self.working_memory,
                 tool_profile=self.active_tool_profile,
                 write_scope=self.write_scope,
@@ -369,36 +474,39 @@ class JCodeAgent:
                 runtime=self,
             )
 
-        task_state.record_tool(action.tool_name, result)
+        task_state.record_tool(tool_name, result)
         self._append_history(
             "tool",
             result.text,
             task_state,
-            name=action.tool_name,
+            name=tool_name,
             tool_status=result.status,
             error_type=result.error_type,
             changed_files=result.changed_files,
             artifacts=result.artifacts,
             metadata=result.metadata,
+            **history_meta,
         )
-        self.working_memory.observe_tool(f"{action.tool_name}: {result.status}: {result.text[:500]}")
-        if action.tool_name == "wait_subagent" and result.status == "success":
+        self.working_memory.observe_tool(f"{tool_name}: {result.status}: {result.text[:500]}")
+        if tool_name == "wait_subagent" and result.status == "success":
             self.working_memory.subagent_results.append(result.text[:1000])
 
-        event_name = "subagent_completed" if action.tool_name == "wait_subagent" and result.status == "success" else "tool_executed"
+        event_name = "subagent_completed" if tool_name == "wait_subagent" and result.status == "success" else "tool_executed"
         self._record_trace(
             run_dir,
             event_name,
             task_state,
-            name=action.tool_name,
+            name=tool_name,
             status=result.status,
             error_type=result.error_type,
             changed_files=result.changed_files,
             metadata=result.metadata,
             result=self.redactor.redact(result.text),
+            **trace_meta,
         )
         self._create_checkpoint(checkpoint, task_state, run_dir, "tool_executed")
         self.run_store.write_task_state(run_dir, task_state)
+        return result
 
     def _record_trace(self, run_dir, event: str, task_state, **payload) -> None:
         self.run_store.append_trace(run_dir, event, task_state.run_id, **payload)

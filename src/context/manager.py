@@ -983,7 +983,7 @@ class ContextManager:
     def _build_prefix_text(self) -> str:
         sections = [
             "System rules:\n- You are JCode, a compact local coding agent.",
-            "Output protocol:\n- To call a tool, return exactly: <tool name=\"tool_name\">{\"arg\": \"value\"}</tool>\n- To finish, return exactly: <final>answer</final>",
+            "Output protocol:\n- To call one tool, return exactly: <tool name=\"tool_name\">{\"arg\": \"value\"}</tool>\n- To call multiple tools in order, return exactly: <tools>[{\"name\": \"tool_name\", \"args\": {\"arg\": \"value\"}}]</tools>\n- To finish, return exactly: <final>answer</final>\n- Use only one protocol per response; do not mix <tool>, <tools>, or <final>.",
             self._build_tool_definitions_text(),
             self.workspace.project_rules_text(),
             self.workspace.stable_docs_text(),
