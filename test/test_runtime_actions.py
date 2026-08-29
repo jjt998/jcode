@@ -22,12 +22,22 @@ class DummyRunStore:
     def __init__(self):
         self.traces = []
         self.task_states = []
+        self.artifacts = []
 
     def append_trace(self, run_dir, event, run_id, **payload):
         self.traces.append({"event": event, "run_id": run_id, **payload})
 
     def write_task_state(self, run_dir, task_state):
         self.task_states.append(task_state.to_dict())
+
+    def write_artifact(self, run_dir, name, content):
+        safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in name)
+        artifact_path = run_dir / "artifacts" / safe
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+        artifact_path.write_text(content, encoding="utf-8")
+        rel_path = f"artifacts/{safe}"
+        self.artifacts.append(rel_path)
+        return rel_path
 
 
 class DummySessionEvents:
@@ -208,3 +218,85 @@ def test_tool_sequence_stops_after_abort_request(tmp_path):
     assert agent.tool_executor.calls == [("read_file", {"path": "a.txt"})]
     assert len([event for event in agent.run_store.traces if event["event"] == "tool_sequence_aborted"]) == 1
     assert task_state.tool_steps == 1
+
+
+def test_long_read_file_result_is_saved_as_artifact(tmp_path):
+    large_text = "a" * 1205
+    agent = build_agent(
+        tmp_path,
+        SequencedToolExecutor(
+            None,
+            {
+                "read_file": ToolResult("success", large_text),
+            },
+        ),
+    )
+    agent.tool_executor.agent = agent
+    task_state = TaskState.create("read a large file")
+    checkpoint = DummyCheckpoint()
+
+    result = agent._execute_tool_call("read_file", {"path": "large.txt"}, task_state, tmp_path, checkpoint)
+
+    tool_history = next(item for item in agent.session["history"] if item.get("role") == "tool")
+    artifact_path = tool_history["artifacts"][0]
+
+    assert result.text.startswith(f"{artifact_path}\n")
+    assert result.text.splitlines()[1] == "a" * 1000
+    assert (tmp_path / artifact_path).read_text(encoding="utf-8") == large_text
+    assert tool_history["metadata"]["full_output_artifact"] == artifact_path
+    assert tool_history["metadata"]["original_chars"] == len(large_text)
+    assert tool_history["metadata"]["content_sha256"]
+    assert any(event["event"] == "tool_executed" for event in agent.run_store.traces)
+
+
+def test_long_non_read_file_result_is_saved_as_artifact(tmp_path):
+    large_text = "b" * 1300
+    agent = build_agent(
+        tmp_path,
+        SequencedToolExecutor(
+            None,
+            {
+                "run_shell": ToolResult("success", large_text),
+            },
+        ),
+    )
+    agent.tool_executor.agent = agent
+    task_state = TaskState.create("run a long command")
+    checkpoint = DummyCheckpoint()
+
+    result = agent._execute_tool_call("run_shell", {"command": "echo long"}, task_state, tmp_path, checkpoint)
+
+    tool_history = next(item for item in agent.session["history"] if item.get("role") == "tool")
+    artifact_path = tool_history["artifacts"][0]
+
+    assert artifact_path.startswith("artifacts/run_shell-output-")
+    assert result.text.startswith(f"{artifact_path}\n")
+    assert result.text.splitlines()[1] == "b" * 1000
+    assert (tmp_path / artifact_path).read_text(encoding="utf-8") == large_text
+    assert tool_history["metadata"]["full_output_artifact"] == artifact_path
+    assert agent.run_store.artifacts == [artifact_path]
+
+
+def test_short_tool_result_stays_inline(tmp_path):
+    agent = build_agent(
+        tmp_path,
+        SequencedToolExecutor(
+            None,
+            {
+                "read_file": ToolResult("success", "short result"),
+            },
+        ),
+    )
+    agent.tool_executor.agent = agent
+    task_state = TaskState.create("read a small file")
+    checkpoint = DummyCheckpoint()
+
+    result = agent._execute_tool_call("read_file", {"path": "small.txt"}, task_state, tmp_path, checkpoint)
+
+    tool_history = next(item for item in agent.session["history"] if item.get("role") == "tool")
+    assert result.text == "short result"
+    assert tool_history["content"] == "short result"
+    assert tool_history["artifacts"] == []
+    assert tool_history["metadata"]["full_output_artifact"] == ""
+    assert tool_history["metadata"]["original_chars"] == len("short result")
+    assert agent.run_store.artifacts == []

@@ -10,11 +10,11 @@ def freshness(path: Path) -> str:
     return f"{int(stat.st_mtime_ns)}:{stat.st_size}"
 
 
-def read_file(workspace, working_memory, args) -> ToolResult:
+def read_file(workspace, args) -> ToolResult:
     path = workspace.resolve_path(args.path)
-    text = path.read_text(encoding="utf-8", errors="replace")[: args.max_chars]
+    text = path.read_text(encoding="utf-8", errors="replace")
     rel = workspace.relpath(path)
-    working_memory.note_file_read(rel, freshness(path))
+    # working_memory.note_file_read(rel, freshness(path))
     return ToolResult("success", text)
 
 

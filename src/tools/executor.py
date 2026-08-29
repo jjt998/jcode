@@ -107,9 +107,10 @@ class ToolExecutor:
             sandbox_decision = self.sandbox.decide_shell()
             if not sandbox_decision.allowed:
                 return self._denied(sandbox_decision, invocation=invocation)
+        # 工具执行前后对比工作区状态，记录变更文件列表，确保记录到工具副作用。
         before = self.workspace.snapshot() if tool.risky else {}
         try:
-            result = read_file(self.workspace, working_memory, parsed) if request.name == "read_file" else tool.execute(self.workspace, parsed)
+            result = tool.execute(self.workspace, parsed)
         except Exception as exc:
             after = self.workspace.snapshot() if tool.risky else before
             changed = sorted(set(after) ^ set(before))

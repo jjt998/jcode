@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from src.evidence.summaries import build_report
+from src.evidence.tool_artifacts import prepare_tool_result_observation
 from src.evidence.session_log import SessionEventBus
 from src.memory.consolidation import maintain_after_turn
 from src.policy.decisions import PolicyDecision
@@ -473,6 +474,17 @@ class JCodeAgent:
                 run_id=task_state.run_id,
                 runtime=self,
             )
+
+        result_text, artifact_metadata, result_artifacts = prepare_tool_result_observation(
+            self.run_store,
+            run_dir,
+            tool_name,
+            result.text,
+            result.artifacts,
+        )
+        result.text = result_text
+        result.artifacts = result_artifacts
+        result.metadata.update(artifact_metadata)
 
         task_state.record_tool(tool_name, result)
         self._append_history(
