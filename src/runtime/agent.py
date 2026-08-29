@@ -457,6 +457,7 @@ class JCodeAgent:
         trace_meta: dict | None = None,
         history_meta: dict | None = None,
     ) -> ToolResult:
+        """执行工具结果 + 记录工具执行前后工作区状态 + 记录工具执行结果到历史 + 记录工具执行结果到 trace"""
         trace_meta = dict(trace_meta or {})
         history_meta = dict(history_meta or {})
         self._record_trace(run_dir, "tool_requested", task_state, name=tool_name, args=tool_args, **trace_meta)
@@ -499,7 +500,7 @@ class JCodeAgent:
             metadata=result.metadata,
             **history_meta,
         )
-        self.working_memory.observe_tool(f"{tool_name}: {result.status}: {result.text[:500]}")
+        self.working_memory.observe_tool(f"{tool_name}: {result.status}: {result.text}")
         if tool_name == "wait_subagent" and result.status == "success":
             self.working_memory.subagent_results.append(result.text[:1000])
 
