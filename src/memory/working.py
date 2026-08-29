@@ -90,33 +90,30 @@ class WorkingMemory:
         self.compact_summary = str(text or "")
 
     def render(self) -> str:
+        if self.resume_context:
+            lines = ["Checkpoint:"]
+            lines.append(str(self.resume_context))
+
         lines = ["Working_Memory:"]
-        lines.append("[task]")
-        lines.append(f"- goal: {self.task_goal or '(not set)'}")
+        lines.append(f"- goal: {self.task_goal}")
         if self.constraints:
             lines.append("- constraints: " + "; ".join(self.constraints))
-        if self.resume_context:
-            lines.append("- resume_context: " + str(self.resume_context)[:1000])
-        lines.append("[files]")
         if self.recent_files:
             lines.append("- recent_files: " + ", ".join(self.recent_files[-10:]))
         if self.file_freshness:
             freshness = ", ".join(f"{k}={v}" for k, v in list(self.file_freshness.items())[-10:])
             lines.append("- file_freshness: " + freshness)
-        lines.append("[retrieval]")
         if self.last_retrieval_query:
             lines.append("- last_query: " + self.last_retrieval_query[:200])
         if self.retrieved_memory:
             lines.append("- retrieved_memory:\n" + "\n".join(f"  - {x}" for x in self.retrieved_memory[:5]))
-        lines.append("[tools]")
         if self.subagent_results:
             lines.append("- subagent_results:\n" + "\n".join(f"  - {x}" for x in self.subagent_results[-5:]))
         if self.tool_observations:
             lines.append("- recent_tool_observations:\n" + "\n".join(f"  - {x}" for x in self.tool_observations[-5:]))
-        lines.append("[compact]")
-        if self.compact_summary:
-            lines.append("- summary:\n" + "\n".join(f"  - {x}" for x in self.compact_summary.splitlines()[:8]))
-        lines.append("[safety]")
+        #lines.append("[compact]")
+        #if self.compact_summary:这里的压缩摘要是哪里的？历史对话的？先不写这个。 
+        #    lines.append("- summary:\n" + "\n".join(f"  - {x}" for x in self.compact_summary.splitlines()[:8]))
         if self.safety_notes:
             lines.append("- safety_notes:\n" + "\n".join(f"  - {x}" for x in self.safety_notes[-5:]))
         return "\n".join(lines)

@@ -11,8 +11,6 @@ def build_resume_context(*, session: dict, session_store, run_store, workspace, 
     run_dir = run_store.run_dir(run_id) if run_id else Path()
     checkpoint_path = run_dir / "checkpoint.json" if run_id else Path()
     status, checkpoint = evaluate_checkpoint_path(checkpoint_path, workspace) if run_id else ("no_checkpoint", {})
-    changed_files = list(checkpoint.get("changed_files", []) or [])
-    checkpoint_fingerprint = str(checkpoint.get("workspace_fingerprint", ""))
     current_fingerprint = workspace.fingerprint()
     return {
         "session_id": str(session.get("id", "")),
@@ -25,11 +23,12 @@ def build_resume_context(*, session: dict, session_store, run_store, workspace, 
         "checkpoint_created_at": str(checkpoint.get("created_at", "")),
         "checkpoint_step_index": int(checkpoint.get("step_index", 0) or 0),
         "checkpoint_stop_reason": str(checkpoint.get("stop_reason", "")),
-        "changed_files": changed_files,
+        "changed_files": list(checkpoint.get("changed_files", []) or []),
         "workspace_fingerprint": current_fingerprint,
-        "checkpoint_workspace_fingerprint": checkpoint_fingerprint,
-        "workspace_mismatch": bool(checkpoint_fingerprint and checkpoint_fingerprint != current_fingerprint),
+        "checkpoint_workspace_fingerprint": str(checkpoint.get("workspace_fingerprint", "")),
+        "workspace_mismatch": bool(status == "workspace_mismatch"),
         "runtime_mode": runtime_mode_name(session),
         "plan_topic": str(runtime_mode_state(session).get("topic", "") or ""),
         "plan_path": runtime_mode_plan_path(session),
+        # 可能还缺一个模型的 fingerprint，来判断当前模型和上次 checkpoint 时使用的模型是否一致。
     }
