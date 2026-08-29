@@ -21,7 +21,6 @@ MIN_SECTION_BUDGETS = {
     "working_memory": 2200,
     "history": 6000,
 }
-REDUCTION_ORDER = ("working_memory", "skill", "history")
 SECTION_RATIO_HINTS = {
     "prefix": 0.20,
     "skill": 0.07,
@@ -94,9 +93,19 @@ class ContextManager:
         user_message = str(user_message)
         self._sync_compact_summary_from_history(session, working_memory)
 
-        initial_section_texts = self._build_section_texts(session, working_memory, user_message)
+        initial_rendered = self._build_sections_texts(
+            session=session,
+            working_memory=working_memory,
+            user_message=user_message,
+            budgets=self._base_budgets(),
+            recent_turn_window=5,
+            compress_old_tools=True,
+            include_older_turns=True,
+        )
+        initial_section_texts = {section: initial_rendered[section].rendered for section in SECTION_ORDER}
         initial_prompt = self._build_prompt(initial_section_texts)
-        initial_pressure = self._build_pressure(initial_prompt, self._budget_tokens())
+        initial_pressure = self._build_pressure(initial_section_texts, self._budget_tokens())
+
         compressed_section_texts, compression_info, compact_audit = self._compress_section_texts_by_pressure(
             session=session,
             working_memory=working_memory,
@@ -105,13 +114,13 @@ class ContextManager:
             pressure=initial_pressure,
         )
         final_prompt = self._build_prompt(compressed_section_texts)
-        final_pressure = self._build_pressure(final_prompt, self._budget_tokens())
+        final_pressure = self._build_pressure(compressed_section_texts, self._budget_tokens())
         cache_info = self._build_cache_info(session, compressed_section_texts["prefix"])
         ctx_info = self._build_ctx_info(
             session=session,
             working_memory=working_memory,
             user_message=user_message,
-            initial_section_texts=initial_section_texts,
+            initial_rendered=initial_rendered,
             compressed_section_texts=compressed_section_texts,
             initial_prompt=initial_prompt,
             final_prompt=final_prompt,
@@ -131,22 +140,11 @@ class ContextManager:
             compact_audit=compact_audit,
         )
 
-    def _build_section_texts(self, session: dict, working_memory, user_message: str) -> dict:
-        rendered = self._render_sections(
-            session=session,
-            working_memory=working_memory,
-            user_message=user_message,
-            budgets=self._base_budgets(),
-            recent_turn_window=5,
-            compress_old_tools=True,
-            include_older_turns=True,
-        )
-        return {section: rendered[section].rendered for section in SECTION_ORDER}
-
     def _build_prompt(self, section_texts: dict) -> str:
         return "\n\n".join(str(section_texts.get(section, "")).strip() for section in SECTION_ORDER).strip()
 
-    def _build_pressure(self, prompt: str, budget_tokens: int) -> dict:
+    def _build_pressure(self, section_texts: dict, budget_tokens: int) -> dict:
+        prompt = self._build_prompt(section_texts)
         input_tokens = estimate_tokens(prompt)
         ratio = round(max(0, int(input_tokens)) / max(1, int(budget_tokens)), 4)
         level, range_text, tier = self._pressure_level(ratio)
@@ -172,7 +170,8 @@ class ContextManager:
         level = int(pressure.get("level", 0))
         budgets = self._base_budgets()
         selected_budgets = dict(budgets)
-        recent_turn_window = self._history_window_for_level(level)
+        compressed_section_texts = dict(section_texts)
+        history_details: dict = {}
         compact_audit = None
         compact_info = {
             "status": "idle",
@@ -187,40 +186,99 @@ class ContextManager:
             "trigger": "",
             "fallback_reason": "",
         }
-        if level >= 2:
-            selected_budgets["skill"] = max(
-                MIN_SECTION_BUDGETS["skill"],
-                int(budgets["skill"] * (0.7 if level == 2 else 0.5)),
-            )
-        if level >= 3:
-            selected_budgets["working_memory"] = max(
-                MIN_SECTION_BUDGETS["working_memory"],
-                int(budgets["working_memory"] * 0.7),
-            )
-
+        recent_turn_window = self._history_window_for_level(level)
         include_older_turns = level < 4
-        if level == 4:
-            compact_info, compact_audit = self.compact_history(session, working_memory, retain_turns=2, summary_mode="llm")
-            compact_info["trigger"] = "semantic_summary"
-            compact_info["should_compact"] = True
-            compact_info["eligible"] = True
 
-        rendered = self._render_sections(
-            session=session,
-            working_memory=working_memory,
-            user_message=user_message,
-            budgets=selected_budgets,
-            recent_turn_window=recent_turn_window,
-            compress_old_tools=True,
-            include_older_turns=include_older_turns,
-        )
-        compressed_section_texts = {section: rendered[section].rendered for section in SECTION_ORDER}
+        match level:
+            case 0:
+                pass
+            case 1:
+                history_render = self._build_history_section_texts(
+                    session,
+                    recent_turn_window=3,
+                    budget_chars=self._base_budgets()["history"],
+                    compress_old_tools=True,
+                    include_older_turns=True,
+                )
+                compressed_section_texts["history"] = history_render.rendered
+                history_details = history_render.details or {}
+            case 2:
+                selected_budgets["skill"] = max(MIN_SECTION_BUDGETS["skill"], int(budgets["skill"] * 0.7))
+                compressed_section_texts["skill"] = tail_clip(section_texts.get("skill", ""), selected_budgets["skill"])
+                history_render = self._build_history_section_texts(
+                    session,
+                    recent_turn_window=2,
+                    budget_chars=self._base_budgets()["history"],
+                    compress_old_tools=True,
+                    include_older_turns=True,
+                )
+                compressed_section_texts["history"] = history_render.rendered
+                history_details = history_render.details or {}
+                recent_turn_window = 2
+            case 3:
+                selected_budgets["skill"] = max(MIN_SECTION_BUDGETS["skill"], int(budgets["skill"] * 0.5))
+                selected_budgets["working_memory"] = max(MIN_SECTION_BUDGETS["working_memory"], int(budgets["working_memory"] * 0.7))
+                compressed_section_texts["skill"] = tail_clip(section_texts.get("skill", ""), selected_budgets["skill"])
+                compressed_section_texts["working_memory"] = tail_clip(section_texts.get("working_memory", ""), selected_budgets["working_memory"])
+                history_render = self._build_history_section_texts(
+                    session,
+                    recent_turn_window=2,
+                    budget_chars=self._base_budgets()["history"],
+                    compress_old_tools=True,
+                    include_older_turns=True,
+                )
+                compressed_section_texts["history"] = history_render.rendered
+                history_details = history_render.details or {}
+                recent_turn_window = 2
+            case 4:
+                selected_budgets["skill"] = max(MIN_SECTION_BUDGETS["skill"], int(budgets["skill"] * 0.5))
+                selected_budgets["working_memory"] = max(MIN_SECTION_BUDGETS["working_memory"], int(budgets["working_memory"] * 0.7))
+                compact_info, compact_audit = self.compact_history(session, working_memory, retain_turns=2, summary_mode="llm")
+                compact_info["trigger"] = "semantic_summary"
+                compact_info["should_compact"] = True
+                compact_info["eligible"] = True
+                compressed_section_texts["skill"] = tail_clip(section_texts.get("skill", ""), selected_budgets["skill"])
+                compressed_section_texts["working_memory"] = tail_clip(section_texts.get("working_memory", ""), selected_budgets["working_memory"])
+                history_render = self._build_history_section_texts(
+                    session,
+                    recent_turn_window=2,
+                    budget_chars=self._base_budgets()["history"],
+                    compress_old_tools=True,
+                    include_older_turns=False,
+                )
+                compressed_section_texts["history"] = history_render.rendered
+                history_details = history_render.details or {}
+                compact_info["history_render"] = {
+                    "raw": history_render.raw,
+                    "rendered": history_render.rendered,
+                    "budget_chars": history_render.budget_chars,
+                    "details": history_render.details or {},
+                }
+                recent_turn_window = 2
+            case _:
+                pass
+
+        if "history_render" not in compact_info:
+            history_render = self._build_history_section_texts(
+                session,
+                recent_turn_window=recent_turn_window,
+                budget_chars=self._base_budgets()["history"],
+                compress_old_tools=True,
+                include_older_turns=include_older_turns,
+            )
+            compact_info["history_render"] = {
+                "raw": history_render.raw,
+                "rendered": history_render.rendered,
+                "budget_chars": history_render.budget_chars,
+                "details": history_render.details or {},
+            }
+
         compression_records = self._build_compression_records(
             initial_section_texts=section_texts,
             compressed_section_texts=compressed_section_texts,
             initial_budgets=budgets,
             compressed_budgets=selected_budgets,
-            history_details=rendered["history"].details or {},
+            history_details=history_details,
         )
         return compressed_section_texts, {
             "level": level,
@@ -228,7 +286,7 @@ class ContextManager:
             "selected_budgets": selected_budgets,
             "initial_budgets": budgets,
             "compression_records": compression_records,
-            "history_records": (rendered["history"].details or {}).get("compression_records", []),
+            "history_records": history_details.get("compression_records", []),
             "compact": compact_info,
         }, compact_audit
 
@@ -238,7 +296,7 @@ class ContextManager:
         session: dict,
         working_memory,
         user_message: str,
-        initial_section_texts: dict,
+        initial_rendered: dict[str, _SectionRender],
         compressed_section_texts: dict,
         initial_prompt: str,
         final_prompt: str,
@@ -247,25 +305,6 @@ class ContextManager:
         compression_info: dict,
         cache_info: dict,
     ) -> dict:
-        initial_rendered = self._render_sections(
-            session=session,
-            working_memory=working_memory,
-            user_message=user_message,
-            budgets=self._base_budgets(),
-            recent_turn_window=5,
-            compress_old_tools=True,
-            include_older_turns=True,
-        )
-        final_budgets = compression_info.get("selected_budgets", self._base_budgets())
-        final_rendered = self._render_sections(
-            session=session,
-            working_memory=working_memory,
-            user_message=user_message,
-            budgets=final_budgets,
-            recent_turn_window=int(compression_info.get("recent_turn_window", 5)),
-            compress_old_tools=True,
-            include_older_turns=int(compression_info.get("level", 0)) < 4,
-        )
         initial_total_chars = len(initial_prompt)
         final_total_chars = len(final_prompt)
         initial_total_tokens = estimate_tokens(initial_prompt)
@@ -279,6 +318,11 @@ class ContextManager:
             section: (None if section == CURRENT_REQUEST_SECTION else int(self._base_budgets().get(section, 0)))
             for section in SECTION_ORDER
         }
+        history_render_info = dict(compression_info.get("compact", {}).get("history_render", {}) or {})
+        history_render_raw = str(history_render_info.get("raw", initial_rendered["history"].raw))
+        history_render_rendered = str(history_render_info.get("rendered", compressed_section_texts.get("history", "")))
+        history_render_budget = history_render_info.get("budget_chars", initial_rendered["history"].budget_chars)
+        history_render_details = dict(history_render_info.get("details", {}) or {})
         ctx_info = {
             "workspace": self._workspace_info(),
             "prefix": {
@@ -288,9 +332,9 @@ class ContextManager:
                     key: value
                     for key, value in {
                         section: {
-                            "raw_chars": initial_rendered[section].raw_chars,
-                            "rendered_chars": initial_rendered[section].rendered_chars,
-                            "budget_chars": initial_rendered[section].budget_chars,
+                            "raw_chars": initial_rendered[section].raw_chars if section != "history" else len(history_render_raw),
+                            "rendered_chars": initial_rendered[section].rendered_chars if section != "history" else len(history_render_rendered),
+                            "budget_chars": initial_rendered[section].budget_chars if section != "history" else history_render_budget,
                         }
                         for section in ("prefix", "skill")
                     }.items()
@@ -305,9 +349,9 @@ class ContextManager:
                 "section_budgets": budget_sections,
                 "sections": {
                     section: {
-                        "raw_chars": final_rendered[section].raw_chars,
-                        "rendered_chars": final_rendered[section].rendered_chars,
-                        "budget_chars": final_rendered[section].budget_chars,
+                        "raw_chars": initial_rendered[section].raw_chars if section != "history" else len(history_render_raw),
+                        "rendered_chars": len(compressed_section_texts.get(section, "")) if section != "history" else len(history_render_rendered),
+                        "budget_chars": selected_budgets.get(section, None) if section != CURRENT_REQUEST_SECTION else None,
                     }
                     for section in SECTION_ORDER
                 },
@@ -320,11 +364,11 @@ class ContextManager:
             "pressure_initial": initial_pressure,
             "history": {
                 "turn_count": len(self._group_turns([item for item in session.get("history", []) if item.get("kind") != "compact_summary"])),
-                "rendered_turn_count": final_rendered["history"].details.get("rendered_turn_count", 0) if final_rendered["history"].details else 0,
-                "recent_turn_window": final_rendered["history"].details.get("recent_turn_window", 5) if final_rendered["history"].details else 5,
-                "turns": final_rendered["history"].details.get("turns", []) if final_rendered["history"].details else [],
+                "rendered_turn_count": history_render_details.get("rendered_turn_count", 0),
+                "recent_turn_window": history_render_details.get("recent_turn_window", compression_info.get("recent_turn_window", 5)),
+                "turns": history_render_details.get("turns", []),
                 "compact_summary": working_memory.compact_summary,
-                "compression_records": (final_rendered["history"].details or {}).get("compression_records", []),
+                "compression_records": history_render_details.get("compression_records", []),
             },
             "compact": compression_info.get("compact", {
                 "status": "idle",
@@ -351,17 +395,17 @@ class ContextManager:
             },
             "compression": {
                 "initial": {
-                    "prompt_chars": initial_total_chars,
-                    "prompt_tokens": initial_total_tokens,
-                    "section_texts": {
-                        section: {
-                            "before_preview": self._preview_text(initial_section_texts.get(section, "")),
-                            "after_preview": self._preview_text(compressed_section_texts.get(section, "")),
-                            "before_chars": len(initial_section_texts.get(section, "")),
-                            "after_chars": len(compressed_section_texts.get(section, "")),
-                        }
-                        for section in SECTION_ORDER
-                    },
+                "prompt_chars": initial_total_chars,
+                "prompt_tokens": initial_total_tokens,
+                "section_texts": {
+                    section: {
+                        "before_preview": self._preview_text(initial_rendered[section].rendered),
+                        "after_preview": self._preview_text(compressed_section_texts.get(section, "")),
+                        "before_chars": initial_rendered[section].rendered_chars,
+                        "after_chars": len(compressed_section_texts.get(section, "")),
+                    }
+                    for section in SECTION_ORDER
+                },
                 },
                 "final": {
                     "prompt_chars": final_total_chars,
@@ -382,6 +426,9 @@ class ContextManager:
         return ctx_info
 
     def compact_history(self, session: dict, working_memory, *, retain_turns: int = 2, summary_mode: str = "llm") -> tuple[dict, dict]:
+        '''
+        第四层做语义压缩，这一层会真正压缩历史结构，不是动渲染。否则会导致连续的语义压缩，成本巨高。
+        '''
         history = [item for item in session.get("history", []) if item.get("kind") != "compact_summary"]
         turns = self._group_turns(history)
         ordered_turn_ids = list(turns)
@@ -406,7 +453,7 @@ class ContextManager:
             else:
                 compacted_items.extend(items)
 
-        before_text, _ = self._render_history_text(
+        before_text, _ = self._build_history_text(
             history,
             recent_turn_window=max(2, retain_turns),
             compress_old_tools=False,
@@ -427,7 +474,7 @@ class ContextManager:
         session["history"] = [summary_item, *kept_items]
         working_memory.set_compact_summary(summary_text)
 
-        after_text, _ = self._render_history_text(
+        after_text, _ = self._build_history_text(
             session["history"],
             recent_turn_window=max(2, retain_turns),
             compress_old_tools=False,
@@ -460,7 +507,7 @@ class ContextManager:
         session["ctx_info"] = dict(session.get("ctx_info", {}), **ctx_info)
         return ctx_info["compact"], summary_audit
 
-    def _render_sections(
+    def _build_sections_texts(
         self,
         *,
         session: dict,
@@ -472,7 +519,7 @@ class ContextManager:
         include_older_turns: bool,
     ) -> dict[str, _SectionRender]:
         rendered: dict[str, _SectionRender] = {}
-        history_render = self._render_history_section(
+        history_render = self._build_history_section_texts(
             session,
             recent_turn_window=recent_turn_window,
             budget_chars=int(budgets.get("history", self._base_budgets()["history"])),
@@ -480,9 +527,9 @@ class ContextManager:
             include_older_turns=include_older_turns,
         )
         section_texts = {
-            "prefix": self._render_prefix(),
+            "prefix": self._build_prefix_text(),
             "skill": render_skill_section(),
-            "working_memory": self._render_working_memory(session, working_memory),
+            "working_memory": self._build_working_memory_text(session, working_memory),
             "history": history_render.raw,
             CURRENT_REQUEST_SECTION: f"Current user request:\n{user_message}",
         }
@@ -507,17 +554,17 @@ class ContextManager:
                 rendered[section] = _SectionRender(raw=raw, rendered=raw, budget_chars=None, details={})
         return rendered
 
-    def _render_history_section(
+    def _build_history_section_texts(
         self,
         session: dict,
         *,
         recent_turn_window: int,
         budget_chars: int,
         compress_old_tools: bool,
-        include_older_turns: bool,
+        include_older_turns: bool, # 是否表示保留窗口外的历史，只有第四层不保存，因为要做旧历史的语义压缩。
     ) -> _SectionRender:
         history = [item for item in session.get("history", []) if item.get("kind") != "compact_summary"]
-        raw, compression_records = self._render_history_text(
+        raw, compression_records = self._build_history_text(
             history,
             recent_turn_window=recent_turn_window,
             compress_old_tools=compress_old_tools,
@@ -537,7 +584,7 @@ class ContextManager:
         }
         return _SectionRender(raw=raw, rendered=tail_clip(raw, budget_chars), budget_chars=budget_chars, details=details)
 
-    def _render_history_text(
+    def _build_history_text(
         self,
         history: list[dict],
         *,
@@ -560,7 +607,7 @@ class ContextManager:
                 if item.get("kind") == "compact_summary":
                     continue
                 if turn_id in recent_turn_ids:
-                    lines.extend(self._render_history_item(item, None))
+                    lines.extend(self._build_history_item_text(item, None))
                 else:
                     if item.get("role") == "tool" and compress_old_tools:
                         compressed_lines, record = self._compress_old_tool_history_item(item, seen_old_read_paths)
@@ -568,10 +615,10 @@ class ContextManager:
                         if record:
                             records.append(record)
                     else:
-                        lines.extend(self._render_history_item(item, None))
+                        lines.extend(self._build_history_item_text(item, None))
         return "\n".join(lines), records
 
-    def _render_history_item(self, item: dict, line_limit: int | None) -> list[str]:
+    def _build_history_item_text(self, item: dict, line_limit: int | None) -> list[str]:
         if item.get("kind") == "compact_summary":
             return []
         if item.get("role") == "tool":
@@ -590,7 +637,7 @@ class ContextManager:
         prefix = f"[tool:{name}] {json.dumps(item.get('args', {}), sort_keys=True)}"
         content = str(item.get("content", ""))
         if not self._can_compress_tool_history_item(item):
-            return self._render_history_item(item, None), None
+            return self._build_history_item_text(item, None), None
 
         artifact_path = self._artifact_path_from_content(content)
         if artifact_path:
@@ -605,7 +652,7 @@ class ContextManager:
                 return [prefix, replacement], record
             if path:
                 seen_old_read_paths.add(path)
-            return self._render_history_item(item, None), None
+            return self._build_history_item_text(item, None), None
 
         if name == "run_shell":
             lines = self._run_shell_preview_lines(content)
@@ -706,18 +753,18 @@ class ContextManager:
             records.append(record)
         return records
 
-    def _preview_text(self, value: str, limit: int = 240) -> str:
-        text = str(value or "").replace("\r\n", "\n").strip()
-        if len(text) <= limit:
-            return text
-        return text[:limit].rstrip() + f"...[{len(text) - limit} chars]"
-
     def _history_window_for_level(self, level: int) -> int:
         if level <= 0:
             return 5
         if level == 1:
             return 3
         return 2
+
+    def _preview_text(self, value: str, limit: int = 240) -> str:
+        text = str(value or "").replace("\r\n", "\n").strip()
+        if len(text) <= limit:
+            return text
+        return text[:limit].rstrip() + f"...[{len(text) - limit} chars]"
 
     def _summarize_compacted_history(self, items: list[dict], *, session: dict, summary_mode: str) -> tuple[str, dict]:
         if summary_mode == "llm":
@@ -826,7 +873,7 @@ class ContextManager:
             }
 
     def _build_compact_summary_prompt(self, items: list[dict], *, session: dict) -> str:
-        transcript = self._render_history_text(
+        transcript = self._build_history_text(
             items,
             recent_turn_window=max(1, len(self._group_turns(items))),
             compress_old_tools=False,
@@ -933,27 +980,18 @@ class ContextManager:
                 working_memory.set_compact_summary(str(item.get("content", "")).strip())
                 return
 
-    def _build_section_texts(self, session: dict, working_memory, user_message: str) -> dict:
-        return {
-            "prefix": self._render_prefix(),
-            "skill": render_skill_section(),
-            "working_memory": self._render_working_memory(session, working_memory),
-            "history": "",
-            CURRENT_REQUEST_SECTION: f"Current user request:\n{user_message}",
-        }
-
-    def _render_prefix(self) -> str:
+    def _build_prefix_text(self) -> str:
         sections = [
             "System rules:\n- You are JCode, a compact local coding agent.",
             "Output protocol:\n- To call a tool, return exactly: <tool name=\"tool_name\">{\"arg\": \"value\"}</tool>\n- To finish, return exactly: <final>answer</final>",
-            self._render_tool_definitions(),
+            self._build_tool_definitions_text(),
             self.workspace.project_rules_text(),
             self.workspace.stable_docs_text(),
             "Stable safety rules:\n- Stay inside the workspace.\n- Read files before writing them.\n- Do not repeat identical tool calls.\n- Shell and write actions may require approval and sandbox checks.\n- Summarize evidence from tools before finalizing.",
         ]
         return "\n\n".join(section for section in sections if str(section).strip())
 
-    def _render_tool_definitions(self) -> str:
+    def _build_tool_definitions_text(self) -> str:
         lines = [
             "Tool definitions:",
             "Use only the tools listed below. Do not invent tool names.",
@@ -985,7 +1023,7 @@ class ContextManager:
         }
         return json.dumps(compact, ensure_ascii=False, sort_keys=True)
 
-    def _render_working_memory(self, session: dict, working_memory) -> str:
+    def _build_working_memory_text(self, session: dict, working_memory) -> str:
         text = working_memory.render() + f"\n- workspace_root: {self.workspace.root}"
         runtime_mode_text = render_runtime_mode_text(session)
         if runtime_mode_text:

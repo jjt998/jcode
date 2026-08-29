@@ -36,3 +36,7 @@ After coding or documentation changes, do not create git commits unless the user
 ## Local Test Services
 
 If you start a local service while testing, stop that service before finishing the turn. This includes web servers, dev servers, API servers, background workers, and other long-running local processes.
+
+## Conventions
+写代码需要补充一些函数级和代码级的UTF-8的中文注释，简单易懂，废话不要说。
+并且改代码时看到已存在的注释，除非你是为了前后注释的兼容性，否则你不要删掉它。

@@ -241,7 +241,18 @@ def test_context_manager_microcompresses_history_by_tool_name(tmp_path):
     }
     working_memory = WorkingMemory.from_dict({}, tmp_path)
 
-    section_texts = manager._build_section_texts(session, working_memory, "new request")
+    section_texts = {
+        section: render.rendered
+        for section, render in manager._build_sections_texts(
+            session=session,
+            working_memory=working_memory,
+            user_message="new request",
+            budgets=manager._base_budgets(),
+            recent_turn_window=5,
+            compress_old_tools=True,
+            include_older_turns=True,
+        ).items()
+    }
     compressed_section_texts, info, compact_audit = manager._compress_section_texts_by_pressure(
         session=session,
         working_memory=working_memory,
@@ -259,7 +270,50 @@ def test_context_manager_microcompresses_history_by_tool_name(tmp_path):
     assert "wrote b.txt" in history
     assert info["recent_turn_window"] == 2
     assert info["history_records"]
+    assert info["compact"]["history_render"]["details"]["include_older_turns"] is True
     assert compact_audit is None
+
+
+def test_context_manager_level_four_history_drops_older_turns(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    registry = DummyRegistry()
+    manager = ContextManager(workspace=workspace, durable_memory=object(), registry=registry)
+    session = {
+        "history": [
+            {"role": "user", "content": "turn 1", "run_id": "turn-1", "turn_id": "turn-1"},
+            {"role": "assistant", "content": "turn 1 done", "run_id": "turn-1", "turn_id": "turn-1"},
+            {"role": "user", "content": "turn 2", "run_id": "turn-2", "turn_id": "turn-2"},
+            {"role": "assistant", "content": "turn 2 done", "run_id": "turn-2", "turn_id": "turn-2"},
+            {"role": "user", "content": "turn 3", "run_id": "turn-3", "turn_id": "turn-3"},
+            {"role": "assistant", "content": "turn 3 done", "run_id": "turn-3", "turn_id": "turn-3"},
+            {"role": "user", "content": "turn 4", "run_id": "turn-4", "turn_id": "turn-4"},
+            {"role": "assistant", "content": "turn 4 done", "run_id": "turn-4", "turn_id": "turn-4"},
+        ],
+        "event_seq": 4,
+    }
+    working_memory = WorkingMemory.from_dict({}, tmp_path)
+    section_texts = {
+        section: render.rendered
+        for section, render in manager._build_sections_texts(
+            session=session,
+            working_memory=working_memory,
+            user_message="new request",
+            budgets=manager._base_budgets(),
+            recent_turn_window=5,
+            compress_old_tools=True,
+            include_older_turns=True,
+        ).items()
+    }
+
+    _, info, _ = manager._compress_section_texts_by_pressure(
+        session=session,
+        working_memory=working_memory,
+        user_message="new request",
+        section_texts=section_texts,
+        pressure={"ratio": 0.98, "level": 4, "tier": "tier4", "range": "95+", "source": "estimated", "input_tokens": 10, "budget_tokens": 10},
+    )
+
+    assert info["compact"]["history_render"]["details"]["include_older_turns"] is False
 
 
 def test_compact_history_inserts_summary_and_next_build_skips_it(tmp_path):

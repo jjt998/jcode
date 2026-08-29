@@ -8,6 +8,7 @@ const state = {
   turns: [],
   eventIds: new Set(),
   eventSource: null,
+  openDetails: new Map(),
 };
 
 const els = {
@@ -114,6 +115,7 @@ async function selectProject(projectId) {
   state.activeRunId = "";
   state.activeTurnId = "";
   state.turns = [];
+  state.openDetails.clear();
   els.projectRoot.textContent = project.root;
   els.sessionTitle.textContent = project.name;
   setRunStatus("idle");
@@ -157,6 +159,7 @@ async function selectSession(sessionId) {
   state.sessionId = session.id;
   state.activeRunId = session.active_run_id || "";
   state.activeTurnId = "";
+  state.openDetails.clear();
   els.sessionTitle.textContent = session.id;
   els.projectRoot.textContent = session.project_root || "";
   renderSessions();
@@ -208,12 +211,13 @@ function messageNode(role, content) {
 function reasoningDrawer(turn) {
   const details = document.createElement("details");
   details.className = "reasoning";
+  rememberOpenState(details, `reasoning:${turnKey(turn)}`, false);
   details.innerHTML = `<summary>${escapeHtml(reasoningTitle(turn))}</summary>`;
   const events = document.createElement("div");
   events.className = "reasoning-events";
   if (turn.events && turn.events.length) {
-    for (const event of turn.events || []) {
-      events.append(reasoningEvent(event));
+    for (const [index, event] of (turn.events || []).entries()) {
+      events.append(reasoningEvent(turn, event, index));
     }
   } else {
     const empty = document.createElement("div");
@@ -225,9 +229,10 @@ function reasoningDrawer(turn) {
   return details;
 }
 
-function reasoningEvent(event) {
+function reasoningEvent(turn, event, index) {
   const details = document.createElement("details");
   details.className = `reasoning-event event-${event.event || "message"}`;
+  rememberOpenState(details, `reasoning-event:${turnKey(turn)}:${eventKey(event, index)}`, false);
   const title = eventTitle(event);
   const content = eventContent(event);
   details.innerHTML = `
@@ -238,6 +243,22 @@ function reasoningEvent(event) {
     <pre>${escapeHtml(content || "这个历史事件没有保存完整内容")}</pre>
   `;
   return details;
+}
+
+function rememberOpenState(details, key, defaultOpen = false) {
+  const remembered = state.openDetails.has(key) ? state.openDetails.get(key) : defaultOpen;
+  details.open = Boolean(remembered);
+  details.addEventListener("toggle", () => {
+    state.openDetails.set(key, details.open);
+  });
+}
+
+function turnKey(turn) {
+  return `${state.sessionId || "session"}:${turn.local_id || turn.web_run_id || turn.run_id || ""}`;
+}
+
+function eventKey(event, index) {
+  return event.event_id || `${event.event || "message"}:${event.created_at || index}`;
 }
 
 function approvalNode(turn) {
