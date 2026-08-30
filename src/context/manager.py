@@ -602,39 +602,113 @@ class ContextManager:
         for turn_id, items in turns.items():
             if turn_id not in recent_turn_ids and not include_older_turns:
                 continue
-            lines.append(f"Turn {turn_id}:")
-            for item in items:
-                if item.get("kind") == "compact_summary":
-                    continue
-                if turn_id in recent_turn_ids:
-                    lines.extend(self._build_history_item_text(item, None))
-                else:
-                    if item.get("role") == "tool" and compress_old_tools:
-                        compressed_lines, record = self._compress_old_tool_history_item(item, seen_old_read_paths)
-                        lines.extend(compressed_lines)
-                        if record:
-                            records.append(record)
-                    else:
-                        lines.extend(self._build_history_item_text(item, None))
+            turn_lines = self._build_turn_history_text(
+                turn_id,
+                items,
+                compress_old_tools=compress_old_tools and turn_id not in recent_turn_ids,
+                seen_old_read_paths=seen_old_read_paths,
+                records=records,
+            )
+            if turn_lines:
+                lines.extend(turn_lines)
         return "\n".join(lines), records
 
     def _build_history_item_text(self, item: dict, line_limit: int | None) -> list[str]:
         if item.get("kind") == "compact_summary":
             return []
-        if item.get("role") == "tool":
-            prefix = f"[tool:{item.get('name', '')}] {json.dumps(item.get('args', {}), sort_keys=True)}"
+        role = str(item.get("role", ""))
+        if role == "tool":
+            return self._render_tool_history_block(item, line_limit)
+        if role == "assistant":
+            return self._render_assistant_history_block(item, line_limit)
+        if role == "user":
             content = str(item.get("content", ""))
             if line_limit is not None:
                 content = tail_clip(content, max(20, int(line_limit)))
-            return [prefix, content]
+            return ["[User]", content]
         content = str(item.get("content", ""))
         if line_limit is not None:
             content = tail_clip(content, max(20, int(line_limit)))
-        return [f"[{item.get('role', '')}] {content}"]
+        return [f"[{role or 'message'}]", content]
+
+    def _build_turn_history_text(
+        self,
+        turn_id: str,
+        items: list[dict],
+        *,
+        compress_old_tools: bool,
+        seen_old_read_paths: set[str],
+        records: list[dict],
+    ) -> list[str]:
+        lines = [f"--- Turn {turn_id} ---"]
+        assistant_seen = False
+        assistant_placeholder = False
+        for item in items:
+            if item.get("kind") == "compact_summary":
+                continue
+            role = str(item.get("role", ""))
+            if role == "user":
+                self._append_history_block(lines, self._build_history_item_text(item, None))
+                continue
+            if role == "assistant":
+                self._append_history_block(lines, self._build_history_item_text(item, None))
+                assistant_seen = True
+                continue
+            if role == "tool":
+                if not assistant_seen and not assistant_placeholder:
+                    self._append_history_block(lines, self._build_empty_assistant_block())
+                    assistant_placeholder = True
+                if compress_old_tools:
+                    compressed_lines, record = self._compress_old_tool_history_item(item, seen_old_read_paths)
+                    self._append_history_block(lines, compressed_lines)
+                    if record:
+                        records.append(record)
+                else:
+                    self._append_history_block(lines, self._build_history_item_text(item, None))
+                continue
+            self._append_history_block(lines, self._build_history_item_text(item, None))
+        if not assistant_seen and not assistant_placeholder:
+            self._append_history_block(lines, self._build_empty_assistant_block())
+        return lines
+
+    def _build_empty_assistant_block(self) -> list[str]:
+        return ["[Assistant]", ""]
+
+    def _append_history_block(self, lines: list[str], block: list[str]) -> None:
+        if not block:
+            return
+        if len(lines) > 1 and lines[-1] != "":
+            lines.append("")
+        lines.extend(block)
+
+    def _render_assistant_history_block(self, item: dict, line_limit: int | None) -> list[str]:
+        action_kind = str(item.get("action_kind", "")).strip()
+        reasoning = str(item.get("reasoning", "")).strip()
+        content = str(item.get("content", ""))
+        if line_limit is not None and action_kind == "final":
+            content = tail_clip(content, max(20, int(line_limit)))
+        lines = ["[Assistant]"]
+        if reasoning:
+            lines.append(f"<reasoning>{reasoning}</reasoning>")
+        if action_kind == "final":
+            lines.append(f"<final>{content}</final>")
+        elif action_kind in {"tool", "tools"}:
+            lines.append(content if content else "")
+        else:
+            lines.append("")
+        return lines
+
+    def _render_tool_history_block(self, item: dict, line_limit: int | None) -> list[str]:
+        name = str(item.get("name", ""))
+        prefix = f"[ToolResult ({name})]"
+        content = str(item.get("content", ""))
+        if line_limit is not None:
+            content = tail_clip(content, max(20, int(line_limit)))
+        return [prefix, content]
 
     def _compress_old_tool_history_item(self, item: dict, seen_old_read_paths: set[str]) -> tuple[list[str], dict | None]:
         name = str(item.get("name", ""))
-        prefix = f"[tool:{name}] {json.dumps(item.get('args', {}), sort_keys=True)}"
+        prefix = f"[ToolResult ({name})]"
         content = str(item.get("content", ""))
         if not self._can_compress_tool_history_item(item):
             return self._build_history_item_text(item, None), None
@@ -982,13 +1056,27 @@ class ContextManager:
 
     def _build_prefix_text(self) -> str:
         sections = [
-            "System rules:\n- You are JCode, a compact local coding agent.",
-            "Output protocol:\n- To call one tool, return exactly: <tool name=\"tool_name\">{\"arg\": \"value\"}</tool>\n- To call multiple tools in order, return exactly: <tools>[{\"name\": \"tool_name\", \"args\": {\"arg\": \"value\"}}]</tools>\n- To finish, return exactly: <final>answer</final>\n- Use only one protocol per response; do not mix <tool>, <tools>, or <final>.",
-            self._build_tool_definitions_text(),
-            self.workspace.project_rules_text(),
-            self.workspace.stable_docs_text(),
-            "Stable safety rules:\n- Stay inside the workspace.\n- Read files before writing them.\n- Do not repeat identical tool calls.\n- Shell and write actions may require approval and sandbox checks.\n- Summarize evidence from tools before finalizing.",
-        ]
+    "System rules:\n- You are JCode, a compact local coding agent.",
+    (
+        "Output protocol:\n"
+        "- You must return exactly one protocol response per model response.\n"
+        "- To include reasoning before your action, use <reasoning>...</reasoning> (optional). Only include it when the task is complex or you need to explain your thought process.\n"
+        "- To call one tool, return exactly: <tool name=\"tool_name\">{\"arg\": \"value\"}</tool>\n"
+        "- To call multiple tools in order, return exactly: <tools>[{\"name\": \"tool_name\", \"args\": {\"arg\": \"value\"}}]</tools>\n"
+        "- To finish, return exactly: <final>answer</final>\n"
+        "- Use only one primary protocol block per response: exactly one of <tool>, <tools>, or <final>.\n"
+        "- If you include reasoning, it must be placed before the primary action block.\n"
+        "- Do not output any natural language outside <reasoning>, <tool>, <tools>, or <final>.\n"
+        "- Project/user style rules, such as required greetings, tone, or answer prefixes, must be applied inside <final>...</final> only.\n"
+        "- When calling tools, do not satisfy style rules with plain text before or after the tool block.\n"
+        "- If a style rule must be acknowledged before a tool call, put it inside <reasoning>...</reasoning>, not outside the protocol tags.\n"
+        "- Any text outside the allowed protocol tags will be treated as invalid."
+    ),
+    self._build_tool_definitions_text(),
+    self.workspace.project_rules_text(),
+    self.workspace.stable_docs_text(),
+    "Stable safety rules:\n- Stay inside the workspace.\n- Read files before writing them.\n- Do not repeat identical tool calls.\n- Shell and write actions may require approval and sandbox checks.\n- Summarize evidence from tools before finalizing.",
+]
         return "\n\n".join(section for section in sections if str(section).strip())
 
     def _build_tool_definitions_text(self) -> str:

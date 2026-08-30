@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from src.app.web_events import trace_events
 from src.state.session import SessionStore
+
+
+REASONING_RE = re.compile(r"<reasoning>(.*?)</reasoning>", re.DOTALL)
 
 
 def build_session_turns(project_id: str, project_root: Path, session: dict) -> dict:
@@ -37,9 +41,11 @@ def _build_turn(run_id: str, runs_root: Path, history: list[dict]) -> dict:
     user_message = _first_content(items, "user")
     assistant_message = _last_content(items, "assistant")
     changed_files = _changed_files(events)
+    reasoning_text = _reasoning_text(events, items)
     return {
         "run_id": run_id,
         "user_message": user_message,
+        "reasoning_text": reasoning_text,
         "assistant_message": assistant_message,
         "status": _status(events, assistant_message),
         "event_count": len(events),
@@ -95,6 +101,29 @@ def _changed_files(events: list[dict]) -> list[str]:
                 changed.append(value)
                 known.add(value)
     return changed
+
+
+def _reasoning_text(events: list[dict], items: list[dict]) -> str:
+    """从 trace 里提取首个 reasoning 原文，兼容旧 history 记录。"""
+    for event in events:
+        if event.get("event") != "model_responded":
+            continue
+        text = str(event.get("response_text") or "")
+        reasoning = _extract_reasoning(text)
+        if reasoning:
+            return reasoning
+    for item in reversed(items):
+        reasoning = str(item.get("reasoning") or "").strip()
+        if reasoning:
+            return reasoning
+    return ""
+
+
+def _extract_reasoning(text: str) -> str:
+    match = REASONING_RE.search(text)
+    if not match:
+        return ""
+    return match.group(1)
 
 
 def _status(events: list[dict], assistant_message: str) -> str:

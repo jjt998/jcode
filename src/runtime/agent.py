@@ -339,9 +339,37 @@ class JCodeAgent:
                 "tool_name": "",
                 "content": f"{len(action.tool_calls)} tools",
                 "tool_names": [call.name for call in action.tool_calls],
+                "reasoning": action.reasoning,
             }
         else:
-            task_state.last_action = {"kind": action.kind, "tool_name": action.tool_name, "content": action.content[:200]}
+            task_state.last_action = {
+                "kind": action.kind,
+                "tool_name": action.tool_name,
+                "content": action.content[:200],
+                "reasoning": action.reasoning,
+            }
+        assistant_history_extra = {
+            "action_kind": action.kind,
+            "reasoning": action.reasoning,
+            "raw_content": response.text,
+        }
+        if action.kind == "tool":
+            assistant_history_extra.update(
+                {
+                    "tool_name": action.tool_name,
+                    "tool_args": action.tool_args or {},
+                }
+            )
+        elif action.kind == "tools":
+            assistant_history_extra.update(
+                {
+                    "tool_calls": [{"name": call.name, "args": call.args} for call in action.tool_calls],
+                }
+            )
+        elif action.kind == "final":
+            assistant_history_extra.update({"final_text": action.content})
+        if action.kind != "invalid":
+            self._append_history("assistant", action.content, task_state, **assistant_history_extra)
         self._record_trace(run_dir, "model_parsed", task_state, action=task_state.last_action)
         return action
 
@@ -349,7 +377,6 @@ class JCodeAgent:
         decision = self.final_gate.check(action.content, task_state, self.working_memory, session=self.session, workspace=self.workspace)
         self._record_trace(run_dir, "final_readiness_decision", task_state, **decision)
         if decision["allowed"]:
-            self._append_history("assistant", action.content, task_state)
             self._create_checkpoint(checkpoint, task_state, run_dir, "final")
             return True, action.content
         self._append_history(

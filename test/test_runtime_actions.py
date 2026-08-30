@@ -155,6 +155,35 @@ def test_parse_model_action_supports_tool_sequence():
     assert action.tool_calls[0].args == {"path": "a.txt"}
 
 
+def test_parse_model_action_supports_reasoning_with_tool():
+    action = parse_model_action(
+        '<reasoning>先检查文件。</reasoning><tool name="read_file">{"path":"a.txt"}</tool>'
+    )
+
+    assert action.kind == "tool"
+    assert action.reasoning == "先检查文件。"
+    assert action.content == '<tool name="read_file">{"path":"a.txt"}</tool>'
+    assert action.tool_name == "read_file"
+    assert action.tool_args == {"path": "a.txt"}
+
+
+def test_parse_model_action_supports_reasoning_with_tools_and_final():
+    tools_action = parse_model_action(
+        '<reasoning>分两步执行。</reasoning><tools>[{"name":"read_file","args":{"path":"a.txt"}},{"name":"write_file","args":{"path":"b.txt","content":"x"}}]</tools>'
+    )
+    final_action = parse_model_action(
+        "<reasoning>已经完成。</reasoning><final>done</final>"
+    )
+
+    assert tools_action.kind == "tools"
+    assert tools_action.reasoning == "分两步执行。"
+    assert tools_action.content.startswith("<tools>")
+    assert [call.name for call in tools_action.tool_calls] == ["read_file", "write_file"]
+    assert final_action.kind == "final"
+    assert final_action.reasoning == "已经完成。"
+    assert final_action.content == "done"
+
+
 def test_parse_model_action_rejects_mixed_protocol():
     action = parse_model_action('<tools>[{"name":"read_file","args":{}}]</tools><final>done</final>')
 

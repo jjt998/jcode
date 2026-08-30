@@ -6,7 +6,6 @@ from pydantic import ValidationError
 
 from src.policy.decisions import PolicyDecision
 from src.tools.base import ToolCallRequest, ToolInvocation, ToolResult
-from src.tools.workspace import read_file
 
 RUNTIME_TOOL_NAMES = {"todo_add", "todo_update", "todo_list", "ask_user", "enter_plan_mode", "exit_plan_mode"}
 
@@ -110,7 +109,11 @@ class ToolExecutor:
         # 工具执行前后对比工作区状态，记录变更文件列表，确保记录到工具副作用。
         before = self.workspace.snapshot() if tool.risky else {}
         try:
-            result = tool.execute(self.workspace, parsed)
+            if request.name == "read_file":
+                # read_file 需要记录文件新鲜度，所以参数多一个working_memory，其它工具仍保持 workspace + args 的通用签名。
+                result = tool.execute(self.workspace, parsed, working_memory=working_memory)
+            else:
+                result = tool.execute(self.workspace, parsed)
         except Exception as exc:
             after = self.workspace.snapshot() if tool.risky else before
             changed = sorted(set(after) ^ set(before))

@@ -199,6 +199,7 @@ function renderTurn(turn) {
   item.className = "turn";
   item.dataset.turnId = turn.local_id || turn.run_id;
   if (turn.user_message) item.append(messageNode("user", turn.user_message));
+  if (turn.reasoning_text) item.append(reasoningNode(turn.reasoning_text));
   if ((turn.events && turn.events.length) || turn.status !== "history") item.append(reasoningDrawer(turn));
   if (turn.pending_approval) item.append(approvalNode(turn));
   if (turn.assistant_message) item.append(messageNode("assistant", turn.assistant_message));
@@ -209,6 +210,16 @@ function messageNode(role, content) {
   const node = document.createElement("section");
   node.className = `message ${role}`;
   node.innerHTML = `<span>${escapeHtml(role)}</span><p>${escapeHtml(content)}</p>`;
+  return node;
+}
+
+function reasoningNode(content) {
+  const node = document.createElement("section");
+  node.className = "reasoning-text";
+  node.innerHTML = `
+    <span class="eyebrow">reasoning</span>
+    <pre>${escapeHtml(content)}</pre>
+  `;
   return node;
 }
 
@@ -445,6 +456,8 @@ function handleRunEvent(name, event) {
     turn.pending_question = payload.question || "";
     turn.pending_choices = payload.choices || [];
     setRunStatus("waiting_approval");
+  } else if (name === "model_responded") {
+    turn.reasoning_text = extractReasoningText(payload.response_text || "");
   } else if (name === "run_abort_requested") {
     turn.status = "aborting";
     setRunStatus("aborting");
@@ -485,6 +498,7 @@ function activeTurn(payload = {}) {
       web_run_id: payload.web_run_id || "",
       run_id: payload.jcode_run_id || payload.run_id || "",
       user_message: "",
+      reasoning_text: "",
       assistant_message: "",
       status: "running",
       events: [],
@@ -500,6 +514,11 @@ function emptyNode(text) {
   empty.className = "empty";
   empty.textContent = text;
   return empty;
+}
+
+function extractReasoningText(text) {
+  const match = String(text || "").match(/<reasoning>([\s\S]*?)<\/reasoning>/);
+  return match ? match[1] : "";
 }
 
 els.projectForm.addEventListener("submit", async (event) => {

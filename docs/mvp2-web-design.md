@@ -16,6 +16,8 @@ MVP2 选择方案 A：将事件流内嵌到对应 turn 的推理抽屉中，并�
 - 过程抽屉标题显示本 turn 状态和摘要，例如 `推理中 · 8 events · 2 tools · 1 file changed`。
 - 过程抽屉内的子事件也默认折叠。
 - 展开子事件后直接展示完整原文，不使用摘要替代原文。
+- 如果模型返回 `<reasoning>...</reasoning>`，只取第一个片段，作为 turn 里的同级原文块展示，位置放在事件流上面。
+- 如果这次没有 reasoning，就完全不显示 reasoning 区块。
 - 将完整 context、模型原始返回、工具请求和工具执行结果直接写入 `trace.jsonl`。
 - SSE 只做事件级流式更新，最终回答仍一次性出现。
 - 逐 token 输出明确留到 MVP3。
@@ -51,6 +53,8 @@ MVP2 将 MVP1 的三栏布局调整为两栏布局：
 ```text
 用户消息
 
+[reasoning 原文]
+
 [推理中 · 8 events · 2 tools · 1 file changed]  展开/折叠
   [Context 拼凑]        默认折叠
   [模型原始返回]        默认折叠
@@ -62,6 +66,8 @@ MVP2 将 MVP1 的三栏布局调整为两栏布局：
 
 助手最终回答
 ```
+
+说明：如果 turn 没有 reasoning，则这里直接跳过这一块，不显示占位。
 
 运行中和完成后，过程抽屉都默认折叠。SSE 到达时只更新标题状态、计数和子事件列表，不自动展开抽屉。
 
@@ -77,6 +83,7 @@ MVP2 引入面向 Web 展示的 turn view model。前端不再直接把 session 
     {
       "run_id": "run-abc123",
       "user_message": "帮我查看项目结构",
+      "reasoning_text": "完整 reasoning 原文",
       "assistant_message": "已查看...",
       "status": "completed",
       "event_count": 12,
@@ -93,6 +100,7 @@ Turn 对齐规则：
 - session history 中带 `run_id` 的 user message 是 turn 起点。
 - 同一 `run_id` 的 assistant message 是 turn 终点。
 - 同一 `run_id` 的 tool history 和 trace events 归入该 turn。
+- 如果 `model_responded.response_text` 中包含首个 `<reasoning>...</reasoning>`，则提取成 `reasoning_text`，并和事件流同级展示。
 - 若历史 session 没有完整 run_id，前端显示普通历史消息，不强行归入推理抽屉。
 - 若 run 中断且没有 assistant message，turn 状态显示 `stopped`、`failed` 或 `incomplete`。
 
@@ -130,6 +138,8 @@ MVP1 的 trace 更偏审计摘要。MVP2 需要把可浏览原文写入 trace。
 ```
 
 `model_requested` 可以继续保留为请求统计事件。`model_responded` 用于前端展示“模型原始返回”。
+
+`model_responded.response_text` 同时也是 reasoning 的抽取来源：如果其中包含首个 `<reasoning>...</reasoning>`，服务层提取该片段写入 turn 的 `reasoning_text`；如果没有，就不生成 reasoning 区块。
 
 ### model_parsed
 
@@ -226,6 +236,7 @@ GET /api/projects/{project_id}/sessions/{session_id}/turns
     {
       "run_id": "run-abc123",
       "user_message": "...",
+      "reasoning_text": "...",
       "assistant_message": "...",
       "status": "completed",
       "event_count": 12,
@@ -270,7 +281,8 @@ GET /api/projects/{project_id}/runs/{run_id}/events
 1. 前端调用 turns API。
 2. 后端从 session history、run_ids 和 trace files 构造 turn 列表。
 3. 前端一次性渲染所有 turn。
-4. 所有 reasoning drawer 和子事件默认折叠。
+4. 如果 turn 带 reasoning_text，则先显示 reasoning 原文，再显示事件流。
+5. 所有 reasoning drawer 和子事件默认折叠。
 
 ## 审批体验
 
@@ -311,6 +323,7 @@ MVP2 可以在原生 HTML/CSS/JS 下拆出逻辑组件函数，不引入前端�
 - `ProjectPanel`：项目与会话选择。
 - `TurnList`：渲染会话 turns。
 - `TurnItem`：用户消息、reasoning drawer、助手回答。
+- `ReasoningBlock`：reasoning 原文，同级展示在事件流上方。
 - `ReasoningDrawer`：turn 级过程抽屉。
 - `ReasoningEvent`：单个可折叠子事件。
 - `ApprovalPanel`：绑定当前 turn 的确认输入。
@@ -381,15 +394,16 @@ context 和工具结果可能包含路径、环境信息或敏感输出。
 
 1. 增强 runtime trace：写入完整 context、模型原始返回和完整工具结果。
 2. 新增 `model_responded` 事件。
-3. 新增 turn 构造逻辑，从 session history、run_ids 和 trace files 生成 turn view model。
-4. 新增 `GET /api/projects/{project_id}/sessions/{session_id}/turns`。
-5. 前端移除右侧 timeline DOM 和 CSS。
-6. 前端改为两栏布局。
-7. 前端加载 session 时渲染 turn list，而不是直接渲染 history。
-8. 前端发送消息时创建 pending turn，并将 SSE 事件挂载到该 turn。
-9. 实现 turn 级 reasoning drawer 和子事件折叠。
-10. 将审批 UI 绑定到对应 turn。
-11. 验证历史会话、当前运行、审批、中止和老 trace 兼容。
+3. 从 `model_responded.response_text` 提取首个 `<reasoning>`，生成可选 `reasoning_text`。
+4. 新增 turn 构造逻辑，从 session history、run_ids 和 trace files 生成 turn view model。
+5. 新增 `GET /api/projects/{project_id}/sessions/{session_id}/turns`。
+6. 前端移除右侧 timeline DOM 和 CSS。
+7. 前端改为两栏布局。
+8. 前端加载 session 时渲染 turn list，而不是直接渲染 history。
+9. 前端发送消息时创建 pending turn，并将 SSE 事件挂载到该 turn。
+10. 实现 reasoning 原文块、turn 级 reasoning drawer 和子事件折叠。
+11. 将审批 UI 绑定到对应 turn。
+12. 验证历史会话、当前运行、审批、中止和老 trace 兼容。
 
 ## MVP3 边界
 

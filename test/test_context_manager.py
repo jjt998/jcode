@@ -199,6 +199,103 @@ def test_context_manager_builds_ctx_info_and_cache(tmp_path):
     assert "Workspace docs" in result.context
 
 
+def test_history_text_renders_turn_template_with_reasoning_and_final(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    registry = DummyRegistry()
+    manager = ContextManager(workspace=workspace, durable_memory=object(), registry=registry)
+    history = [
+        {"role": "user", "content": "Do the thing", "run_id": "turn-1", "turn_id": "turn-1"},
+        {
+            "role": "assistant",
+            "content": '<tool name="read_file">{"path":"a.txt"}</tool>',
+            "reasoning": "先检查文件。",
+            "action_kind": "tool",
+            "run_id": "turn-1",
+            "turn_id": "turn-1",
+        },
+        {
+            "role": "tool",
+            "name": "read_file",
+            "args": {"path": "a.txt"},
+            "content": "read ok",
+            "tool_status": "success",
+            "run_id": "turn-1",
+            "turn_id": "turn-1",
+        },
+        {
+            "role": "assistant",
+            "content": "done",
+            "reasoning": "已经完成。",
+            "action_kind": "final",
+            "run_id": "turn-1",
+            "turn_id": "turn-1",
+        },
+    ]
+
+    rendered, records = manager._build_history_text(
+        history,
+        recent_turn_window=5,
+        compress_old_tools=False,
+        include_older_turns=True,
+    )
+
+    assert records == []
+    assert rendered == (
+        "Transcript:\n"
+        "--- Turn turn-1 ---\n"
+        "[User]\n"
+        "Do the thing\n"
+        "\n"
+        "[Assistant]\n"
+        "<reasoning>先检查文件。</reasoning>\n"
+        '<tool name="read_file">{"path":"a.txt"}</tool>\n'
+        "\n"
+        "[ToolResult (read_file)]\n"
+        "read ok\n"
+        "\n"
+        "[Assistant]\n"
+        "<reasoning>已经完成。</reasoning>\n"
+        "<final>done</final>"
+    )
+
+
+def test_history_text_renders_blank_assistant_when_missing(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    registry = DummyRegistry()
+    manager = ContextManager(workspace=workspace, durable_memory=object(), registry=registry)
+    history = [
+        {"role": "user", "content": "Do the thing", "run_id": "turn-1", "turn_id": "turn-1"},
+        {
+            "role": "tool",
+            "name": "read_file",
+            "args": {"path": "a.txt"},
+            "content": "read ok",
+            "tool_status": "success",
+            "run_id": "turn-1",
+            "turn_id": "turn-1",
+        },
+    ]
+
+    rendered, _ = manager._build_history_text(
+        history,
+        recent_turn_window=5,
+        compress_old_tools=False,
+        include_older_turns=True,
+    )
+
+    assert rendered == (
+        "Transcript:\n"
+        "--- Turn turn-1 ---\n"
+        "[User]\n"
+        "Do the thing\n"
+        "\n"
+        "[Assistant]\n"
+        "\n"
+        "[ToolResult (read_file)]\n"
+        "read ok"
+    )
+
+
 def test_default_registry_includes_subagent_tools():
     registry = build_default_registry()
     assert {"spawn_subagent", "send_subagent_message", "wait_subagent"}.issubset(set(registry.tools))

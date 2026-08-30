@@ -10,11 +10,12 @@ def freshness(path: Path) -> str:
     return f"{int(stat.st_mtime_ns)}:{stat.st_size}"
 
 
-def read_file(workspace, args) -> ToolResult:
+def read_file(workspace, args, working_memory) -> ToolResult:
     path = workspace.resolve_path(args.path)
     text = path.read_text(encoding="utf-8", errors="replace")
     rel = workspace.relpath(path)
-    # working_memory.note_file_read(rel, freshness(path))
+    # 这里是把读过文件的新鲜度写到工作记忆的！注释掉会导致agent在恢复时无法判断文件是否被修改过，以及读后写等下游功能的异常！
+    working_memory.note_file_read(rel, freshness(path))
     return ToolResult("success", text)
 
 

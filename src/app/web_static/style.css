@@ -308,6 +308,26 @@ h3 {
   line-height: 1.56;
 }
 
+.reasoning-text {
+  width: min(900px, 92%);
+  align-self: center;
+  padding: 14px 16px;
+  border: 1px solid rgba(90, 83, 126, 0.28);
+  border-radius: 8px;
+  background: #f6f4ff;
+  box-shadow: 0 10px 26px rgba(31, 35, 32, 0.05);
+}
+
+.reasoning-text pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.55;
+  color: var(--ink);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+}
+
 .reasoning {
   width: min(900px, 92%);
   align-self: center;
