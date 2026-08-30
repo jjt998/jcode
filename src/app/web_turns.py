@@ -112,6 +112,7 @@ def _fallback_steps(items: list[dict], run_id: str) -> list[dict]:
             "reasoning_summary": reasoning[:20] + ("…" if len(reasoning) > 20 else "") if reasoning else "",
             "context_text": context,
             "response_text": "",
+            "error_text": "",
             "parsed_action": {},
             "tool_calls": [],
             "details": [],

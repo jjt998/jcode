@@ -71,4 +71,4 @@ def parse_model_action(text: str) -> ModelAction:
         except json.JSONDecodeError as exc:
             return ModelAction(kind="invalid", content=f"invalid tool json: {exc}", reasoning=reasoning)
         return ModelAction(kind="tool", content=body.strip(), reasoning=reasoning, tool_name=tool.group(1).strip(), tool_args=args)
-    return ModelAction(kind="invalid", content="model output must contain exactly one of <tool>, <tools>, or <final>", reasoning=reasoning)
+    return ModelAction(kind="invalid", content="Your output protocol is invalid: model output must contain exactly one of <tool>, <tools>, or <final>", reasoning=reasoning)

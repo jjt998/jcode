@@ -295,6 +295,16 @@ function stepItem(turn, step) {
     `;
     body.append(reasoning);
   }
+  if (step.error_text) {
+    const error = document.createElement("section");
+    error.className = "step-error-text";
+    // 直接把后端返回的错误原文露出来，便于排根因。
+    error.innerHTML = `
+      <span class="eyebrow">错误信息</span>
+      <pre>${escapeHtml(step.error_text)}</pre>
+    `;
+    body.append(error);
+  }
   if (step.tool_calls && step.tool_calls.length) {
     const tools = document.createElement("section");
     tools.className = "step-tools";
@@ -419,7 +429,7 @@ function stepStatusLabel(status) {
     error: "失败",
     timeout: "超时",
   };
-  return labels[status] || status || "待执行";
+  return labels[status] || status || "";
 }
 
 function toolStatusLabel(status) {
@@ -430,7 +440,7 @@ function toolStatusLabel(status) {
     error: "失败",
     timeout: "超时",
   };
-  return labels[status] || status || "执行中";
+  return labels[status] || status || "";
 }
 
 function normalizeTurn(turn) {

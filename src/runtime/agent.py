@@ -368,8 +368,8 @@ class JCodeAgent:
             )
         elif action.kind == "final":
             assistant_history_extra.update({"final_text": action.content})
-        if action.kind != "invalid":
-            self._append_history("assistant", action.content, task_state, **assistant_history_extra)
+        assistant_content = response.text if action.kind == "invalid" else action.content
+        self._append_history("assistant", assistant_content, task_state, **assistant_history_extra)
         self._record_trace(run_dir, "model_parsed", task_state, action=task_state.last_action)
         return action
 

@@ -79,7 +79,7 @@ class ToolExecutor:
         if self.call_guard.repeated(request.name, parsed_args):
             decision = PolicyDecision.deny(
                 "repeated_identical_call",
-                f"error: repeated identical tool call for {request.name}",
+                f"error: repeated identical tool call for {request.name + ':' + str(parsed_args)}",
                 layer="call_guard",
             )
             return self._denied(decision, invocation=invocation)

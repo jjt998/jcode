@@ -197,6 +197,7 @@ def test_context_manager_builds_ctx_info_and_cache(tmp_path):
     assert result.ctx_info["history"]["turn_count"] == 1
     assert "Workspace runtime" in result.context
     assert "Workspace docs" in result.context
+    assert "artifacts/ path" in result.context
 
 
 def test_history_text_renders_turn_template_with_reasoning_and_final(tmp_path):
@@ -216,7 +217,7 @@ def test_history_text_renders_turn_template_with_reasoning_and_final(tmp_path):
         {
             "role": "tool",
             "name": "read_file",
-            "args": {"path": "a.txt"},
+            "args": {"path": "a.txt", "max_chars": 20000},
             "content": "read ok",
             "tool_status": "success",
             "run_id": "turn-1",
@@ -250,7 +251,7 @@ def test_history_text_renders_turn_template_with_reasoning_and_final(tmp_path):
         "<reasoning>先检查文件。</reasoning>\n"
         '<tool name="read_file">{"path":"a.txt"}</tool>\n'
         "\n"
-        "[ToolResult (read_file)]\n"
+        '[ToolResult (read_file)]<args>{"max_chars":20000,"path":"a.txt"}</args>\n'
         "read ok\n"
         "\n"
         "[Assistant]\n"
@@ -268,7 +269,7 @@ def test_history_text_renders_blank_assistant_when_missing(tmp_path):
         {
             "role": "tool",
             "name": "read_file",
-            "args": {"path": "a.txt"},
+            "args": {"path": "a.txt", "max_chars": 20000},
             "content": "read ok",
             "tool_status": "success",
             "run_id": "turn-1",
@@ -291,9 +292,51 @@ def test_history_text_renders_blank_assistant_when_missing(tmp_path):
         "\n"
         "[Assistant]\n"
         "\n"
-        "[ToolResult (read_file)]\n"
+        '[ToolResult (read_file)]<args>{"max_chars":20000,"path":"a.txt"}</args>\n'
         "read ok"
     )
+
+
+def test_history_text_renders_invalid_assistant_content_plainly(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    registry = DummyRegistry()
+    manager = ContextManager(workspace=workspace, durable_memory=object(), registry=registry)
+    history = [
+        {"role": "user", "content": "Do the thing", "run_id": "turn-1", "turn_id": "turn-1"},
+        {
+            "role": "assistant",
+            "content": 'plain text before protocol\n<tool name="list_files">{}</tool>',
+            "reasoning": "",
+            "action_kind": "invalid",
+            "run_id": "turn-1",
+            "turn_id": "turn-1",
+        },
+        {
+            "role": "tool",
+            "name": "parser",
+            "args": {},
+            "content": "Your output protocol is invalid: model output must contain exactly one of <tool>, <tools>, or <final>",
+            "tool_status": "error",
+            "run_id": "turn-1",
+            "turn_id": "turn-1",
+        },
+    ]
+
+    rendered, _ = manager._build_history_text(
+        history,
+        recent_turn_window=5,
+        compress_old_tools=False,
+        include_older_turns=True,
+    )
+
+    assert (
+        "[Assistant]\n"
+        "plain text before protocol\n"
+        '<tool name="list_files">{}</tool>\n'
+        "\n"
+        "[ToolResult (parser)]<args>{}</args>\n"
+        "Your output protocol is invalid"
+    ) in rendered
 
 
 def test_default_registry_includes_subagent_tools():

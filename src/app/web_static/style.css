@@ -420,6 +420,7 @@ h3 {
 }
 
 .step-reasoning,
+.step-error-text,
 .step-tools,
 .final-answer {
   border: 1px solid var(--line);
@@ -431,7 +432,14 @@ h3 {
   padding: 12px 14px;
 }
 
+.step-error-text {
+  padding: 12px 14px;
+  border-color: rgba(161, 63, 67, 0.32);
+  background: rgba(161, 63, 67, 0.06);
+}
+
 .step-reasoning pre,
+.step-error-text pre,
 .final-answer pre {
   margin: 8px 0 0;
   white-space: pre-wrap;

@@ -88,6 +88,28 @@ def test_step_timeline_builder_updates_the_same_step_incrementally():
     assert success["tool_calls"][0]["args_text"] == json.dumps({"recursive": True}, ensure_ascii=False, indent=2)
 
 
+def test_step_timeline_builder_exposes_error_text_on_failure():
+    builder = StepTimelineBuilder(run_id="run-err")
+    builder.consume(
+        {
+            "event": "model_responded",
+            "created_at": "2026-08-30T15:10:00Z",
+            "response_text": "<reasoning>先执行。</reasoning>",
+        }
+    )
+    failed = builder.consume(
+        {
+            "event": "run_failed",
+            "created_at": "2026-08-30T15:10:01Z",
+            "error_type": "ValueError",
+            "error": "bad input",
+        }
+    )[0]
+
+    assert failed["status"] == "error"
+    assert failed["error_text"] == "bad input"
+
+
 def test_build_session_turns_uses_step_list_and_falls_back_without_trace(tmp_path):
     project_root = tmp_path
     run_dir = project_root / ".jcode" / "runs" / "run-1"

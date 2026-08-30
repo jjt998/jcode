@@ -28,6 +28,7 @@ STABLE_SAFETY_RULES = """Stable safety rules:
 - Do not repeat identical tool calls.
 - Shell and write actions may require approval and sandbox checks.
 - Summarize evidence from tools before finalizing.
+- If a tool result starts with an artifacts/ path, treat that path as the full result artifact and read it when you need the complete output.
 """
 
 

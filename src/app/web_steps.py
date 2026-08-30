@@ -55,6 +55,7 @@ class StepTimelineBuilder:
             step["reasoning_text"] = action.reasoning or _extract_reasoning(step["response_text"])
             step["parsed_action"] = _action_to_dict(action)
             step["status"] = "pending"
+            step["error_text"] = ""
             self._push_detail(step, "model_responded", "模型原始返回", step["response_text"], event)
             self._push_detail(step, "model_parsed", "模型解析结果", json.dumps(step["parsed_action"], ensure_ascii=False, indent=2), event)
             self.current_step = step
@@ -80,6 +81,8 @@ class StepTimelineBuilder:
             else:
                 tool_status = _normalize_status(str(event.get("status") or ""), default="success")
                 step["status"] = tool_status
+                if tool_status in {"error", "timeout"} and not step.get("error_text"):
+                    step["error_text"] = _step_error_text(event)
             self._push_detail(step, name, _event_title(name, event), _event_content(name, event), event)
             patches.append(self._snapshot_step(step))
             return patches
@@ -92,6 +95,8 @@ class StepTimelineBuilder:
                 step["status"] = "success"
             if name == "tool_sequence_aborted":
                 step["status"] = "error"
+                if not step.get("error_text"):
+                    step["error_text"] = _step_error_text(event)
             patches.append(self._snapshot_step(step))
             return patches
 
@@ -125,6 +130,7 @@ class StepTimelineBuilder:
 
         if name == "run_failed":
             step["status"] = "error"
+            step["error_text"] = _step_error_text(event)
             self._push_detail(step, name, _event_title(name, event), _event_content(name, event), event)
             patches.append(self._snapshot_step(step))
             self._finalize_current_step(success_if_open=False, end_at=created_at or self._last_event_at)
@@ -132,6 +138,8 @@ class StepTimelineBuilder:
 
         if name == "run_aborted":
             step["status"] = "timeout"
+            if not step.get("error_text"):
+                step["error_text"] = _step_error_text(event)
             self._push_detail(step, name, _event_title(name, event), _event_content(name, event), event)
             patches.append(self._snapshot_step(step))
             self._finalize_current_step(success_if_open=False, end_at=created_at or self._last_event_at)
@@ -162,6 +170,7 @@ class StepTimelineBuilder:
             "reasoning_summary": "",
             "context_text": "",
             "response_text": "",
+            "error_text": "",
             "parsed_action": {},
             "tool_calls": [],
             "details": [],
@@ -321,6 +330,16 @@ def _stringify_payload(value) -> str:
         return json.dumps(value, ensure_ascii=False, indent=2)
     except TypeError:
         return str(value)
+
+
+def _step_error_text(event: dict) -> str:
+    text = _stringify_payload(event.get("error") or event.get("result") or event.get("content") or event.get("result_text") or "")
+    if text:
+        return text
+    error_type = str(event.get("error_type") or "").strip()
+    if error_type:
+        return error_type
+    return _stringify_payload({k: v for k, v in event.items() if k not in {"event", "created_at", "run_id"}})
 
 
 def _duration_ms(start_at: str, end_at: str) -> int | None:

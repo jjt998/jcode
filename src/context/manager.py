@@ -694,13 +694,15 @@ class ContextManager:
             lines.append(f"<final>{content}</final>")
         elif action_kind in {"tool", "tools"}:
             lines.append(content if content else "")
+        elif action_kind == "invalid":
+            lines.append(content)
         else:
             lines.append("")
         return lines
 
     def _render_tool_history_block(self, item: dict, line_limit: int | None) -> list[str]:
         name = str(item.get("name", ""))
-        prefix = f"[ToolResult ({name})]"
+        prefix = f"[ToolResult ({name})]<args>{self._tool_args_json(item)}</args>"
         content = str(item.get("content", ""))
         if line_limit is not None:
             content = tail_clip(content, max(20, int(line_limit)))
@@ -708,7 +710,7 @@ class ContextManager:
 
     def _compress_old_tool_history_item(self, item: dict, seen_old_read_paths: set[str]) -> tuple[list[str], dict | None]:
         name = str(item.get("name", ""))
-        prefix = f"[ToolResult ({name})]"
+        prefix = f"[ToolResult ({name})]<args>{self._tool_args_json(item)}</args>"
         content = str(item.get("content", ""))
         if not self._can_compress_tool_history_item(item):
             return self._build_history_item_text(item, None), None
@@ -737,6 +739,9 @@ class ContextManager:
         replacement = content[:80]
         record = self._compression_record_for_item(item, "tool_first_80_chars", len(content), replacement)
         return [prefix, replacement], record
+
+    def _tool_args_json(self, item: dict) -> str:
+        return json.dumps(item.get("args", {}) or {}, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
 
     def _can_compress_tool_history_item(self, item: dict) -> bool:
         name = str(item.get("name", ""))
@@ -1055,6 +1060,7 @@ class ContextManager:
                 return
 
     def _build_prefix_text(self) -> str:
+        # 这里把工具结果 artifact 约定直接写进系统前缀，明确告诉模型首行路径就是完整结果入口。
         sections = [
     "System rules:\n- You are JCode, a compact local coding agent.",
     (
@@ -1075,7 +1081,7 @@ class ContextManager:
     self._build_tool_definitions_text(),
     self.workspace.project_rules_text(),
     self.workspace.stable_docs_text(),
-    "Stable safety rules:\n- Stay inside the workspace.\n- Shell and write actions may require approval and sandbox checks.\n- Summarize evidence from tools before finalizing.",
+    "Stable safety rules:\n- Stay inside the workspace.\n- Shell and write actions may require approval and sandbox checks.\n- Summarize evidence from tools before finalizing.\n- If a tool result starts with an artifacts/ path, treat that path as the full result artifact and read it when you need the complete output.",
 ]
         return "\n\n".join(section for section in sections if str(section).strip())
 

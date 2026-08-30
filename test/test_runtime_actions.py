@@ -188,6 +188,7 @@ def test_parse_model_action_rejects_mixed_protocol():
     action = parse_model_action('<tools>[{"name":"read_file","args":{}}]</tools><final>done</final>')
 
     assert action.kind == "invalid"
+    assert action.content.startswith("Your output protocol is invalid")
     assert "exactly one" in action.content
 
 
