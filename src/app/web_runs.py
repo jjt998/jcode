@@ -12,6 +12,7 @@ from typing import Any
 from src.app.bootstrap import build_agent
 from src.app.config import AppConfig, load_config
 from src.app.web_projects import WebProject, WebProjectStore
+from src.app.web_steps import StepTimelineBuilder
 from src.app.web_turns import build_session_turns
 from src.state.session import SessionStore
 from src.state.workspace import Workspace, now_iso
@@ -297,15 +298,29 @@ class WebRunManager:
 
     def _bind_run_store(self, web_run: WebRun, agent) -> None:
         original_start_run = agent.run_store.start_run
+        original_append_trace = agent.run_store.append_trace
+        step_builder = StepTimelineBuilder()
 
         def start_run_wrapper(store_self, task_state):
             run_dir = original_start_run(task_state)
             with web_run.lock:
                 web_run.jcode_run_id = str(task_state.run_id)
+                step_builder.run_id = web_run.jcode_run_id
                 web_run.emit("jcode_run_bound", jcode_run_id=web_run.jcode_run_id)
             return run_dir
 
+        def append_trace_wrapper(store_self, run_dir, event, run_id, **payload):
+            original_append_trace(run_dir, event, run_id, **payload)
+            row = {"event": event, "run_id": run_id, "created_at": now_iso(), **payload}
+            patches = step_builder.consume(row)
+            if not patches:
+                return
+            with web_run.lock:
+                for patch in patches:
+                    web_run.emit("step_patch", step=patch)
+
         agent.run_store.start_run = MethodType(start_run_wrapper, agent.run_store)
+        agent.run_store.append_trace = MethodType(append_trace_wrapper, agent.run_store)
 
     def _run_agent(self, run: WebRun, message: str) -> None:
         try:

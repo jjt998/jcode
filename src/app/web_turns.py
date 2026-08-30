@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from src.app.web_events import trace_events
+from src.app.web_steps import build_reasoning_steps
 from src.state.session import SessionStore
-
-
-REASONING_RE = re.compile(r"<reasoning>(.*?)</reasoning>", re.DOTALL)
 
 
 def build_session_turns(project_id: str, project_root: Path, session: dict) -> dict:
@@ -38,18 +35,25 @@ def _ordered_run_ids(session: dict, history: list[dict]) -> list[str]:
 def _build_turn(run_id: str, runs_root: Path, history: list[dict]) -> dict:
     items = [item for item in history if item.get("run_id") == run_id]
     events = trace_events(runs_root / run_id)
+    reasoning_steps, final_text = build_reasoning_steps(events, run_id=run_id)
+    if not reasoning_steps:
+        reasoning_steps = _fallback_steps(items, run_id)
     user_message = _first_content(items, "user")
     assistant_message = _last_content(items, "assistant")
     changed_files = _changed_files(events)
-    reasoning_text = _reasoning_text(events, items)
+    if not final_text:
+        final_text = assistant_message
     return {
         "run_id": run_id,
         "user_message": user_message,
-        "reasoning_text": reasoning_text,
         "assistant_message": assistant_message,
+        "final_text": final_text,
+        "reasoning_steps": reasoning_steps,
+        "reasoning_text": reasoning_steps[0].get("reasoning_text", "") if reasoning_steps else "",
         "status": _status(events, assistant_message),
         "event_count": len(events),
-        "tool_count": sum(1 for event in events if event.get("event") == "tool_executed"),
+        "step_count": len(reasoning_steps),
+        "tool_count": sum(len(step.get("tool_calls", []) or []) for step in reasoning_steps),
         "changed_files": changed_files,
         "events": events,
     }
@@ -67,14 +71,54 @@ def _orphan_history_turns(history: list[dict]) -> list[dict]:
                 "run_id": f"history-{index}",
                 "user_message": content if role == "user" else "",
                 "assistant_message": content if role == "assistant" else "",
+                "final_text": content if role == "assistant" else "",
+                "reasoning_steps": [],
+                "reasoning_text": "",
                 "status": "history",
                 "event_count": 0,
+                "step_count": 0,
                 "tool_count": 0,
                 "changed_files": [],
                 "events": [],
             }
         )
     return turns
+
+
+def _fallback_steps(items: list[dict], run_id: str) -> list[dict]:
+    reasoning = ""
+    context = ""
+    for item in items:
+        if item.get("role") == "assistant" and not reasoning:
+            reasoning = str(item.get("reasoning") or "").strip()
+            if not reasoning:
+                content = str(item.get("content") or "")
+                if "<reasoning>" in content and "</reasoning>" in content:
+                    start = content.find("<reasoning>") + len("<reasoning>")
+                    end = content.find("</reasoning>")
+                    reasoning = content[start:end].strip()
+        if item.get("kind") == "context_built":
+            context = str(item.get("content") or "")
+    if not reasoning and not context:
+        return []
+    return [
+        {
+            "step_id": f"{run_id}:1" if run_id else "step-1",
+            "index": 1,
+            "timestamp": items[0].get("created_at", "") if items else "",
+            "end_timestamp": items[-1].get("created_at", "") if items else "",
+            "status": "success",
+            "reasoning_text": reasoning,
+            "reasoning_summary": reasoning[:20] + ("…" if len(reasoning) > 20 else "") if reasoning else "",
+            "context_text": context,
+            "response_text": "",
+            "parsed_action": {},
+            "tool_calls": [],
+            "details": [],
+            "duration_ms": None,
+            "tool_count": 0,
+        }
+    ]
 
 
 def _first_content(items: list[dict], role: str) -> str:
@@ -103,33 +147,12 @@ def _changed_files(events: list[dict]) -> list[str]:
     return changed
 
 
-def _reasoning_text(events: list[dict], items: list[dict]) -> str:
-    """从 trace 里提取首个 reasoning 原文，兼容旧 history 记录。"""
-    for event in events:
-        if event.get("event") != "model_responded":
-            continue
-        text = str(event.get("response_text") or "")
-        reasoning = _extract_reasoning(text)
-        if reasoning:
-            return reasoning
-    for item in reversed(items):
-        reasoning = str(item.get("reasoning") or "").strip()
-        if reasoning:
-            return reasoning
-    return ""
-
-
-def _extract_reasoning(text: str) -> str:
-    match = REASONING_RE.search(text)
-    if not match:
-        return ""
-    return match.group(1)
-
-
 def _status(events: list[dict], assistant_message: str) -> str:
     for event in reversed(events):
         if event.get("event") == "run_failed":
             return "failed"
+        if event.get("event") == "run_aborted":
+            return "stopped"
         if event.get("event") == "run_finished":
             status = str(event.get("status") or "")
             stop_reason = str(event.get("stop_reason") or "")

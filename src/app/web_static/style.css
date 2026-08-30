@@ -273,7 +273,7 @@ h3 {
 .turn {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .message {
@@ -308,94 +308,253 @@ h3 {
   line-height: 1.56;
 }
 
-.reasoning-text {
-  width: min(900px, 92%);
+.step-timeline {
+  width: min(940px, 92%);
   align-self: center;
-  padding: 14px 16px;
-  border: 1px solid rgba(90, 83, 126, 0.28);
-  border-radius: 8px;
-  background: #f6f4ff;
-  box-shadow: 0 10px 26px rgba(31, 35, 32, 0.05);
+  display: grid;
+  gap: 14px;
+  padding-left: 12px;
+  border-left: 2px solid rgba(90, 83, 126, 0.18);
 }
 
-.reasoning-text pre {
+.step-empty {
+  padding: 12px 14px;
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+}
+
+.step {
+  border: 1px solid var(--line);
+  border-left-width: 5px;
+  border-radius: 8px;
+  background: rgba(252, 251, 246, 0.96);
+  box-shadow: 0 8px 20px rgba(31, 35, 32, 0.05);
+}
+
+.step-pending {
+  border-left-color: var(--violet);
+}
+
+.step-running {
+  border-left-color: var(--signal);
+}
+
+.step-success {
+  border-left-color: #4a8d52;
+}
+
+.step-error,
+.step-timeout {
+  border-left-color: var(--danger);
+}
+
+.step > summary {
+  list-style: none;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.step > summary::-webkit-details-marker {
+  display: none;
+}
+
+.step-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.step-summary-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: center;
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+}
+
+.step-index {
+  color: var(--ink);
+  font-weight: 760;
+}
+
+.step-time,
+.step-meta {
+  opacity: 0.86;
+}
+
+.step-status {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(90, 83, 126, 0.08);
+  color: var(--violet);
+}
+
+.step-running .step-status {
+  background: rgba(36, 123, 104, 0.12);
+  color: var(--signal);
+}
+
+.step-success .step-status {
+  background: rgba(74, 141, 82, 0.12);
+  color: #3e7a45;
+}
+
+.step-error .step-status,
+.step-timeout .step-status {
+  background: rgba(161, 63, 67, 0.12);
+  color: var(--danger);
+}
+
+.step-summary-text {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.step-body {
+  padding: 0 16px 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.step-reasoning,
+.step-tools,
+.final-answer {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.step-reasoning {
+  padding: 12px 14px;
+}
+
+.step-reasoning pre,
+.final-answer pre {
   margin: 8px 0 0;
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.55;
+  line-height: 1.58;
   color: var(--ink);
   font-family: Consolas, "Cascadia Mono", monospace;
   font-size: 12px;
 }
 
-.reasoning {
-  width: min(900px, 92%);
-  align-self: center;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(252, 251, 246, 0.82);
-  box-shadow: 0 10px 26px rgba(31, 35, 32, 0.07);
-}
-
-.reasoning > summary {
-  padding: 11px 14px;
-  color: var(--violet);
-  font-family: Consolas, "Cascadia Mono", monospace;
-  font-size: 12px;
-  font-weight: 700;
-  list-style-position: inside;
-}
-
-.reasoning-events {
-  padding: 0 12px 12px;
+.step-tools {
+  padding: 10px 12px 12px;
   display: grid;
   gap: 8px;
 }
 
-.reasoning-empty {
-  padding: 12px;
-  color: var(--muted);
-  font-family: Consolas, "Cascadia Mono", monospace;
-  font-size: 12px;
+.step-tools-head,
+.final-head,
+.tool-summary,
+.tool-summary-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
-.reasoning-event {
+.tool-call,
+.mini-detail {
   border: 1px solid var(--line);
   border-radius: 7px;
   background: #fff;
 }
 
-.reasoning-event > summary {
+.tool-call > summary,
+.mini-detail > summary {
+  list-style: none;
+  cursor: pointer;
   padding: 10px 12px;
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  list-style-position: inside;
 }
 
-.reasoning-event summary span {
-  font-weight: 740;
+.tool-call > summary::-webkit-details-marker,
+.mini-detail > summary::-webkit-details-marker {
+  display: none;
 }
 
-.reasoning-event summary small {
+.tool-call[open] > summary,
+.mini-detail[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.tool-summary {
+  flex-wrap: wrap;
+}
+
+.tool-name {
+  font-weight: 760;
+}
+
+.tool-args {
   color: var(--muted);
   font-family: Consolas, "Cascadia Mono", monospace;
   font-size: 11px;
-  white-space: nowrap;
 }
 
-.reasoning-event pre {
-  max-height: 440px;
+.tool-summary-meta {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.tool-status {
+  color: var(--signal);
+  font-size: 11px;
+}
+
+.tool-call.tool-error .tool-status,
+.tool-call.tool-timeout .tool-status {
+  color: var(--danger);
+}
+
+.tool-duration {
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+}
+
+.tool-body {
+  padding: 10px 12px 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.mini-detail pre {
   margin: 0;
+  padding: 10px 12px 12px;
+  max-height: 320px;
   overflow: auto;
-  padding: 12px;
-  border-top: 1px solid var(--line);
   background: var(--code);
   color: #e7efe8;
   font-family: Consolas, "Cascadia Mono", monospace;
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
+}
+
+.final-answer {
+  width: min(940px, 92%);
+  align-self: center;
+  padding: 14px 16px 16px;
+  border-left: 5px solid var(--signal);
+  background: #f5fbf8;
+}
+
+.final-chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(36, 123, 104, 0.12);
+  color: var(--signal);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+}
+
+.final-answer pre {
+  max-height: 360px;
 }
 
 .event-context_built {
@@ -541,7 +700,8 @@ summary:focus-visible {
   }
 
   .message,
-  .reasoning,
+  .step-timeline,
+  .final-answer,
   .approval {
     max-width: 100%;
     width: 100%;
@@ -554,7 +714,9 @@ summary:focus-visible {
 
 @media (prefers-reduced-motion: no-preference) {
   .turn,
-  .approval {
+  .step,
+  .approval,
+  .final-answer {
     animation: rise 160ms ease-out;
   }
 

@@ -32,6 +32,7 @@ const STREAM_EVENTS = [
   "web_run_started",
   "jcode_run_bound",
   "run_started",
+  "step_patch",
   "compact_evaluated",
   "compact_triggered",
   "compact_completed",
@@ -79,9 +80,29 @@ function formatTime(value) {
   return date.toLocaleString();
 }
 
+function formatDuration(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const ms = Number(value);
+  if (Number.isNaN(ms)) return "";
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(ms >= 10000 ? 0 : 1)}s`;
+}
+
 function setRunStatus(status) {
   els.runState.textContent = status || "idle";
   els.runState.dataset.status = status || "idle";
+}
+
+function summarizeText(text, limit = 20) {
+  const value = String(text || "").replace(/\s+/g, " ").trim();
+  if (!value) return "";
+  return value.length > limit ? `${value.slice(0, limit)}…` : value;
+}
+
+function previewText(text, limit = 60) {
+  const value = String(text || "").replace(/\s+/g, " ").trim();
+  if (!value) return "";
+  return value.length > limit ? `${value.slice(0, limit)}…` : value;
 }
 
 async function loadProjects(selectLatest = false) {
@@ -175,7 +196,7 @@ async function selectSession(sessionId) {
 async function loadTurns() {
   if (!state.projectId || !state.sessionId) return;
   const data = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions/${encodeURIComponent(state.sessionId)}/turns`);
-  state.turns = data.turns || [];
+  state.turns = (data.turns || []).map(normalizeTurn);
   renderTurns();
 }
 
@@ -184,7 +205,7 @@ function renderTurns() {
   if (!state.turns.length) {
     const node = document.createElement("div");
     node.className = "empty-state";
-    node.innerHTML = "<strong>准备开始</strong><span>发送一个任务，推理过程会折叠在这个 turn 里。</span>";
+    node.innerHTML = "<strong>准备开始</strong><span>发送一个任务，步骤时间线会显示在这里。</span>";
     els.turnList.append(node);
     return;
   }
@@ -199,10 +220,10 @@ function renderTurn(turn) {
   item.className = "turn";
   item.dataset.turnId = turn.local_id || turn.run_id;
   if (turn.user_message) item.append(messageNode("user", turn.user_message));
-  if (turn.reasoning_text) item.append(reasoningNode(turn.reasoning_text));
-  if ((turn.events && turn.events.length) || turn.status !== "history") item.append(reasoningDrawer(turn));
+  const steps = turn.reasoning_steps || [];
+  if (steps.length || turn.reasoning_text || turn.status !== "history") item.append(stepTimeline(turn));
   if (turn.pending_approval) item.append(approvalNode(turn));
-  if (turn.assistant_message) item.append(messageNode("assistant", turn.assistant_message));
+  if (turn.final_text || turn.assistant_message) item.append(finalAnswerNode(turn.final_text || turn.assistant_message));
   return item;
 }
 
@@ -213,48 +234,116 @@ function messageNode(role, content) {
   return node;
 }
 
-function reasoningNode(content) {
+function finalAnswerNode(content) {
   const node = document.createElement("section");
-  node.className = "reasoning-text";
+  node.className = "final-answer";
   node.innerHTML = `
-    <span class="eyebrow">reasoning</span>
+    <div class="final-head">
+      <span class="eyebrow">最终答案</span>
+      <span class="final-chip">完成</span>
+    </div>
     <pre>${escapeHtml(content)}</pre>
   `;
   return node;
 }
 
-function reasoningDrawer(turn) {
-  const details = document.createElement("details");
-  details.className = "reasoning";
-  rememberOpenState(details, `reasoning:${turnKey(turn)}`, false);
-  details.innerHTML = `<summary>${escapeHtml(reasoningTitle(turn))}</summary>`;
-  const events = document.createElement("div");
-  events.className = "reasoning-events";
-  if (turn.events && turn.events.length) {
-    for (const [index, event] of (turn.events || []).entries()) {
-      events.append(reasoningEvent(turn, event, index));
-    }
-  } else {
+function stepTimeline(turn) {
+  const section = document.createElement("section");
+  section.className = "step-timeline";
+  const steps = turn.reasoning_steps || [];
+  if (!steps.length) {
     const empty = document.createElement("div");
-    empty.className = "reasoning-empty";
-    empty.textContent = "等待第一个事件";
-    events.append(empty);
+    empty.className = "step-empty";
+    empty.textContent = "等待步骤生成";
+    section.append(empty);
+    return section;
   }
-  details.append(events);
+  for (const step of steps) {
+    section.append(stepItem(turn, step));
+  }
+  return section;
+}
+
+function stepItem(turn, step) {
+  const details = document.createElement("details");
+  details.className = `step step-${escapeHtml(step.status || "pending")}`;
+  rememberOpenState(details, `step:${turnKey(turn)}:${step.step_id}`, false);
+  details.innerHTML = `
+    <summary>
+      <div class="step-summary">
+        <div class="step-summary-top">
+          <span class="step-index">步骤 ${escapeHtml(String(step.index || 1))}</span>
+          <span class="step-time">${escapeHtml(formatTime(step.timestamp))}</span>
+          <span class="step-status">${escapeHtml(stepStatusLabel(step.status))}</span>
+          <span class="step-meta">${escapeHtml(stepMetaLabel(step))}</span>
+        </div>
+        <div class="step-summary-text">${escapeHtml(step.reasoning_summary || summarizeText(step.reasoning_text || "没有推理内容"))}</div>
+      </div>
+    </summary>
+  `;
+  const body = document.createElement("div");
+  body.className = "step-body";
+  if (step.context_text) {
+    body.append(detailBlock("Context 拼凑", step.context_text, `step-detail:${turnKey(turn)}:${step.step_id}:context`));
+  }
+  if (step.reasoning_text) {
+    const reasoning = document.createElement("section");
+    reasoning.className = "step-reasoning";
+    reasoning.innerHTML = `
+      <span class="eyebrow">推理内容</span>
+      <pre>${escapeHtml(step.reasoning_text)}</pre>
+    `;
+    body.append(reasoning);
+  }
+  if (step.tool_calls && step.tool_calls.length) {
+    const tools = document.createElement("section");
+    tools.className = "step-tools";
+    tools.innerHTML = `<div class="step-tools-head"><span class="eyebrow">工具调用清单</span><span>${escapeHtml(String(step.tool_calls.length))} 个</span></div>`;
+    for (const [index, tool] of (step.tool_calls || []).entries()) {
+      tools.append(toolCallNode(turn, step, tool, index));
+    }
+    body.append(tools);
+  }
+  for (const detail of step.details || []) {
+    if (detail.event === "context_built" || detail.event === "model_responded" || detail.event === "model_parsed") continue;
+    body.append(detailBlock(detail.title || detail.event, detail.content || "", `step-detail:${turnKey(turn)}:${step.step_id}:${detail.event}:${detail.created_at || ""}`));
+  }
+  details.append(body);
   return details;
 }
 
-function reasoningEvent(turn, event, index) {
+function toolCallNode(turn, step, tool, index) {
   const details = document.createElement("details");
-  details.className = `reasoning-event event-${event.event || "message"}`;
-  rememberOpenState(details, `reasoning-event:${turnKey(turn)}:${eventKey(event, index)}`, false);
-  const title = eventTitle(event);
-  const content = eventContent(event);
+  details.className = `tool-call tool-${escapeHtml(tool.status || "running")}`;
+  rememberOpenState(details, `tool:${turnKey(turn)}:${step.step_id}:${tool.tool_id}`, false);
   details.innerHTML = `
     <summary>
-      <span>${escapeHtml(title)}</span>
-      <small>${escapeHtml(formatTime(event.created_at))}</small>
+      <div class="tool-summary">
+        <span class="tool-name">🔧 ${escapeHtml(tool.name || `tool-${index + 1}`)}</span>
+        <span class="tool-args">${escapeHtml(previewText(tool.args_text || "", 60))}</span>
+      </div>
+      <div class="tool-summary-meta">
+        <span class="tool-status">${escapeHtml(toolStatusLabel(tool.status))}</span>
+        <span class="tool-duration">${escapeHtml(formatDuration(tool.duration_ms))}</span>
+      </div>
     </summary>
+  `;
+  const body = document.createElement("div");
+  body.className = "tool-body";
+  body.append(detailBlock("参数", tool.args_text || "{}", `tool-args:${turnKey(turn)}:${step.step_id}:${tool.tool_id}`));
+  if (tool.result_text) {
+    body.append(detailBlock("返回结果", tool.result_text, `tool-result:${turnKey(turn)}:${step.step_id}:${tool.tool_id}`));
+  }
+  details.append(body);
+  return details;
+}
+
+function detailBlock(title, content, key) {
+  const details = document.createElement("details");
+  details.className = "mini-detail";
+  rememberOpenState(details, key, false);
+  details.innerHTML = `
+    <summary><span>${escapeHtml(title)}</span></summary>
     <pre>${escapeHtml(content || "这个历史事件没有保存完整内容")}</pre>
   `;
   return details;
@@ -270,10 +359,6 @@ function rememberOpenState(details, key, defaultOpen = false) {
 
 function turnKey(turn) {
   return `${state.sessionId || "session"}:${turn.local_id || turn.web_run_id || turn.run_id || ""}`;
-}
-
-function eventKey(event, index) {
-  return event.event_id || `${event.event || "message"}:${event.created_at || index}`;
 }
 
 function approvalNode(turn) {
@@ -317,102 +402,89 @@ function approvalNode(turn) {
   return section;
 }
 
-function reasoningTitle(turn) {
-  const status = statusLabel(turn.status);
-  const eventCount = turn.events ? turn.events.length : turn.event_count || 0;
-  const toolCount = countTools(turn);
-  const changedFiles = collectChangedFiles(turn.events || []);
-  const parts = [`${status} · ${eventCount} events`];
-  if (toolCount) parts.push(`${toolCount} tools`);
-  if (changedFiles.length) parts.push(`${changedFiles.length} file${changedFiles.length > 1 ? "s" : ""} changed`);
+function stepMetaLabel(step) {
+  const parts = [];
+  const toolCount = (step.tool_calls || []).length;
+  parts.push(`工具 ${toolCount} 个`);
+  const duration = formatDuration(step.duration_ms);
+  if (duration) parts.push(`耗时 ${duration}`);
   return parts.join(" · ");
 }
 
-function countTools(turn) {
-  return (turn.events || []).filter((event) => event.event === "tool_executed").length || turn.tool_count || 0;
+function stepStatusLabel(status) {
+  const labels = {
+    pending: "待执行",
+    running: "执行中",
+    success: "已完成",
+    error: "失败",
+    timeout: "超时",
+  };
+  return labels[status] || status || "待执行";
 }
 
-function collectChangedFiles(events) {
-  const files = new Set();
-  for (const event of events) {
-    for (const file of event.changed_files || []) files.add(file);
+function toolStatusLabel(status) {
+  const labels = {
+    pending: "待执行",
+    running: "执行中",
+    success: "成功",
+    error: "失败",
+    timeout: "超时",
+  };
+  return labels[status] || status || "执行中";
+}
+
+function normalizeTurn(turn) {
+  if (!turn) return turn;
+  if (!Array.isArray(turn.reasoning_steps)) turn.reasoning_steps = [];
+  if (!turn.final_text) turn.final_text = turn.assistant_message || "";
+  if (!turn.stepMap || !(turn.stepMap instanceof Map)) {
+    turn.stepMap = new Map();
+    for (const step of turn.reasoning_steps) {
+      if (step && step.step_id) turn.stepMap.set(step.step_id, step);
+    }
   }
-  return [...files];
+  if (!turn.reasoning_steps.length && turn.reasoning_text) {
+    const synthetic = syntheticStep(turn);
+    turn.reasoning_steps = [synthetic];
+    turn.stepMap.set(synthetic.step_id, synthetic);
+  }
+  return turn;
 }
 
-function statusLabel(status) {
-  const labels = {
-    running: "推理中",
-    waiting_approval: "等待确认",
-    completed: "已完成",
-    stopped: "已停止",
-    aborted: "已停止",
-    aborting: "停止中",
-    failed: "失败",
-    incomplete: "未完成",
-    history: "历史消息",
+function syntheticStep(turn) {
+  return {
+    step_id: `${turn.run_id || turn.local_id || "turn"}:1`,
+    index: 1,
+    timestamp: "",
+    end_timestamp: "",
+    status: turn.status === "failed" ? "error" : "success",
+    reasoning_text: turn.reasoning_text || "",
+    reasoning_summary: summarizeText(turn.reasoning_text || "", 20),
+    context_text: "",
+    response_text: "",
+    parsed_action: {},
+    tool_calls: [],
+    details: [],
+    duration_ms: null,
+    tool_count: 0,
   };
-  return labels[status] || status || "推理中";
 }
 
-function eventTitle(event) {
-  const name = event.event || "message";
-  const tool = event.name || event.tool_name;
-  const labels = {
-    web_run_started: "开始运行",
-    jcode_run_bound: "绑定 Run",
-    run_started: "运行开始",
-    compact_evaluated: "压缩评估",
-    compact_triggered: "压缩触发",
-    compact_completed: "压缩完成",
-    compact_fallback: "压缩回退",
-    context_built: "Context 拼凑",
-    model_requested: "模型请求",
-    model_responded: "模型原始返回",
-    model_parsed: "模型解析结果",
-    tool_requested: `工具请求${tool ? `: ${tool}` : ""}`,
-    tool_executed: `工具结果${tool ? `: ${tool}` : ""}`,
-    tool_sequence_requested: "工具序列请求",
-    tool_sequence_step_requested: `工具序列步骤${tool ? `: ${tool}` : ""}`,
-    tool_sequence_completed: "工具序列完成",
-    tool_sequence_aborted: "工具序列中止",
-    subagent_completed: `子任务结果${tool ? `: ${tool}` : ""}`,
-    checkpoint_created: "Checkpoint",
-    final_readiness_decision: "Final gate",
-    memory_maintained: "记忆整理",
-    run_finished: "运行结束",
-    approval_required: "等待确认",
-    approval_answered: "已确认",
-    web_run_completed: "最终回答",
-    run_abort_requested: "请求停止",
-    run_aborted: "已停止",
-    run_failed: "失败",
-  };
-  return labels[name] || name;
+function upsertStep(turn, step) {
+  normalizeTurn(turn);
+  if (!step || !step.step_id) return;
+  turn.stepMap.set(step.step_id, step);
+  turn.reasoning_steps = [...turn.stepMap.values()].sort(compareSteps);
 }
 
-function eventContent(event) {
-  if (event.event === "context_built") return event.context || fallbackJson(event);
-  if (event.event === "compact_evaluated" || event.event === "compact_triggered" || event.event === "compact_completed" || event.event === "compact_fallback") return fallbackJson(event);
-  if (event.event === "model_responded") return event.response_text || fallbackJson(event);
-  if (event.event === "model_parsed") return formatJson(event.action || event);
-  if (event.event === "tool_requested") return formatJson(event.args || event);
-  if (event.event === "tool_sequence_requested" || event.event === "tool_sequence_step_requested" || event.event === "tool_sequence_completed" || event.event === "tool_sequence_aborted") return fallbackJson(event);
-  if (event.event === "tool_executed" || event.event === "subagent_completed") return event.result || fallbackJson(event);
-  if (event.event === "web_run_completed") return event.final_text || fallbackJson(event);
-  return fallbackJson(event);
-}
-
-function fallbackJson(event) {
-  const copy = { ...event };
-  delete copy.context;
-  delete copy.response_text;
-  delete copy.result;
-  return formatJson(copy);
-}
-
-function formatJson(value) {
-  return JSON.stringify(value, null, 2);
+function compareSteps(a, b) {
+  const ai = Number(a.index || 0);
+  const bi = Number(b.index || 0);
+  if (ai !== bi) return ai - bi;
+  const at = String(a.timestamp || "");
+  const bt = String(b.timestamp || "");
+  if (at !== bt) return at < bt ? -1 : 1;
+  return String(a.step_id || "").localeCompare(String(b.step_id || ""));
 }
 
 function connectEvents(runId) {
@@ -450,14 +522,17 @@ function handleRunEvent(name, event) {
   if (name === "jcode_run_bound" && payload.jcode_run_id) {
     turn.run_id = payload.jcode_run_id;
   }
+  if (name === "step_patch" && payload.step) {
+    upsertStep(turn, payload.step);
+    renderTurns();
+    return;
+  }
   if (name === "approval_required") {
     turn.status = "waiting_approval";
     turn.pending_approval = true;
     turn.pending_question = payload.question || "";
     turn.pending_choices = payload.choices || [];
     setRunStatus("waiting_approval");
-  } else if (name === "model_responded") {
-    turn.reasoning_text = extractReasoningText(payload.response_text || "");
   } else if (name === "run_abort_requested") {
     turn.status = "aborting";
     setRunStatus("aborting");
@@ -470,7 +545,10 @@ function handleRunEvent(name, event) {
   } else if (name === "web_run_completed" || name === "run_finished") {
     turn.status = name === "run_finished" && payload.status !== "completed" ? "stopped" : "completed";
     setRunStatus(turn.status);
-    if (payload.final_text) turn.assistant_message = payload.final_text;
+    if (payload.final_text) {
+      turn.final_text = payload.final_text;
+      turn.assistant_message = payload.final_text;
+    }
     loadSessions(false).catch(console.error);
   } else if (name !== "stream_closed") {
     if (turn.status !== "waiting_approval") turn.status = "running";
@@ -492,20 +570,22 @@ function handleRunEvent(name, event) {
 function activeTurn(payload = {}) {
   const ids = [payload.web_run_id, payload.jcode_run_id, payload.run_id, state.activeTurnId].filter(Boolean);
   let turn = state.turns.find((item) => ids.includes(item.web_run_id) || ids.includes(item.run_id) || ids.includes(item.local_id));
-  if (!turn) {
-    turn = {
-      local_id: payload.web_run_id || state.activeTurnId || `pending-${Date.now()}`,
-      web_run_id: payload.web_run_id || "",
-      run_id: payload.jcode_run_id || payload.run_id || "",
-      user_message: "",
-      reasoning_text: "",
-      assistant_message: "",
-      status: "running",
-      events: [],
-      pending_approval: false,
-    };
-    state.turns.push(turn);
-  }
+  if (turn) return normalizeTurn(turn);
+  turn = normalizeTurn({
+    local_id: payload.web_run_id || state.activeTurnId || `pending-${Date.now()}`,
+    web_run_id: payload.web_run_id || "",
+    run_id: payload.jcode_run_id || payload.run_id || "",
+    user_message: "",
+    reasoning_text: "",
+    reasoning_steps: [],
+    final_text: "",
+    assistant_message: "",
+    status: "running",
+    events: [],
+    pending_approval: false,
+    stepMap: new Map(),
+  });
+  state.turns.push(turn);
   return turn;
 }
 
@@ -516,9 +596,32 @@ function emptyNode(text) {
   return empty;
 }
 
-function extractReasoningText(text) {
-  const match = String(text || "").match(/<reasoning>([\s\S]*?)<\/reasoning>/);
-  return match ? match[1] : "";
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function detailBlock(title, content, key) {
+  const details = document.createElement("details");
+  details.className = "mini-detail";
+  rememberOpenState(details, key, false);
+  details.innerHTML = `
+    <summary><span>${escapeHtml(title)}</span></summary>
+    <pre>${escapeHtml(content || "这个历史事件没有保存完整内容")}</pre>
+  `;
+  return details;
+}
+
+function rememberOpenState(details, key, defaultOpen = false) {
+  const remembered = state.openDetails.has(key) ? state.openDetails.get(key) : defaultOpen;
+  details.open = Boolean(remembered);
+  details.addEventListener("toggle", () => {
+    state.openDetails.set(key, details.open);
+  });
 }
 
 els.projectForm.addEventListener("submit", async (event) => {
@@ -560,16 +663,22 @@ els.composer.addEventListener("submit", async (event) => {
   if (!message) return;
   const localId = `pending-${Date.now()}`;
   state.activeTurnId = localId;
-  state.turns.push({
-    local_id: localId,
-    run_id: "",
-    web_run_id: "",
-    user_message: message,
-    assistant_message: "",
-    status: "running",
-    events: [],
-    pending_approval: false,
-  });
+  state.turns.push(
+    normalizeTurn({
+      local_id: localId,
+      run_id: "",
+      web_run_id: "",
+      user_message: message,
+      reasoning_text: "",
+      reasoning_steps: [],
+      final_text: "",
+      assistant_message: "",
+      status: "running",
+      events: [],
+      pending_approval: false,
+      stepMap: new Map(),
+    }),
+  );
   els.messageInput.value = "";
   setRunStatus("running");
   renderTurns();
@@ -607,24 +716,19 @@ els.stopRun.addEventListener("click", async () => {
   }
 });
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 loadProjects(true).catch((error) => {
   state.turns = [
-    {
+    normalizeTurn({
       local_id: "startup-error",
       status: "failed",
       user_message: "",
+      reasoning_text: "",
+      reasoning_steps: [],
+      final_text: "",
       assistant_message: "",
       events: [{ event: "client_error", created_at: new Date().toISOString(), error_type: "startup_failed", result: error.message }],
-    },
+      stepMap: new Map(),
+    }),
   ];
   renderTurns();
 });
