@@ -1075,7 +1075,7 @@ class ContextManager:
     self._build_tool_definitions_text(),
     self.workspace.project_rules_text(),
     self.workspace.stable_docs_text(),
-    "Stable safety rules:\n- Stay inside the workspace.\n- Read files before writing them.\n- Do not repeat identical tool calls.\n- Shell and write actions may require approval and sandbox checks.\n- Summarize evidence from tools before finalizing.",
+    "Stable safety rules:\n- Stay inside the workspace.\n- Shell and write actions may require approval and sandbox checks.\n- Summarize evidence from tools before finalizing.",
 ]
         return "\n\n".join(section for section in sections if str(section).strip())
 
