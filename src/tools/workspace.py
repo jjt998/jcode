@@ -13,9 +13,13 @@ def freshness(path: Path) -> str:
 def read_file(workspace, args, working_memory) -> ToolResult:
     path = workspace.resolve_path(args.path)
     text = path.read_text(encoding="utf-8", errors="replace")
+    # 先按 start/end 截取，再交给 max_chars 控制返回长度，避免读取范围和结果长度混在一起。
+    text = text[args.start : args.end]
+    if args.max_chars and len(text) > args.max_chars:
+        text = text[: args.max_chars]
     rel = workspace.relpath(path)
     # 这里是把读过文件的新鲜度写到工作记忆的！注释掉会导致agent在恢复时无法判断文件是否被修改过，以及读后写等下游功能的异常！
-    working_memory.note_file_read(rel, freshness(path))
+    working_memory.note_file_read(rel, args.model_dump(), freshness(path))
     return ToolResult("success", text)
 
 

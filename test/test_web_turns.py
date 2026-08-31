@@ -110,6 +110,31 @@ def test_step_timeline_builder_exposes_error_text_on_failure():
     assert failed["error_text"] == "bad input"
 
 
+def test_step_timeline_builder_shows_model_parse_failure_detail():
+    builder = StepTimelineBuilder(run_id="run-parse")
+    builder.consume(
+        {
+            "event": "model_responded",
+            "created_at": "2026-08-30T15:12:00Z",
+            "response_text": 'plain text\n<tool name="list_files">{}</tool>',
+        }
+    )
+    detail = builder.consume(
+        {
+            "event": "model_parse_failed",
+            "created_at": "2026-08-30T15:12:01Z",
+            "error": "Your output protocol is invalid: model output must contain exactly one of <tool>, <tools>, or <final>",
+            "raw_content": 'plain text\n<tool name="list_files">{}</tool>',
+            "reasoning": "",
+        }
+    )[0]
+
+    assert detail["status"] == "error"
+    assert detail["error_text"].startswith("Your output protocol is invalid")
+    assert detail["details"][-1]["event"] == "model_parse_failed"
+    assert "raw_content" in detail["details"][-1]["content"]
+
+
 def test_build_session_turns_uses_step_list_and_falls_back_without_trace(tmp_path):
     project_root = tmp_path
     run_dir = project_root / ".jcode" / "runs" / "run-1"

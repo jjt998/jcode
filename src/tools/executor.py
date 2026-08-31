@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from src.policy.decisions import PolicyDecision
 from src.tools.base import ToolCallRequest, ToolInvocation, ToolResult
+from src.tools.workspace import freshness
 
 RUNTIME_TOOL_NAMES = {"todo_add", "todo_update", "todo_list", "ask_user", "enter_plan_mode", "exit_plan_mode"}
 
@@ -76,7 +77,11 @@ class ToolExecutor:
         scope_decision = self._check_write_scope(invocation, write_scope)
         if not scope_decision.allowed:
             return self._denied(scope_decision, invocation=invocation)
-        if self.call_guard.repeated(request.name, parsed_args):
+        if request.name == "read_file":
+            read_guard = self._check_read_file_repeat(invocation, working_memory)
+            if not read_guard.allowed:
+                return self._denied(read_guard, invocation=invocation)
+        elif self.call_guard.repeated(request.name, parsed_args):
             decision = PolicyDecision.deny(
                 "repeated_identical_call",
                 f"error: repeated identical tool call for {request.name + ':' + str(parsed_args)}",
@@ -180,6 +185,28 @@ class ToolExecutor:
         result.decision = "executed"
         result.metadata.update(self._metadata(invocation, [PolicyDecision.allow("runtime_tool_ok", layer="tool_execution")], {"decision": "executed", "runtime_tool": True}))
         return result
+
+    def _check_read_file_repeat(self, invocation: ToolInvocation, working_memory: WorkingMemory) -> PolicyDecision:
+        # read_file 以“路径 + 参数 + 范围 + 文件版本”为单位计数，同一份老文件的相同读法才算重复。
+        try:
+            path = self.workspace.resolve_path(invocation.parsed_args.get("path", ""))
+            relpath = self.workspace.relpath(path)
+            current_freshness = freshness(path)
+        except Exception:
+            return PolicyDecision.allow("read_file_repeat_check_skipped", layer="call_guard", metadata={"tool_name": invocation.tool.name})
+
+        if working_memory.read_file_count(relpath, invocation.parsed_args, current_freshness) >= 3:
+            return PolicyDecision.deny(
+                "repeated_old_file_read",
+                "error: You've already reread this unchanged file three times. Please avoid repeatedly reading content you already know. If you still need the missing result, you can call ask_user to decide the next step.",
+                layer="call_guard",
+                metadata={"path": relpath, "freshness": current_freshness},
+            )
+        return PolicyDecision.allow(
+            "read_file_repeat_allowed",
+            layer="call_guard",
+            metadata={"path": relpath, "freshness": current_freshness, "read_count": working_memory.read_file_count(relpath, invocation.parsed_args, current_freshness)},
+        )
 
     def _check_profile(self, invocation: ToolInvocation, tool_profile: ToolSetProfile | None) -> PolicyDecision:
         if tool_profile is None or tool_profile.allows(invocation.tool.name):

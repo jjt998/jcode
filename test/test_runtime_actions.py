@@ -165,6 +165,10 @@ def test_invalid_model_action_records_raw_assistant_before_parser(tmp_path):
     assert agent.session["history"][1]["role"] == "tool"
     assert agent.session["history"][1]["name"] == "parser"
     assert agent.session["history"][1]["content"].startswith("Your output protocol is invalid")
+    assert any(event["event"] == "model_parse_failed" for event in agent.run_store.traces)
+    failure_event = next(event for event in agent.run_store.traces if event["event"] == "model_parse_failed")
+    assert failure_event["raw_content"] == 'plain text\n<tool name="list_files">{}</tool>'
+    assert failure_event["error"].startswith("Your output protocol is invalid")
 
 
 def test_parse_model_action_supports_tool_sequence():

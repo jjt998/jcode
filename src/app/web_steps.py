@@ -74,6 +74,23 @@ class StepTimelineBuilder:
             patches.append(self._snapshot_step(step))
             return patches
 
+        if name == "model_parse_failed":
+            step["status"] = "error"
+            if not step.get("error_text"):
+                step["error_text"] = str(event.get("error") or "")
+            content = json.dumps(
+                {
+                    "error": event.get("error") or "",
+                    "raw_content": event.get("raw_content") or "",
+                    "reasoning": event.get("reasoning") or "",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            self._push_detail(step, name, "模型解析失败", content, event)
+            patches.append(self._snapshot_step(step))
+            return patches
+
         if name in {"tool_requested", "tool_executed", "subagent_completed"}:
             self._update_tool_call(step, event)
             if name == "tool_requested":
@@ -269,6 +286,7 @@ def _event_title(name: str, event: dict) -> str:
         "context_built": "Context 拼凑",
         "model_responded": "模型原始返回",
         "model_parsed": "模型解析结果",
+        "model_parse_failed": "模型解析失败",
         "tool_requested": f"工具请求{f': {tool}' if tool else ''}",
         "tool_executed": f"工具结果{f': {tool}' if tool else ''}",
         "subagent_completed": f"子任务结果{f': {tool}' if tool else ''}",
@@ -296,6 +314,16 @@ def _event_content(name: str, event: dict) -> str:
         return str(event.get("response_text") or "")
     if name == "model_parsed":
         return json.dumps(event.get("action") or {}, ensure_ascii=False, indent=2)
+    if name == "model_parse_failed":
+        return json.dumps(
+            {
+                "error": event.get("error") or "",
+                "raw_content": event.get("raw_content") or "",
+                "reasoning": event.get("reasoning") or "",
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
     if name in {"tool_requested", "tool_executed", "subagent_completed"}:
         if name == "tool_requested":
             return _stringify_payload(event.get("args") or {})

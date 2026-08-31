@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 class ReadFileArgs(BaseModel):
     path: str
     max_chars: int = Field(default=20000, ge=1, le=200000)
+    start: int = Field(default=0, ge=0)
+    end: int | None = Field(default=None, ge=0)
 
 
 class WriteFileArgs(BaseModel):

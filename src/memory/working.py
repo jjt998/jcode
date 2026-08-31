@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -11,6 +12,7 @@ class WorkingMemory:
     constraints: list[str] = field(default_factory=list)
     recent_files: list[str] = field(default_factory=list)
     file_freshness: dict[str, str] = field(default_factory=dict)
+    read_file_counts: dict[str, dict[str, int]] = field(default_factory=dict)
     tool_observations: list[str] = field(default_factory=list)
     resume_context: dict = field(default_factory=dict)
     retrieved_memory: list[str] = field(default_factory=list)
@@ -27,12 +29,14 @@ class WorkingMemory:
         tools = data.get("tools", {}) if isinstance(data.get("tools"), dict) else {}
         safety = data.get("safety", {}) if isinstance(data.get("safety"), dict) else {}
         compact = data.get("compact", {}) if isinstance(data.get("compact"), dict) else {}
+        read_file_counts = _read_file_counts_from_dict(files.get("read_file_counts", data.get("read_file_counts", {})))
         return cls(
             workspace_root=workspace_root,
             task_goal=str(task.get("goal", data.get("task_goal", ""))),
             constraints=list(task.get("constraints", data.get("constraints", []))),
             recent_files=list(files.get("recent", data.get("recent_files", []))),
             file_freshness=dict(files.get("freshness", data.get("file_freshness", {}))),
+            read_file_counts=read_file_counts,
             tool_observations=list(tools.get("observations", data.get("tool_observations", []))),
             resume_context=dict(task.get("resume_context", data.get("resume_context", {}))),
             retrieved_memory=list(retrieval.get("items", data.get("retrieved_memory", []))),
@@ -53,6 +57,7 @@ class WorkingMemory:
             "files": {
                 "recent": self.recent_files[-20:],
                 "freshness": self.file_freshness,
+                "read_file_counts": self.read_file_counts,
             },
             "retrieval": {
                 "last_query": self.last_retrieval_query,
@@ -71,10 +76,18 @@ class WorkingMemory:
             "compact_summary": self.compact_summary,
         }
 
-    def note_file_read(self, relpath: str, freshness: str) -> None:
+    def note_file_read(self, relpath: str, args: dict, freshness: str) -> None:
         if relpath not in self.recent_files:
             self.recent_files.append(relpath)
         self.file_freshness[relpath] = freshness
+        # 这里只记录成功读到的文件版本，后续用它判断同一份老文件已经读了几次。
+        bucket = self.read_file_counts.setdefault(relpath, {})
+        key = _read_file_count_key(relpath, args, freshness)
+        bucket[key] = int(bucket.get(key, 0)) + 1
+
+    def read_file_count(self, relpath: str, args: dict, freshness: str) -> int:
+        bucket = self.read_file_counts.get(relpath, {})
+        return int(bucket.get(_read_file_count_key(relpath, args, freshness), 0))
 
     def observe_tool(self, text: str) -> None:
         self.tool_observations.append(text[:1000])
@@ -117,3 +130,36 @@ class WorkingMemory:
         if self.safety_notes:
             lines.append("- safety_notes:\n" + "\n".join(f"  - {x}" for x in self.safety_notes[-5:]))
         return "\n".join(lines)
+
+
+def _read_file_counts_from_dict(raw: object) -> dict[str, dict[str, int]]:
+    counts: dict[str, dict[str, int]] = {}
+    if not isinstance(raw, dict):
+        return counts
+    for relpath, versions in raw.items():
+        if not isinstance(versions, dict):
+            continue
+        rel = str(relpath)
+        bucket: dict[str, int] = {}
+        for freshness, count in versions.items():
+            try:
+                bucket[str(freshness)] = max(0, int(count))
+            except Exception:
+                continue
+        if bucket:
+            counts[rel] = bucket
+    return counts
+
+
+def _read_file_count_key(relpath: str, args: dict, freshness: str) -> str:
+    payload = {
+        "tool": "read_file",
+        "path": relpath,
+        "args": {
+            "max_chars": int(args.get("max_chars", 20000)),
+            "start": int(args.get("start", 0)),
+            "end": args.get("end", None),
+        },
+        "freshness": str(freshness),
+    }
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))

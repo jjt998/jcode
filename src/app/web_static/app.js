@@ -41,6 +41,7 @@ const STREAM_EVENTS = [
   "model_requested",
   "model_responded",
   "model_parsed",
+  "model_parse_failed",
   "tool_requested",
   "tool_executed",
   "tool_sequence_requested",

@@ -316,13 +316,6 @@ class JCodeAgent:
         )
         self._record_trace(
             run_dir,
-            "model_requested",
-            task_state,
-            estimated_input_tokens=response.input_tokens,
-            estimated_output_tokens=response.output_tokens,
-        )
-        self._record_trace(
-            run_dir,
             "model_responded",
             task_state,
             estimated_input_tokens=response.input_tokens,
@@ -371,6 +364,17 @@ class JCodeAgent:
         assistant_content = (action.raw_content or response.text) if action.kind == "invalid" else action.content
         self._append_history("assistant", assistant_content, task_state, **assistant_history_extra)
         self._record_trace(run_dir, "model_parsed", task_state, action=task_state.last_action)
+        if action.kind == "invalid":
+            # 单独记录解析失败原文，便于排查模型到底输出了什么。
+            self._record_trace(
+                run_dir,
+                "model_parse_failed",
+                task_state,
+                raw_content=action.raw_content or response.text,
+                error=action.content,
+                reasoning=action.reasoning,
+                response_text=self.redactor.redact(action.raw_content or response.text),
+            )
         return action
 
     def _handle_final_action(self, action, task_state, run_dir, checkpoint) -> tuple[bool, str]:
