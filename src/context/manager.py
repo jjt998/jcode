@@ -16,10 +16,10 @@ from src.providers.router import ModelRouter
 SECTION_ORDER = ("prefix", "skill", "working_memory", "history", "current_request")
 CURRENT_REQUEST_SECTION = "current_request"
 MIN_SECTION_BUDGETS = {
-    "prefix": 4000,
-    "skill": 600,
-    "working_memory": 2200,
-    "history": 6000,
+    "prefix": 40000,
+    "skill": 6000,
+    "working_memory": 35000,
+    "history": 60000,
 }
 SECTION_RATIO_HINTS = {
     "prefix": 0.20,

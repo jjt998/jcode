@@ -63,7 +63,7 @@ def build_agent(config: AppConfig) -> JCodeAgent:
         session_events.emit("session_resumed", **working_memory.resume_context)
         session_events.emit("resume_checkpoint_evaluated", **working_memory.resume_context)
     workers = WorkerManager(workspace, state_dir / "workers", executor, router, config, session_events=session_events)
-    manager = ContextManager(workspace=workspace, durable_memory=memory_store, registry=registry, model_router=router)
+    manager = ContextManager(workspace=workspace, durable_memory=memory_store, registry=registry, model_router=router, total_budget=400000)
     agent = JCodeAgent(
         config=config,
         workspace=workspace,

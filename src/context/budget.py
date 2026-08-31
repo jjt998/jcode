@@ -7,5 +7,5 @@ def estimate_tokens(text: str) -> int:
 
 def tail_clip(text: str, budget: int) -> str:
     if len(text) <= budget:
-        return text
-    return "...\n" + text[-max(0, budget - 4):]
+        return "History:\n: " + text
+    return "History:\n...\n" + text[-max(0, budget - 4):]
