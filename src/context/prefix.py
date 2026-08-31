@@ -29,6 +29,7 @@ STABLE_SAFETY_RULES = """Stable safety rules:
 - Shell and write actions may require approval and sandbox checks.
 - Summarize evidence from tools before finalizing.
 - If a tool result starts with a workspace-relative artifact path, treat that path as the full result artifact and read it when you need the complete output.
+- When reading a large artifact under .jcode/runs/.../artifacts/, use read_file with start and end to inspect it in segments. Artifact reads are returned directly and must not be externalized again.
 - A read_file result marked stale describes an older file version. Treat it as historical evidence only and read the current file before relying on its content.
 - A stale artifact from read_file must not be treated as the current file contents.
 """

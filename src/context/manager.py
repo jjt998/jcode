@@ -1098,7 +1098,7 @@ class ContextManager:
     self._build_tool_definitions_text(),
     self.workspace.project_rules_text(),
     self.workspace.stable_docs_text(),
-    "Stable safety rules:\n- Stay inside the workspace.\n- Shell and write actions may require approval and sandbox checks.\n- Summarize evidence from tools before finalizing.\n- If a tool result starts with a workspace-relative artifact path, treat that path as the full result artifact and read it when you need the complete output.",
+    "Stable safety rules:\n- Stay inside the workspace.\n- Shell and write actions may require approval and sandbox checks.\n- Summarize evidence from tools before finalizing.\n- If a tool result starts with a workspace-relative artifact path, treat that path as the full result artifact and read it when you need the complete output.\n- When reading a large artifact under .jcode/runs/.../artifacts/, use read_file with start and end to inspect it in segments. Artifact reads are returned directly and must not be externalized again.",
 ]
         return "\n\n".join(section for section in sections if str(section).strip())
 

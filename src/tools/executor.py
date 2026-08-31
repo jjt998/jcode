@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
+from src.evidence.tool_artifacts import is_tool_result_artifact
 from src.policy.decisions import PolicyDecision
 from src.tools.base import ToolCallRequest, ToolInvocation, ToolResult
 from src.tools.workspace import freshness
@@ -81,13 +82,18 @@ class ToolExecutor:
             read_guard = self._check_read_file_repeat(invocation, working_memory)
             if not read_guard.allowed:
                 return self._denied(read_guard, invocation=invocation)
-        elif self.call_guard.repeated(request.name, parsed_args):
-            decision = PolicyDecision.deny(
-                "repeated_identical_call",
-                f"error: repeated identical tool call for {request.name + ':' + str(parsed_args)}",
-                layer="call_guard",
-            )
-            return self._denied(decision, invocation=invocation)
+        else:
+            call_context = ""
+            if request.name == "run_shell":
+                # fingerprint 只覆盖有限工作区元数据，可能漏掉深层或高频变更；这里接受该近似以低成本放开修改后的测试重跑。
+                call_context = self.workspace.fingerprint()
+            if self.call_guard.repeated(request.name, parsed_args, context_key=call_context):
+                decision = PolicyDecision.deny(
+                    "repeated_identical_call",
+                    f"error: repeated identical tool call for {request.name + ':' + str(parsed_args)}",
+                    layer="call_guard",
+                )
+                return self._denied(decision, invocation=invocation)
         if request.name in RUNTIME_TOOL_NAMES:
             return self._execute_runtime_tool(runtime, invocation, parsed_args)
         try:
@@ -117,6 +123,9 @@ class ToolExecutor:
             if request.name == "read_file":
                 # read_file 需要记录文件新鲜度，所以参数多一个working_memory，其它工具仍保持 workspace + args 的通用签名。
                 result = tool.execute(self.workspace, parsed, working_memory=working_memory)
+                # artifact 读取由上游决定渲染与外置策略，read_file 本身只负责读取文件内容。
+                if is_tool_result_artifact(parsed_args.get("path", "")):
+                    result.metadata["artifact_read"] = True
             else:
                 result = tool.execute(self.workspace, parsed)
         except Exception as exc:

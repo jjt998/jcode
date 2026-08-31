@@ -147,3 +147,25 @@ def test_read_file_result_records_source_freshness(tmp_path):
         "path": "note.txt",
         "freshness": f"{int(target.stat().st_mtime_ns)}:{target.stat().st_size}",
     }]
+
+
+def test_read_file_does_not_append_truncation_hint_for_regular_file(tmp_path):
+    target = tmp_path / "note.txt"
+    target.write_text("abcdefghij", encoding="utf-8")
+    executor, working_memory, _ = build_executor(tmp_path)
+
+    result = executor.execute("read_file", {"path": "note.txt", "max_chars": 4, "start": 2, "end": 9}, working_memory=working_memory)
+
+    assert result.status == "success"
+    assert result.text == "cdef"
+
+
+def test_search_records_all_scanned_file_sources(tmp_path):
+    (tmp_path / "a.txt").write_text("needle", encoding="utf-8")
+    (tmp_path / "b.txt").write_text("other", encoding="utf-8")
+    executor, working_memory, _ = build_executor(tmp_path)
+
+    result = executor.execute("search", {"query": "needle"}, working_memory=working_memory)
+
+    assert result.status == "success"
+    assert {source["path"] for source in result.metadata["source_files"]} == {"a.txt", "b.txt"}

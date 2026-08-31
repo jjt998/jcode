@@ -296,8 +296,8 @@ def test_long_read_file_result_is_saved_as_artifact(tmp_path):
     tool_history = next(item for item in agent.session["history"] if item.get("role") == "tool")
     artifact_path = tool_history["artifacts"][0]
 
-    assert result.text.startswith(f"{artifact_path}\n")
-    assert result.text.splitlines()[1] == "a" * 1000
+    assert result.text.startswith(f"whole tool result in: {artifact_path}\n")
+    assert result.text.splitlines()[2] == "a" * 1000
     assert (tmp_path / artifact_path).read_text(encoding="utf-8") == large_text
     assert tool_history["metadata"]["full_output_artifact"] == artifact_path
     assert tool_history["metadata"]["original_chars"] == len(large_text)
@@ -326,8 +326,8 @@ def test_long_non_read_file_result_is_saved_as_artifact(tmp_path):
     artifact_path = tool_history["artifacts"][0]
 
     assert artifact_path.startswith("artifacts/run_shell-output-")
-    assert result.text.startswith(f"{artifact_path}\n")
-    assert result.text.splitlines()[1] == "b" * 1000
+    assert result.text.startswith(f"whole tool result in: {artifact_path}\n")
+    assert result.text.splitlines()[2] == "b" * 1000
     assert (tmp_path / artifact_path).read_text(encoding="utf-8") == large_text
     assert tool_history["metadata"]["full_output_artifact"] == artifact_path
     assert agent.run_store.artifacts == [artifact_path]
@@ -377,3 +377,47 @@ def test_successful_file_change_marks_prior_read_evidence_stale(tmp_path):
     assert metadata["stale"] is True
     assert metadata["stale_paths"] == ["src/app.py"]
     assert metadata["full_output_artifact"] == "artifacts/read_file-output-old.txt"
+
+
+def test_artifact_read_returns_direct_content_and_inherits_source_files(tmp_path):
+    artifact_path = ".jcode/runs/run-1/artifacts/read_file-output-old.txt"
+    agent = build_agent(
+        tmp_path,
+        SequencedToolExecutor(None, {"read_file": ToolResult("success", "x" * 1205, metadata={"missing_chars": 205, "artifact_read": True})}),
+    )
+    agent.tool_executor.agent = agent
+    agent.session["history"] = [{
+        "role": "tool",
+        "name": "read_file",
+        "metadata": {
+            "full_output_artifact": artifact_path,
+            "source_files": [{"path": "src/app.py", "freshness": "1:10"}],
+        },
+    }]
+    task_state = TaskState.create("read artifact")
+
+    result = agent._execute_tool_call("read_file", {"path": artifact_path}, task_state, tmp_path, DummyCheckpoint())
+
+    artifact_read = agent.session["history"][-1]
+    assert result.text == "x" * 1205 + "\n[read_file result is truncated, the missing chars are 205; use start/end to continue reading.]"
+    assert result.artifacts == []
+    assert agent.run_store.artifacts == []
+    assert artifact_read["metadata"]["source_files"] == [{"path": "src/app.py", "freshness": "1:10"}]
+
+    agent._mark_stale_file_evidence(["src/app.py"])
+
+    assert agent.session["history"][0]["metadata"]["stale"] is True
+    assert artifact_read["metadata"]["stale"] is True
+
+
+def test_file_change_marks_search_evidence_stale(tmp_path):
+    agent = build_agent(tmp_path, SequencedToolExecutor(None, {}))
+    agent.session["history"] = [{
+        "role": "tool",
+        "name": "search",
+        "metadata": {"source_files": [{"path": "src/app.py", "freshness": "1:10"}]},
+    }]
+
+    agent._mark_stale_file_evidence(["src/app.py"])
+
+    assert agent.session["history"][0]["metadata"]["stale"] is True

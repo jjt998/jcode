@@ -507,16 +507,28 @@ class JCodeAgent:
                 runtime=self,
             )
 
-        result_text, artifact_metadata, result_artifacts = prepare_tool_result_observation(
-            self.run_store,
-            run_dir,
-            tool_name,
-            result.text,
-            result.artifacts,
-        )
-        result.text = result_text
-        result.artifacts = result_artifacts
-        result.metadata.update(artifact_metadata)
+        artifact_read = tool_name == "read_file" and bool(result.metadata.get("artifact_read"))
+        if artifact_read:
+            source_files = self._artifact_source_files(str(tool_args.get("path", "")))
+            if source_files:
+                result.metadata["source_files"] = source_files
+            missing_chars = int(result.metadata.get("missing_chars", 0) or 0)
+            if result.ok and missing_chars:
+                result.text += (
+                    f"\n[read_file result is truncated, the missing chars are {missing_chars}; "
+                    "use start/end to continue reading.]"
+                )
+        else:
+            result_text, artifact_metadata, result_artifacts = prepare_tool_result_observation(
+                self.run_store,
+                run_dir,
+                tool_name,
+                result.text,
+                result.artifacts,
+            )
+            result.text = result_text
+            result.artifacts = result_artifacts
+            result.metadata.update(artifact_metadata)
 
         if result.ok and result.changed_files:
             self._mark_stale_file_evidence(result.changed_files)
@@ -562,13 +574,27 @@ class JCodeAgent:
     def _append_history(self, role: str, content: str, task_state, **extra) -> None:
         append_history(self.session, role, content, run_id=task_state.run_id, **extra)
 
+    def _artifact_source_files(self, artifact_path: str) -> list[dict]:
+        """从原始工具结果复用文件来源，保证 artifact 分段读取也能参与 stale 判断。"""
+        normalized = str(artifact_path).replace("\\", "/")
+        for item in reversed(self.session.get("history", [])):
+            metadata = item.get("metadata", {})
+            if not isinstance(metadata, dict):
+                continue
+            if str(metadata.get("full_output_artifact", "")).replace("\\", "/") != normalized:
+                continue
+            source_files = metadata.get("source_files", [])
+            if isinstance(source_files, list):
+                return [dict(source) for source in source_files if isinstance(source, dict)]
+        return []
+
     def _mark_stale_file_evidence(self, changed_files: list[str]) -> None:
         """文件成功变更后，标记历史中依赖旧文件内容的 read_file 结果。"""
         changed = {str(path).replace("\\", "/") for path in changed_files if str(path).strip()}
         if not changed:
             return
         for item in self.session.get("history", []):
-            if item.get("role") != "tool" or item.get("name") != "read_file":
+            if item.get("role") != "tool" or item.get("name") not in {"read_file", "search"}:
                 continue
             metadata = item.get("metadata")
             if not isinstance(metadata, dict):

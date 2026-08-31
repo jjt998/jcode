@@ -6,6 +6,12 @@ import hashlib
 INLINE_TOOL_OUTPUT_LIMIT = 1000
 
 
+def is_tool_result_artifact(path: str) -> bool:
+    """判断路径是否为当前 run 生成的工具结果 artifact。"""
+    normalized = str(path or "").replace("\\", "/")
+    return normalized.startswith(".jcode/runs/") and "/artifacts/" in normalized
+
+
 def prepare_tool_result_observation(run_store, run_dir, tool_name: str, full_result: str, artifacts: list[str] | None = None) -> tuple[str, dict, list[str]]:
     """把超长工具结果写入 artifact，并返回给模型可读的短预览。"""
     full_result = str(full_result)
@@ -24,4 +30,4 @@ def prepare_tool_result_observation(run_store, run_dir, tool_name: str, full_res
         artifact_list.append(artifact_path)
     metadata["full_output_artifact"] = artifact_path
     # 首行保留 artifact 路径，方便旧历史压缩逻辑直接识别并替换。
-    return f"'whole tool result in :' + {artifact_path}+ ' ,below is partial:' + \n{full_result[:INLINE_TOOL_OUTPUT_LIMIT] + '\n...'}", metadata, artifact_list
+    return f"whole tool result in: {artifact_path}\nbelow is partial:\n{full_result[:INLINE_TOOL_OUTPUT_LIMIT]}\n...", metadata, artifact_list

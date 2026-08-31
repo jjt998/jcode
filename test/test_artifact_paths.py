@@ -35,7 +35,7 @@ def test_generated_artifact_path_can_be_read_from_workspace(tmp_path: Path):
 
     assert artifact_path == ".jcode/runs/run-1/artifacts/read_file-output-" + metadata["content_sha256"][:12] + ".txt"
     assert artifact_path in artifacts
-    assert observed.startswith(artifact_path + "\n")
+    assert artifact_path in observed
 
     executor = ToolExecutor(
         workspace=workspace,
@@ -46,7 +46,9 @@ def test_generated_artifact_path_can_be_read_from_workspace(tmp_path: Path):
         call_guard=CallGuard(),
         redactor=DummyRedactor(),
     )
-    result = executor.execute("read_file", {"path": artifact_path}, working_memory=WorkingMemory.from_dict({}, tmp_path))
+    result = executor.execute("read_file", {"path": artifact_path, "max_chars": 1000}, working_memory=WorkingMemory.from_dict({}, tmp_path))
 
     assert result.status == "success"
-    assert result.text == full_text
+    assert result.text == "x" * 1000
+    assert result.metadata["missing_chars"] == 201
+    assert result.metadata["artifact_read"] is True
