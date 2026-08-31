@@ -352,6 +352,7 @@ def test_short_tool_result_stays_inline(tmp_path):
     tool_history = next(item for item in agent.session["history"] if item.get("role") == "tool")
     assert result.text == "short result"
     assert tool_history["content"] == "short result"
+    assert tool_history["args"] == {"path": "small.txt"}
     assert tool_history["artifacts"] == []
     assert tool_history["metadata"]["full_output_artifact"] == ""
     assert tool_history["metadata"]["original_chars"] == len("short result")

@@ -527,6 +527,7 @@ class JCodeAgent:
             result.text,
             task_state,
             name=tool_name,
+            args=tool_args,
             tool_status=result.status,
             error_type=result.error_type,
             changed_files=result.changed_files,
