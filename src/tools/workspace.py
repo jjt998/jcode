@@ -18,9 +18,11 @@ def read_file(workspace, args, working_memory) -> ToolResult:
     if args.max_chars and len(text) > args.max_chars:
         text = text[: args.max_chars]
     rel = workspace.relpath(path)
+    current_freshness = freshness(path)
     # 这里是把读过文件的新鲜度写到工作记忆的！注释掉会导致agent在恢复时无法判断文件是否被修改过，以及读后写等下游功能的异常！
-    working_memory.note_file_read(rel, args.model_dump(), freshness(path))
-    return ToolResult("success", text)
+    working_memory.note_file_read(rel, args.model_dump(), current_freshness)
+    # 工具历史和 artifact 需要知道这段内容对应的文件版本，文件变更后才能标记为过期。
+    return ToolResult("success", text, metadata={"source_files": [{"path": rel, "freshness": current_freshness}]})
 
 
 def write_file(workspace, args) -> ToolResult:

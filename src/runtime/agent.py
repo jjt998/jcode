@@ -518,6 +518,9 @@ class JCodeAgent:
         result.artifacts = result_artifacts
         result.metadata.update(artifact_metadata)
 
+        if result.ok and result.changed_files:
+            self._mark_stale_file_evidence(result.changed_files)
+
         task_state.record_tool(tool_name, result)
         self._append_history(
             "tool",
@@ -557,6 +560,30 @@ class JCodeAgent:
 
     def _append_history(self, role: str, content: str, task_state, **extra) -> None:
         append_history(self.session, role, content, run_id=task_state.run_id, **extra)
+
+    def _mark_stale_file_evidence(self, changed_files: list[str]) -> None:
+        """文件成功变更后，标记历史中依赖旧文件内容的 read_file 结果。"""
+        changed = {str(path).replace("\\", "/") for path in changed_files if str(path).strip()}
+        if not changed:
+            return
+        for item in self.session.get("history", []):
+            if item.get("role") != "tool" or item.get("name") != "read_file":
+                continue
+            metadata = item.get("metadata")
+            if not isinstance(metadata, dict):
+                continue
+            source_files = metadata.get("source_files", [])
+            if not isinstance(source_files, list):
+                continue
+            stale_paths = {
+                str(source.get("path", "")).replace("\\", "/")
+                for source in source_files
+                if isinstance(source, dict) and str(source.get("path", "")).strip()
+            } & changed
+            if stale_paths:
+                metadata["stale"] = True
+                metadata["stale_reason"] = "source_file_changed"
+                metadata["stale_paths"] = sorted(stale_paths)
 
     def _create_checkpoint(self, checkpoint, task_state, run_dir, trigger: str) -> None:
         checkpoint.create(self.session, task_state, self.working_memory, self.worker_manager.worker_refs())

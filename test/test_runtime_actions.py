@@ -356,3 +356,23 @@ def test_short_tool_result_stays_inline(tmp_path):
     assert tool_history["metadata"]["full_output_artifact"] == ""
     assert tool_history["metadata"]["original_chars"] == len("short result")
     assert agent.run_store.artifacts == []
+
+
+def test_successful_file_change_marks_prior_read_evidence_stale(tmp_path):
+    agent = build_agent(tmp_path, SequencedToolExecutor(None, {}))
+    agent.session["history"] = [{
+        "role": "tool",
+        "name": "read_file",
+        "content": "old content",
+        "metadata": {
+            "source_files": [{"path": "src/app.py", "freshness": "1:10"}],
+            "full_output_artifact": "artifacts/read_file-output-old.txt",
+        },
+    }]
+
+    agent._mark_stale_file_evidence(["src\\app.py"])
+
+    metadata = agent.session["history"][0]["metadata"]
+    assert metadata["stale"] is True
+    assert metadata["stale_paths"] == ["src/app.py"]
+    assert metadata["full_output_artifact"] == "artifacts/read_file-output-old.txt"

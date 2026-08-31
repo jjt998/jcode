@@ -297,6 +297,59 @@ def test_history_text_renders_blank_assistant_when_missing(tmp_path):
     )
 
 
+def test_history_text_replaces_stale_read_and_hides_old_artifact(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    registry = DummyRegistry()
+    manager = ContextManager(workspace=workspace, durable_memory=object(), registry=registry)
+    history = [
+        {"role": "user", "content": "Continue", "run_id": "turn-1", "turn_id": "turn-1"},
+        {
+            "role": "tool",
+            "name": "read_file",
+            "args": {"path": "src/app.py"},
+            "content": "artifacts/read_file-output-old.txt\nold content",
+            "metadata": {
+                "stale": True,
+                "stale_paths": ["src/app.py"],
+                "full_output_artifact": "artifacts/read_file-output-old.txt",
+            },
+            "tool_status": "success",
+            "run_id": "turn-1",
+            "turn_id": "turn-1",
+        },
+    ]
+
+    rendered, _ = manager._build_history_text(
+        history,
+        recent_turn_window=5,
+        compress_old_tools=False,
+        include_older_turns=True,
+    )
+
+    assert "This read_file result is stale because the source file changed: src/app.py." in rendered
+    assert "old content" not in rendered
+    assert "artifacts/read_file-output-old.txt" not in rendered
+
+
+def test_compressed_history_replaces_stale_read_before_artifact_path(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    registry = DummyRegistry()
+    manager = ContextManager(workspace=workspace, durable_memory=object(), registry=registry)
+    item = {
+        "role": "tool",
+        "name": "read_file",
+        "args": {"path": "src/app.py"},
+        "content": "artifacts/read_file-output-old.txt\n" + ("old content" * 200),
+        "metadata": {"stale": True, "stale_paths": ["src/app.py"]},
+        "tool_status": "success",
+    }
+
+    rendered, _ = manager._compress_old_tool_history_item(item, set())
+
+    assert "source file changed: src/app.py" in "\n".join(rendered)
+    assert "artifacts/read_file-output-old.txt" not in "\n".join(rendered)
+
+
 def test_history_text_renders_invalid_assistant_content_plainly(tmp_path):
     workspace = FakeWorkspace(tmp_path)
     registry = DummyRegistry()

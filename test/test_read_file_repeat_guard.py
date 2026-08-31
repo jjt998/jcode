@@ -133,3 +133,17 @@ def test_working_memory_round_trip_keeps_read_file_counts(tmp_path):
 
     assert restored.read_file_count("docs/note.txt", first_args, "1:10") == 2
     assert restored.read_file_count("docs/note.txt", second_args, "2:11") == 1
+
+
+def test_read_file_result_records_source_freshness(tmp_path):
+    target = tmp_path / "note.txt"
+    target.write_text("alpha", encoding="utf-8")
+    executor, working_memory, _ = build_executor(tmp_path)
+
+    result = executor.execute("read_file", {"path": "note.txt"}, working_memory=working_memory)
+
+    assert result.status == "success"
+    assert result.metadata["source_files"] == [{
+        "path": "note.txt",
+        "freshness": f"{int(target.stat().st_mtime_ns)}:{target.stat().st_size}",
+    }]

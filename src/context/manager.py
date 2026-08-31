@@ -582,7 +582,8 @@ class ContextManager:
             "compression_records": compression_records,
             "include_older_turns": include_older_turns,
         }
-        return _SectionRender(raw=raw, rendered=tail_clip(raw, budget_chars), budget_chars=budget_chars, details=details)
+        rendered = "History:\n" + tail_clip(raw, budget_chars)
+        return _SectionRender(raw=raw, rendered=rendered, budget_chars=budget_chars, details=details)
 
     def _build_history_text(
         self,
@@ -703,6 +704,8 @@ class ContextManager:
     def _render_tool_history_block(self, item: dict, line_limit: int | None) -> list[str]:
         name = str(item.get("name", ""))
         prefix = f"[ToolResult ({name})]<args>{self._tool_args_json(item)}</args>"
+        if name == "read_file" and self._is_stale_read_file(item):
+            return [prefix, self._stale_read_file_message(item)]
         content = str(item.get("content", ""))
         if line_limit is not None:
             content = tail_clip(content, max(20, int(line_limit)))
@@ -714,6 +717,11 @@ class ContextManager:
         content = str(item.get("content", ""))
         if not self._can_compress_tool_history_item(item):
             return self._build_history_item_text(item, None), None
+
+        if name == "read_file" and self._is_stale_read_file(item):
+            replacement = self._stale_read_file_message(item)
+            record = self._compression_record_for_item(item, "stale_read_file_replaced", len(content), replacement)
+            return [prefix, replacement], record
 
         artifact_path = self._artifact_path_from_content(content)
         if artifact_path:
@@ -739,6 +747,21 @@ class ContextManager:
         replacement = content[:80]
         record = self._compression_record_for_item(item, "tool_first_80_chars", len(content), replacement)
         return [prefix, replacement], record
+
+    @staticmethod
+    def _is_stale_read_file(item: dict) -> bool:
+        metadata = item.get("metadata", {})
+        return item.get("name") == "read_file" and isinstance(metadata, dict) and bool(metadata.get("stale"))
+
+    @staticmethod
+    def _stale_read_file_message(item: dict) -> str:
+        metadata = item.get("metadata", {})
+        paths = metadata.get("stale_paths", []) if isinstance(metadata, dict) else []
+        path_text = ", ".join(str(path) for path in paths if str(path).strip()) or str(item.get("args", {}).get("path", ""))
+        return (
+            f"This read_file result is stale because the source file changed: {path_text}. "
+            "Treat it as historical evidence only and read the current file before relying on its content."
+        )
 
     def _tool_args_json(self, item: dict) -> str:
         return json.dumps(item.get("args", {}) or {}, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
