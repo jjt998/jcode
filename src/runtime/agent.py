@@ -179,6 +179,9 @@ class JCodeAgent:
             context_result = self._build_context(user_message, task_state, run_dir)
             try:
                 response = self._call_model(context_result, task_state, run_dir)
+                print("\n================================\n")
+                print(response)
+
             except Exception as exc:
                 self._record_trace(
                     run_dir,
@@ -314,6 +317,7 @@ class JCodeAgent:
             max_tokens=self.config.max_new_tokens,
             temperature=self.config.temperature,
         )
+
         self._record_trace(
             run_dir,
             "model_responded",

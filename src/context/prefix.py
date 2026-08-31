@@ -17,8 +17,17 @@ SYSTEM_RULES = """System rules:
 
 
 OUTPUT_PROTOCOL = """Output protocol:
-- To call a tool, return exactly: <tool name="tool_name">{"arg": "value"}</tool>
-- To finish, return exactly: <final>answer</final>
+Return exactly one primary protocol block per response: exactly one of <tool>, <tools>, or <final>.
+Optional reasoning may appear before the primary protocol block as <reasoning>internal planning only</reasoning>.
+Reasoning is for internal task planning and must be written in Chinese. Do not put greetings, final-answer prefixes, tone, or final formatting in reasoning.
+Do not acknowledge final-response style rules in reasoning.
+For one tool, return exactly: <tool name="tool_name">{"arg":"value"}</tool>
+For multiple tools, return exactly: <tools>[{"name":"tool_name","args":{"arg":"value"}}]</tools>.
+The <tools> content must be a JSON array. Each item must contain "name" and an object-valued "args" field. Tools execute in array order.
+<tool> must close with </tool>; <tools> must close with </tools>; <final> must close with </final>. Never use <tools>...</tool> or <tool>...</tools>.
+For the final answer, return exactly: <final>answer</final>. Project final-response style rules apply only inside <final>.
+Apply greetings, tone, prefixes, and answer formatting only inside <final>. Do not apply them to reasoning, tool, or tools blocks.
+Do not output natural language outside the allowed protocol blocks. Do not output more than one primary protocol block. Do not add Markdown fences around protocol blocks.
 """
 
 

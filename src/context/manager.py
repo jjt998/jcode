@@ -1082,18 +1082,17 @@ class ContextManager:
     "System rules:\n- You are JCode, a compact local coding agent.",
     (
         "Output protocol:\n"
-        "- You must return exactly one protocol response per model response.\n"
-        "- To include reasoning before your action, use <reasoning>...</reasoning> (optional). Only include it when the task is complex or you need to explain your thought process.\n"
-        "- To call one tool, return exactly: <tool name=\"tool_name\">{\"arg\": \"value\"}</tool>\n"
-        "- To call multiple tools in order, return exactly: <tools>[{\"name\": \"tool_name\", \"args\": {\"arg\": \"value\"}}]</tools>\n"
-        "- To finish, return exactly: <final>answer</final>\n"
-        "- Use only one primary protocol block per response: exactly one of <tool>, <tools>, or <final>.\n"
-        "- If you include reasoning, it must be placed before the primary action block.\n"
-        "- Do not output any natural language outside <reasoning>, <tool>, <tools>, or <final>.\n"
-        "- Project/user style rules, such as required greetings, tone, or answer prefixes, must be applied inside <final>...</final> only.\n"
-        "- When calling tools, do not satisfy style rules with plain text before or after the tool block.\n"
-        "- If a style rule must be acknowledged before a tool call, put it inside <reasoning>...</reasoning>, not outside the protocol tags.\n"
-        "- Any text outside the allowed protocol tags will be treated as invalid."
+        "Return exactly one primary protocol block per response: exactly one of <tool>, <tools>, or <final>.\n"
+        "Optional reasoning may appear before the primary protocol block as <reasoning>internal planning only</reasoning>.\n"
+        "Reasoning is for internal task planning and must be written in Chinese. Do not put greetings, final-answer prefixes, tone, or final formatting in reasoning.\n"
+        "Do not acknowledge final-response style rules in reasoning.\n"
+        "For one tool, return exactly: <tool name=\"tool_name\">{\"arg\":\"value\"}</tool>\n"
+        "For multiple tools, return exactly: <tools>[{\"name\":\"tool_name\",\"args\":{\"arg\":\"value\"}}]</tools>.\n"
+        "The <tools> content must be a JSON array. Each item must contain \"name\" and an object-valued \"args\" field. Tools execute in array order.\n"
+        "<tool> must close with </tool>; <tools> must close with </tools>; <final> must close with </final>. Never use <tools>...</tool> or <tool>...</tools>.\n"
+        "For the final answer, return exactly: <final>answer</final>. Project final-response style rules apply only inside <final>.\n"
+        "Apply greetings, tone, prefixes, and answer formatting only inside <final>. Do not apply them to reasoning, tool, or tools blocks.\n"
+        "Do not output natural language outside the allowed protocol blocks. Do not output more than one primary protocol block. Do not add Markdown fences around protocol blocks."
     ),
     self._build_tool_definitions_text(),
     self.workspace.project_rules_text(),
