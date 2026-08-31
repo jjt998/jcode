@@ -305,7 +305,8 @@ def test_history_text_renders_invalid_assistant_content_plainly(tmp_path):
         {"role": "user", "content": "Do the thing", "run_id": "turn-1", "turn_id": "turn-1"},
         {
             "role": "assistant",
-            "content": 'plain text before protocol\n<tool name="list_files">{}</tool>',
+            "content": "Your output protocol is invalid: model output must contain exactly one of <tool>, <tools>, or <final>",
+            "raw_content": 'plain text before protocol\n<tool name="list_files">{}</tool>',
             "reasoning": "",
             "action_kind": "invalid",
             "run_id": "turn-1",

@@ -10,6 +10,7 @@ class ModelAction:
     kind: str
     content: str = ""
     reasoning: str = ""
+    raw_content: str = ""
     tool_name: str = ""
     tool_args: dict | None = None
     tool_calls: list["ModelToolCall"] = field(default_factory=list)
@@ -37,7 +38,7 @@ def parse_model_action(text: str) -> ModelAction:
 
     final = FINAL_RE.fullmatch(body)
     if final:
-        return ModelAction(kind="final", content=final.group(1).strip(), reasoning=reasoning)
+        return ModelAction(kind="final", content=final.group(1).strip(), reasoning=reasoning, raw_content=text)
 
     tools = TOOLS_RE.fullmatch(body)
     if tools:
@@ -45,23 +46,23 @@ def parse_model_action(text: str) -> ModelAction:
         try:
             items = json.loads(raw_items)
         except json.JSONDecodeError as exc:
-            return ModelAction(kind="invalid", content=f"invalid tools json: {exc}", reasoning=reasoning)
+            return ModelAction(kind="invalid", content=f"invalid tools json: {exc}", reasoning=reasoning, raw_content=text)
         if not isinstance(items, list):
-            return ModelAction(kind="invalid", content="invalid tools payload: expected a JSON array", reasoning=reasoning)
+            return ModelAction(kind="invalid", content="invalid tools payload: expected a JSON array", reasoning=reasoning, raw_content=text)
         tool_calls: list[ModelToolCall] = []
         for index, item in enumerate(items):
             if not isinstance(item, dict):
-                return ModelAction(kind="invalid", content=f"invalid tools item at index {index}: expected an object", reasoning=reasoning)
+                return ModelAction(kind="invalid", content=f"invalid tools item at index {index}: expected an object", reasoning=reasoning, raw_content=text)
             name = str(item.get("name", "")).strip()
             if not name:
-                return ModelAction(kind="invalid", content=f"invalid tools item at index {index}: missing tool name", reasoning=reasoning)
+                return ModelAction(kind="invalid", content=f"invalid tools item at index {index}: missing tool name", reasoning=reasoning, raw_content=text)
             args = item.get("args", {})
             if args is None:
                 args = {}
             if not isinstance(args, dict):
-                return ModelAction(kind="invalid", content=f"invalid tools item at index {index}: args must be a JSON object", reasoning=reasoning)
+                return ModelAction(kind="invalid", content=f"invalid tools item at index {index}: args must be a JSON object", reasoning=reasoning, raw_content=text)
             tool_calls.append(ModelToolCall(name=name, args=args))
-        return ModelAction(kind="tools", content=body.strip(), reasoning=reasoning, tool_calls=tool_calls)
+        return ModelAction(kind="tools", content=body.strip(), reasoning=reasoning, raw_content=text, tool_calls=tool_calls)
 
     tool = TOOL_RE.fullmatch(body)
     if tool:
@@ -69,6 +70,6 @@ def parse_model_action(text: str) -> ModelAction:
         try:
             args = json.loads(raw_args)
         except json.JSONDecodeError as exc:
-            return ModelAction(kind="invalid", content=f"invalid tool json: {exc}", reasoning=reasoning)
-        return ModelAction(kind="tool", content=body.strip(), reasoning=reasoning, tool_name=tool.group(1).strip(), tool_args=args)
-    return ModelAction(kind="invalid", content="Your output protocol is invalid: model output must contain exactly one of <tool>, <tools>, or <final>", reasoning=reasoning)
+            return ModelAction(kind="invalid", content=f"invalid tool json: {exc}", reasoning=reasoning, raw_content=text)
+        return ModelAction(kind="tool", content=body.strip(), reasoning=reasoning, raw_content=text, tool_name=tool.group(1).strip(), tool_args=args)
+    return ModelAction(kind="invalid", content="Your output protocol is invalid: model output must contain exactly one of <tool>, <tools>, or <final>", reasoning=reasoning, raw_content=text)

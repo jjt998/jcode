@@ -145,6 +145,28 @@ def build_agent(tmp_path: Path, executor) -> JCodeAgent:
     )
 
 
+def test_invalid_model_action_records_raw_assistant_before_parser(tmp_path):
+    agent = build_agent(tmp_path, SequencedToolExecutor(None, {}))
+    task_state = TaskState.create("bad protocol")
+    response = SimpleNamespace(
+        text='plain text\n<tool name="list_files">{}</tool>',
+        input_tokens=1,
+        output_tokens=1,
+    )
+
+    action = agent._parse_action(response, task_state, tmp_path)
+    agent._handle_invalid_action(action, task_state)
+
+    assert action.kind == "invalid"
+    assert agent.session["history"][0]["role"] == "assistant"
+    assert agent.session["history"][0]["action_kind"] == "invalid"
+    assert agent.session["history"][0]["content"] == 'plain text\n<tool name="list_files">{}</tool>'
+    assert agent.session["history"][0]["raw_content"] == 'plain text\n<tool name="list_files">{}</tool>'
+    assert agent.session["history"][1]["role"] == "tool"
+    assert agent.session["history"][1]["name"] == "parser"
+    assert agent.session["history"][1]["content"].startswith("Your output protocol is invalid")
+
+
 def test_parse_model_action_supports_tool_sequence():
     action = parse_model_action(
         '<tools>[{"name":"read_file","args":{"path":"a.txt"}},{"name":"write_file","args":{"path":"b.txt","content":"x"}}]</tools>'

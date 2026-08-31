@@ -351,7 +351,7 @@ class JCodeAgent:
         assistant_history_extra = {
             "action_kind": action.kind,
             "reasoning": action.reasoning,
-            "raw_content": response.text,
+            "raw_content": action.raw_content or response.text,
         }
         if action.kind == "tool":
             assistant_history_extra.update(
@@ -368,7 +368,7 @@ class JCodeAgent:
             )
         elif action.kind == "final":
             assistant_history_extra.update({"final_text": action.content})
-        assistant_content = response.text if action.kind == "invalid" else action.content
+        assistant_content = (action.raw_content or response.text) if action.kind == "invalid" else action.content
         self._append_history("assistant", assistant_content, task_state, **assistant_history_extra)
         self._record_trace(run_dir, "model_parsed", task_state, action=task_state.last_action)
         return action

@@ -61,6 +61,17 @@ const STREAM_EVENTS = [
   "stream_closed",
 ];
 
+const HIDDEN_REASON_DETAIL_EVENTS = new Set([
+  "model_requested",
+  "tool_sequence_requested",
+  "tool_sequence_step_requested",
+  "tool_sequence_completed",
+  "tool_sequence_aborted",
+  "tool_requested",
+  "tool_executed",
+  "checkpoint_created",
+]);
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -284,7 +295,8 @@ function stepItem(turn, step) {
   const body = document.createElement("div");
   body.className = "step-body";
   if (step.context_text) {
-    body.append(detailBlock("Context 拼凑", step.context_text, `step-detail:${turnKey(turn)}:${step.step_id}:context`));
+    // 只保留完整上下文，不再展示底层事件细节。
+    body.append(detailBlock("完整上下文文本", step.context_text, `step-detail:${turnKey(turn)}:${step.step_id}:context`));
   }
   if (step.reasoning_text) {
     const reasoning = document.createElement("section");
@@ -315,7 +327,12 @@ function stepItem(turn, step) {
     body.append(tools);
   }
   for (const detail of step.details || []) {
-    if (detail.event === "context_built" || detail.event === "model_responded" || detail.event === "model_parsed") continue;
+    // 隐藏模型请求和工具执行底层事件，只留下有业务价值的上下文与工具明细。
+    if (HIDDEN_REASON_DETAIL_EVENTS.has(detail.event) || detail.event === "model_responded" || detail.event === "model_parsed") continue;
+    if (detail.event === "context_built") {
+      body.append(detailBlock("完整上下文文本", detail.content || "", `step-detail:${turnKey(turn)}:${step.step_id}:${detail.event}:${detail.created_at || ""}`));
+      continue;
+    }
     body.append(detailBlock(detail.title || detail.event, detail.content || "", `step-detail:${turnKey(turn)}:${step.step_id}:${detail.event}:${detail.created_at || ""}`));
   }
   details.append(body);

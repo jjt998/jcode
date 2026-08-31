@@ -695,7 +695,7 @@ class ContextManager:
         elif action_kind in {"tool", "tools"}:
             lines.append(content if content else "")
         elif action_kind == "invalid":
-            lines.append(content)
+            lines.append(str(item.get("raw_content", "") or content))
         else:
             lines.append("")
         return lines
