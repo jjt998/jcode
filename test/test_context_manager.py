@@ -197,7 +197,7 @@ def test_context_manager_builds_ctx_info_and_cache(tmp_path):
     assert result.ctx_info["history"]["turn_count"] == 1
     assert "Workspace runtime" in result.context
     assert "Workspace docs" in result.context
-    assert "artifacts/ path" in result.context
+    assert "workspace-relative artifact path" in result.context
 
 
 def test_history_text_renders_turn_template_with_reasoning_and_final(tmp_path):
@@ -350,6 +350,12 @@ def test_compressed_history_replaces_stale_read_before_artifact_path(tmp_path):
     assert "artifacts/read_file-output-old.txt" not in "\n".join(rendered)
 
 
+def test_context_manager_does_not_recognize_legacy_artifact_path(tmp_path):
+    manager = ContextManager(workspace=FakeWorkspace(tmp_path), durable_memory=object(), registry=DummyRegistry())
+
+    assert manager._artifact_path_from_content("artifacts/old-result.txt") == ""
+
+
 def test_history_text_renders_invalid_assistant_content_plainly(tmp_path):
     workspace = FakeWorkspace(tmp_path)
     registry = DummyRegistry()
@@ -423,7 +429,7 @@ def test_context_manager_microcompresses_history_by_tool_name(tmp_path):
             {"role": "assistant", "content": "turn 3 done", "run_id": "turn-3", "turn_id": "turn-3"},
             {"role": "user", "content": "turn 4", "run_id": "turn-4", "turn_id": "turn-4"},
             {"role": "tool", "name": "search", "args": {"query": "foo"}, "content": "search result: " + ("x" * 160), "tool_status": "success", "run_id": "turn-4", "turn_id": "turn-4"},
-            {"role": "tool", "name": "read_file", "args": {"path": "artifacts/result.txt"}, "content": "artifacts/result.txt\n" + ("z" * 1500), "tool_status": "success", "run_id": "turn-4", "turn_id": "turn-4", "artifacts": ["artifacts/result.txt"]},
+            {"role": "tool", "name": "read_file", "args": {"path": ".jcode/runs/run-4/artifacts/result.txt"}, "content": ".jcode/runs/run-4/artifacts/result.txt\n" + ("z" * 1500), "tool_status": "success", "run_id": "turn-4", "turn_id": "turn-4", "artifacts": [".jcode/runs/run-4/artifacts/result.txt"]},
             {"role": "assistant", "content": "turn 4 done", "run_id": "turn-4", "turn_id": "turn-4"},
             {"role": "user", "content": "turn 5", "run_id": "turn-5", "turn_id": "turn-5"},
             {"role": "tool", "name": "write_file", "args": {"path": "b.txt", "content": "written"}, "content": "wrote b.txt", "tool_status": "success", "run_id": "turn-5", "turn_id": "turn-5"},
@@ -460,7 +466,7 @@ def test_context_manager_microcompresses_history_by_tool_name(tmp_path):
     assert "SECOND READ" not in history
     assert "line1" in history and "line4" not in history
     assert "search result:" in history and ("x" * 120) not in history
-    assert "artifacts/result.txt" in history and ("z" * 100) not in history
+    assert ".jcode/runs/run-4/artifacts/result.txt" in history and ("z" * 100) not in history
     assert "wrote b.txt" in history
     assert info["recent_turn_window"] == 2
     assert info["history_records"]

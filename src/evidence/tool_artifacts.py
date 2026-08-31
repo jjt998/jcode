@@ -24,4 +24,4 @@ def prepare_tool_result_observation(run_store, run_dir, tool_name: str, full_res
         artifact_list.append(artifact_path)
     metadata["full_output_artifact"] = artifact_path
     # 首行保留 artifact 路径，方便旧历史压缩逻辑直接识别并替换。
-    return f"{artifact_path}\n{full_result[:INLINE_TOOL_OUTPUT_LIMIT]}", metadata, artifact_list
+    return f"'whole tool result in :' + {artifact_path}+ ' ,below is partial:' + \n{full_result[:INLINE_TOOL_OUTPUT_LIMIT] + '\n...'}", metadata, artifact_list

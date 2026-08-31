@@ -28,7 +28,7 @@ def build_agent(config: AppConfig) -> JCodeAgent:
     workspace = Workspace.build(config.cwd)
     state_dir = workspace.root / ".jcode"
     session_store = SessionStore(state_dir / "sessions")
-    run_store = RunStore(state_dir / "runs")
+    run_store = RunStore(state_dir / "runs", workspace_root=workspace.root)
     memory_store = DurableMemoryStore(state_dir / "memory")
     session = session_store.load_requested(config.session_id, config.resume, workspace.root)
     working_memory = WorkingMemory.from_dict(session.get("working_memory", {}), workspace.root)

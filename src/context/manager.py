@@ -792,15 +792,9 @@ class ContextManager:
             stripped = line.strip()
             if not stripped:
                 continue
-            if stripped.lower().startswith("artifact"):
-                match = re.search(r"(artifacts/[^\s]+)", stripped)
-                if match:
-                    return match.group(1)
-                if ":" in stripped:
-                    return stripped.split(":", 1)[1].strip()
-                return stripped
-            if stripped.startswith("artifacts/"):
-                return stripped
+            match = re.search(r"(\.jcode/runs/[^\s/]+/artifacts/[^\s]+)", stripped)
+            if match:
+                return match.group(1)
         return ""
 
     def _run_shell_preview_lines(self, content: str) -> list[str]:
@@ -1104,7 +1098,7 @@ class ContextManager:
     self._build_tool_definitions_text(),
     self.workspace.project_rules_text(),
     self.workspace.stable_docs_text(),
-    "Stable safety rules:\n- Stay inside the workspace.\n- Shell and write actions may require approval and sandbox checks.\n- Summarize evidence from tools before finalizing.\n- If a tool result starts with an artifacts/ path, treat that path as the full result artifact and read it when you need the complete output.",
+    "Stable safety rules:\n- Stay inside the workspace.\n- Shell and write actions may require approval and sandbox checks.\n- Summarize evidence from tools before finalizing.\n- If a tool result starts with a workspace-relative artifact path, treat that path as the full result artifact and read it when you need the complete output.",
 ]
         return "\n\n".join(section for section in sections if str(section).strip())
 

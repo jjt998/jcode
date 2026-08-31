@@ -8,9 +8,12 @@ from src.evidence.events import event_record
 
 class RunStore:
     root: Path
+    workspace_root: Path
 
-    def __init__(self, root: Path):
-        self.root = root
+    def __init__(self, root: Path, workspace_root: Path | None = None):
+        self.root = Path(root).resolve()
+        # artifact 引用要由 workspace 根目录解析，不能以单次 run 目录为相对基准。
+        self.workspace_root = (Path(workspace_root).resolve() if workspace_root else self.root.parent.parent)
         self.root.mkdir(parents=True, exist_ok=True)
 
     def start_run(self, task_state) -> Path:
@@ -25,8 +28,10 @@ class RunStore:
     def write_artifact(self, run_dir: Path, name: str, content: str) -> str:
         safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in name)
         path = run_dir / "artifacts" / safe
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
-        return f"artifacts/{safe}"
+        # 返回 workspace-relative 路径，模型后续可直接交给 read_file。
+        return str(path.resolve().relative_to(self.workspace_root)).replace("\\", "/")
 
     def write_task_state(self, run_dir: Path, task_state) -> None:
         (run_dir / "task_state.json").write_text(json.dumps(task_state.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
