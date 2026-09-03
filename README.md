@@ -176,8 +176,8 @@ JCode 始终使用稳定的上下文结构，即使用户只输入一个很短�
 ```text
 prefix
 skill
-working_memory
 history
+working_memory
 current_request
 ```
 
@@ -185,8 +185,8 @@ current_request
 
 - `prefix` 放稳定系统提示词，包括系统规则、输出协议、动态工具定义、工作区 `JCODE.md` 项目规则和安全规则。
 - `skill` 放技能相关提示。
-- `working_memory` 放 `Working_Memory` 渲染结果，包括当前任务目标、最近文件、文件 freshness、恢复上下文、检索到的长期记忆、子 Agent 结果和工具观察。
 - `history` 放当前 session 的历史对话和工具结果。
+- `working_memory` 放 `Working_Memory` 渲染结果，包括当前任务目标、最近文件、文件 freshness、恢复上下文、检索到的长期记忆、子 Agent 结果和工具观察。
 - `current_request` 放本轮用户请求。
 
 `prefix` 的工具定义来自运行时 `ToolRegistry`，并动态渲染工具名、说明、读写风险标记和 Pydantic 参数 schema，避免模型猜测不存在的工具名。`prefix` 还会读取当前工作区根目录的 `JCODE.md` 作为项目规则；如果文件不存在，则项目规则层渲染为 `(none)`。

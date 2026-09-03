@@ -56,8 +56,8 @@ JCode 的顶层上下文顺序固定为：
 ```text
 prefix
 skill
-working_memory
 history
+working_memory
 current_request
 ```
 
