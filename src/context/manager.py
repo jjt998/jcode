@@ -7,6 +7,7 @@ import re
 from collections import OrderedDict
 
 from src.context.budget import estimate_tokens, tail_clip
+from src.context.prefix import render_prefix
 from src.context.skills import render_skill_section
 from src.runtime.plan import render_runtime_mode_text
 from src.state.workspace import now_iso
@@ -528,7 +529,7 @@ class ContextManager:
             include_older_turns=include_older_turns,
         )
         section_texts = {
-            "prefix": self._build_prefix_text(),
+            "prefix": render_prefix(self.workspace, self.registry),
             "skill": render_skill_section(),
             "working_memory": self._build_working_memory_text(session, working_memory),
             "history": history_render.raw,
@@ -691,7 +692,8 @@ class ContextManager:
             content = tail_clip(content, max(20, int(line_limit)))
         lines = ["[Assistant]"]
         if reasoning:
-            lines.append(f"<reasoning>{reasoning}</reasoning>")
+            # 原生思考仅作为历史元数据，不能伪装成模型输出协议。
+            lines.extend(["[Reasoning]:", reasoning])
         if action_kind == "final":
             lines.append(f"<final>{content}</final>")
         elif action_kind in {"tool", "tools"}:
@@ -1083,63 +1085,6 @@ class ContextManager:
             if item.get("kind") == "compact_summary":
                 working_memory.set_compact_summary(str(item.get("content", "")).strip())
                 return
-
-    def _build_prefix_text(self) -> str:
-        # 这里把工具结果 artifact 约定直接写进系统前缀，明确告诉模型首行路径就是完整结果入口。
-        sections = [
-    "System rules:\n- You are JCode, a compact local coding agent.",
-    (
-        "Output protocol:\n"
-        "Return exactly one primary protocol block per response: exactly one of <tool>, <tools>, or <final>.\n"
-        "Optional reasoning may appear before the primary protocol block as <reasoning>internal planning only</reasoning>.\n"
-        "Reasoning is for internal task planning and must be written in Chinese. Do not put greetings, final-answer prefixes, tone, or final formatting in reasoning.\n"
-        "Do not acknowledge final-response style rules in reasoning.\n"
-        "For one tool, return exactly: <tool name=\"tool_name\">{\"arg\":\"value\"}</tool>\n"
-        "For multiple tools, return exactly: <tools>[{\"name\":\"tool_name\",\"args\":{\"arg\":\"value\"}}]</tools>.\n"
-        "The <tools> content must be a JSON array. Each item must contain \"name\" and an object-valued \"args\" field. Tools execute in array order.\n"
-        "<tool> must close with </tool>; <tools> must close with </tools>; <final> must close with </final>. Never use <tools>...</tool> or <tool>...</tools>.\n"
-        "For the final answer, return exactly: <final>answer</final>. Project final-response style rules apply only inside <final>.\n"
-        "Apply greetings, tone, prefixes, and answer formatting only inside <final>. Do not apply them to reasoning, tool, or tools blocks.\n"
-        "Do not output natural language outside the allowed protocol blocks. Do not output more than one primary protocol block. Do not add Markdown fences around protocol blocks."
-    ),
-    self._build_tool_definitions_text(),
-    self.workspace.project_rules_text(),
-    self.workspace.stable_docs_text(),
-    "Stable safety rules:\n- Stay inside the workspace.\n- Shell and write actions may require approval and sandbox checks.\n- Summarize evidence from tools before finalizing.\n- If a tool result starts with a workspace-relative artifact path, treat that path as the full result artifact and read it when you need the complete output.\n- When reading a large artifact under .jcode/runs/.../artifacts/, use read_file with start and end to inspect it in segments. Artifact reads are returned directly and must not be externalized again.",
-]
-        return "\n\n".join(section for section in sections if str(section).strip())
-
-    def _build_tool_definitions_text(self) -> str:
-        lines = [
-            "Tool definitions:",
-            "Use only the tools listed below. Do not invent tool names.",
-            "",
-            "Available tools:",
-        ]
-        for name in sorted(getattr(self.registry, "tools", {})):
-            tool = self.registry.tools[name]
-            schema = self._schema_for_prompt(tool.schema)
-            lines.extend(
-                [
-                    f"- {tool.name}: {tool.description or '(no description)'}",
-                    f"  read_only: {'true' if tool.read_only else 'false'}",
-                    f"  risky: {'true' if tool.risky else 'false'}",
-                    f"  args_schema: {schema}",
-                ]
-            )
-        return "\n".join(lines)
-
-    def _schema_for_prompt(self, schema_type: type) -> str:
-        if hasattr(schema_type, "model_json_schema"):
-            schema = schema_type.model_json_schema()
-        else:
-            schema = {}
-        compact = {
-            "type": schema.get("type", "object"),
-            "properties": schema.get("properties", {}),
-            "required": schema.get("required", []),
-        }
-        return json.dumps(compact, ensure_ascii=False, sort_keys=True)
 
     def _build_working_memory_text(self, session: dict, working_memory) -> str:
         text = working_memory.render() + f"\n- workspace_root: {self.workspace.root}"

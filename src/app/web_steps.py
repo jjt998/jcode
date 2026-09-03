@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 import json
-import re
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Iterable
 
 from src.runtime.actions import parse_model_action
-
-
-REASONING_RE = re.compile(r"<reasoning>(.*?)</reasoning>", re.DOTALL)
 
 
 def build_reasoning_steps(events: Iterable[dict], *, run_id: str = "") -> tuple[list[dict], str]:
@@ -333,13 +329,6 @@ def _event_content(name: str, event: dict) -> str:
     if name in {"checkpoint_created", "tool_sequence_requested", "tool_sequence_step_requested", "tool_sequence_completed", "tool_sequence_aborted", "memory_maintained", "run_finished", "approval_required", "approval_answered", "web_run_completed", "run_failed", "run_aborted"}:
         return json.dumps({k: v for k, v in event.items() if k not in {"event", "created_at", "run_id"}}, ensure_ascii=False, indent=2)
     return json.dumps({k: v for k, v in event.items() if k not in {"event", "created_at", "run_id"}}, ensure_ascii=False, indent=2)
-
-
-def _extract_reasoning(text: str) -> str:
-    match = REASONING_RE.search(text)
-    if not match:
-        return ""
-    return match.group(1).strip()
 
 
 def _summarize(text: str, limit: int = 20) -> str:

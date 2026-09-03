@@ -202,8 +202,9 @@ def test_context_manager_builds_ctx_info_and_cache(tmp_path):
         "current_request",
     ]
     assert result.ctx_info["history"]["turn_count"] == 1
-    assert "Workspace runtime" in result.context
-    assert "Workspace docs" in result.context
+    assert "Output protocol" in result.context
+    assert "Native provider reasoning is delivered separately" in result.context
+    assert "<reasoning>" not in result.context
     assert "workspace-relative artifact path" in result.context
 
 
@@ -255,14 +256,16 @@ def test_history_text_renders_turn_template_with_reasoning_and_final(tmp_path):
         "Do the thing\n"
         "\n"
         "[Assistant]\n"
-        "<reasoning>先检查文件。</reasoning>\n"
+        "[Native provider reasoning; do not reproduce in your response]\n"
+        "先检查文件。\n"
         '<tool name="read_file">{"path":"a.txt"}</tool>\n'
         "\n"
         '[ToolResult (read_file)]<args>{"max_chars":20000,"path":"a.txt"}</args>\n'
         "read ok\n"
         "\n"
         "[Assistant]\n"
-        "<reasoning>已经完成。</reasoning>\n"
+        "[Native provider reasoning; do not reproduce in your response]\n"
+        "已经完成。\n"
         "<final>done</final>"
     )
 

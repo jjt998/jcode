@@ -54,7 +54,7 @@ def render_prefix(workspace: "Workspace", registry: "ToolRegistry") -> str:
 def render_tool_definitions(registry: "ToolRegistry") -> str:
     lines = [
         "Tool definitions:",
-        "se only the tools listed below. Do not invent tool names.",
+        "Use only the tools listed below. Do not invent tool names.",
         "",
         "Available tools:",
     ]
