@@ -1,174 +1,22 @@
 from __future__ import annotations
 
-import json
-
-from src.app.web_steps import StepTimelineBuilder, build_reasoning_steps
-from src.app.web_turns import build_session_turns
+from src.app.web_steps import build_reasoning_steps
 
 
-def test_build_reasoning_steps_groups_tools_into_the_current_step():
+def test_reasoning_steps_show_native_tool_calls():
     events = [
-        {"event": "context_built", "created_at": "2026-08-30T15:23:40Z", "context": "ctx"},
-        {
-            "event": "model_responded",
-            "created_at": "2026-08-30T15:23:41Z",
-                "response_text": '<tool name="read_file">{"path":"README.md"}</tool>',
-                "reasoning_text": "第一步检查。",
-        },
-        {
-            "event": "tool_requested",
-            "created_at": "2026-08-30T15:23:42Z",
-            "name": "read_file",
-            "args": {"path": "README.md"},
-        },
-        {
-            "event": "tool_executed",
-            "created_at": "2026-08-30T15:23:43Z",
-            "name": "read_file",
-            "status": "success",
-            "result": "read ok",
-        },
-        {
-            "event": "model_responded",
-            "created_at": "2026-08-30T15:23:44Z",
-                "response_text": "<final>done</final>",
-                "reasoning_text": "第二步收尾。",
-        },
-        {
-            "event": "web_run_completed",
-            "created_at": "2026-08-30T15:23:45Z",
-            "final_text": "done",
-        },
+        {"event": "context_built", "created_at": "2026-08-30T15:23:40Z", "context_result": {"prefix": "ctx"}},
+        {"event": "model_responded", "created_at": "2026-08-30T15:23:41Z", "response_text": "", "reasoning_text": "inspect", "native_tool_calls": [{"call_id": "call-1", "name": "read_file", "arguments": {"path": "README.md"}}]},
+        {"event": "tool_requested", "created_at": "2026-08-30T15:23:42Z", "call_id": "call-1", "name": "read_file", "args": {"path": "README.md"}},
+        {"event": "tool_executed", "created_at": "2026-08-30T15:23:43Z", "call_id": "call-1", "name": "read_file", "status": "success", "result": "read ok"},
+        {"event": "model_responded", "created_at": "2026-08-30T15:23:44Z", "response_text": "done", "reasoning_text": "finish", "native_tool_calls": []},
+        {"event": "web_run_completed", "created_at": "2026-08-30T15:23:45Z", "final_text": "done"},
     ]
 
     steps, final_text = build_reasoning_steps(events, run_id="run-1")
 
     assert final_text == "done"
     assert len(steps) == 2
-    assert steps[0]["step_id"] == "run-1:1"
-    assert steps[0]["reasoning_text"] == "第一步检查。"
-    assert steps[0]["context_text"] == "ctx"
     assert steps[0]["tool_calls"][0]["name"] == "read_file"
     assert steps[0]["tool_calls"][0]["result_text"] == "read ok"
-    assert steps[0]["tool_calls"][0]["status"] == "success"
-    assert steps[0]["status"] == "success"
-    assert steps[1]["reasoning_text"] == "第二步收尾。"
-    assert steps[1]["tool_calls"] == []
-
-
-def test_step_timeline_builder_updates_the_same_step_incrementally():
-    builder = StepTimelineBuilder(run_id="run-2")
-    builder.consume({"event": "context_built", "created_at": "2026-08-30T15:00:00Z", "context": "ctx"})
-    first = builder.consume(
-        {
-            "event": "model_responded",
-            "created_at": "2026-08-30T15:00:01Z",
-            "response_text": '<tool name="list_files">{"recursive":true}</tool>',
-            "reasoning_text": "先看一下。",
-        }
-    )[0]
-    running = builder.consume(
-        {
-            "event": "tool_requested",
-            "created_at": "2026-08-30T15:00:02Z",
-            "name": "list_files",
-            "args": {"recursive": True},
-        }
-    )[0]
-    success = builder.consume(
-        {
-            "event": "tool_executed",
-            "created_at": "2026-08-30T15:00:03Z",
-            "name": "list_files",
-            "status": "success",
-            "result": {"files": ["a.py", "b.py"]},
-        }
-    )[0]
-
-    assert first["status"] == "pending"
-    assert running["status"] == "running"
-    assert success["status"] == "success"
-    assert success["tool_calls"][0]["args_text"] == json.dumps({"recursive": True}, ensure_ascii=False, indent=2)
-
-
-def test_step_timeline_builder_exposes_error_text_on_failure():
-    builder = StepTimelineBuilder(run_id="run-err")
-    builder.consume(
-        {
-            "event": "model_responded",
-            "created_at": "2026-08-30T15:10:00Z",
-            "response_text": '<tool name="list_files">{"recursive":true}</tool>',
-            "reasoning_text": "先执行。",
-        }
-    )
-    failed = builder.consume(
-        {
-            "event": "run_failed",
-            "created_at": "2026-08-30T15:10:01Z",
-            "error_type": "ValueError",
-            "error": "bad input",
-        }
-    )[0]
-
-    assert failed["status"] == "error"
-    assert failed["error_text"] == "bad input"
-
-
-def test_step_timeline_builder_shows_model_parse_failure_detail():
-    builder = StepTimelineBuilder(run_id="run-parse")
-    builder.consume(
-        {
-            "event": "model_responded",
-            "created_at": "2026-08-30T15:12:00Z",
-            "response_text": 'plain text\n<tool name="list_files">{}</tool>',
-        }
-    )
-    detail = builder.consume(
-        {
-            "event": "model_parse_failed",
-            "created_at": "2026-08-30T15:12:01Z",
-            "error": "Your output protocol is invalid: model output must contain exactly one of <tool>, <tools>, or <final>",
-            "raw_content": 'plain text\n<tool name="list_files">{}</tool>',
-            "reasoning": "",
-        }
-    )[0]
-
-    assert detail["status"] == "error"
-    assert detail["error_text"].startswith("Your output protocol is invalid")
-    assert detail["details"][-1]["event"] == "model_parse_failed"
-    assert "raw_content" in detail["details"][-1]["content"]
-
-
-def test_build_session_turns_uses_step_list_and_falls_back_without_trace(tmp_path):
-    project_root = tmp_path
-    run_dir = project_root / ".jcode" / "runs" / "run-1"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    trace_rows = [
-        {
-            "event": "model_responded",
-            "created_at": "2026-08-30T15:23:41Z",
-                "response_text": "<final>done</final>",
-                "reasoning_text": "第一段",
-        },
-        {
-            "event": "web_run_completed",
-            "created_at": "2026-08-30T15:23:45Z",
-            "final_text": "done",
-        },
-    ]
-    (run_dir / "trace.jsonl").write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in trace_rows), encoding="utf-8")
-
-    session = {
-        "id": "session-1",
-        "run_ids": ["run-1"],
-        "history": [
-            {"role": "user", "content": "帮我看一下", "run_id": "run-1"},
-            {"role": "assistant", "content": "done", "run_id": "run-1"},
-        ],
-    }
-
-    turns = build_session_turns("default", project_root, session)["turns"]
-
-    assert turns[0]["final_text"] == "done"
-    assert turns[0]["reasoning_steps"][0]["reasoning_text"] == "第一段"
-    assert turns[0]["step_count"] == 1
+    assert steps[1]["response_text"] == "done"

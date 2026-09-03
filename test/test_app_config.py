@@ -32,11 +32,14 @@ def test_default_config_is_global_and_cwd_remains_project(tmp_path, monkeypatch)
         """
 default_model = "global-model"
 
-[models.global-model]
-provider = "deepseek"
-model = "deepseek-v4-flash"
+[provider]
+name = "deepseek"
+api_protocol = "openai_responses"
 base_url = "https://api.deepseek.com"
 api_key = "global-key"
+
+[models.global-model]
+model = "deepseek-v4-flash"
 reasoning_mode = "native"
 thinking_enabled = true
 reasoning_effort = "high"

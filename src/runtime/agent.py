@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -11,7 +10,6 @@ from src.evidence.session_log import SessionEventBus
 from src.memory.consolidation import maintain_after_turn
 from src.policy.decisions import PolicyDecision
 from src.runtime.plan import PlanModeController, runtime_mode_name, runtime_mode_plan_path
-from src.runtime.actions import parse_model_action
 from src.runtime.transitions import ABORTED, MODEL_ERROR, STEP_LIMIT_REACHED, VALID_FINAL
 from src.state.checkpoint import CheckpointManager
 from src.state.history import append_history
@@ -202,19 +200,23 @@ class JCodeAgent:
                 )
                 return self._finish_run(task_state, run_dir, f"Model error: {exc}", MODEL_ERROR)
 
-            action = self._parse_action(response, task_state, run_dir)
-            if action.kind == "final":
-                handled, final_text = self._handle_final_action(action, task_state, run_dir, checkpoint)
-                if handled:
-                    return self._finish_run(task_state, run_dir, final_text, VALID_FINAL)
-                continue
-            if action.kind == "tools":
-                self._handle_tool_sequence_action(action, task_state, run_dir, checkpoint)
-                continue
-            if action.kind != "tool":
-                self._handle_invalid_action(action, task_state)
-                continue
-            self._handle_tool_action(action, task_state, run_dir, checkpoint)
+            tool_calls = list(response.tool_calls or [])
+            self._record_model_history(response, task_state)
+            if not tool_calls:
+                self._create_checkpoint(checkpoint, task_state, run_dir, "model_completed")
+                if response.text:
+                    return self._finish_run(task_state, run_dir, response.text, VALID_FINAL)
+                return self._finish_run(task_state, run_dir, "", "empty_model_content")
+            self._record_trace(
+                run_dir,
+                "native_tool_calls_received",
+                task_state,
+                tool_calls=[{"call_id": call.call_id, "name": call.name, "arguments": call.arguments} for call in tool_calls],
+            )
+            for call in tool_calls:
+                if self.abort_requested:
+                    break
+                self._execute_tool_call(call.name, call.arguments, task_state, run_dir, checkpoint, call_id=call.call_id)
 
         return self._finish_run(task_state, run_dir, final_text or "Stopped after reaching max steps.", STEP_LIMIT_REACHED)
 
@@ -263,7 +265,13 @@ class JCodeAgent:
         return task_state, run_dir, checkpoint
 
     def _build_context(self, user_message: str, task_state, run_dir):
-        context_result = self.context_manager.build(self.session, self.working_memory, user_message)
+        context_result = self.context_manager.build(
+            self.session,
+            self.working_memory,
+            user_message,
+            allowed_tools=self.active_tool_profile.allowed_tools,
+        )
+        print("------------------------------------------------------------\n",context_result)
         self.session["ctx_info"] = context_result.ctx_info
         self.session_store.save(self.session)
         self.working_memory.set_compact_summary(str(context_result.ctx_info.get("history", {}).get("compact_summary", "")).strip())
@@ -283,8 +291,16 @@ class JCodeAgent:
                 summary_response=context_result.compact_audit.get("response", ""),
                 summary_text=context_result.compact_audit.get("summary_text", ""),
             )
-        self.session_events.emit("context_built", run_id=task_state.run_id, ctx_info=context_result.ctx_info, context=context_result.context)
-        self._record_trace(run_dir, "context_built", task_state, ctx_info=context_result.ctx_info, context=context_result.context)
+        context_snapshot = {
+            "prefix": context_result.prefix,
+            "skill": context_result.skill,
+            "history": [event.to_dict() for event in context_result.history],
+            "working_memory": context_result.working_memory.to_dict(),
+            "current_request": context_result.current_request,
+            "tools": [tool.name for tool in context_result.tools],
+        }
+        self.session_events.emit("context_built", run_id=task_state.run_id, ctx_info=context_result.ctx_info, context_result=context_snapshot)
+        self._record_trace(run_dir, "context_built", task_state, ctx_info=context_result.ctx_info, context_result=context_snapshot)
         return context_result
 
     def _emit_compact_context_events(self, run_dir, task_state, context_result, compact_info: dict) -> None:
@@ -326,7 +342,7 @@ class JCodeAgent:
 
     def _call_model(self, context_result, task_state, run_dir):
         response = self.model_router.complete(
-            context_result.context,
+            context_result,
             max_tokens=self.config.max_new_tokens,
             temperature=self.config.temperature,
             profile_id=str(task_state.model_profile.get("id") or ""),
@@ -341,163 +357,35 @@ class JCodeAgent:
             estimated_output_tokens=response.output_tokens,
             response_text=self.redactor.redact(response.text),
             reasoning_text=self.redactor.redact(response.reasoning),
+            finish_reason=response.finish_reason,
+            native_tool_calls=[{"call_id": call.call_id, "name": call.name, "arguments": call.arguments} for call in response.tool_calls or []],
             model_profile=task_state.model_profile,
         )
         return response
 
-    def _parse_action(self, response, task_state, run_dir):
-        action = parse_model_action(response.text, str(getattr(response, "reasoning", "") or ""))
-        if action.kind == "tools":
-            task_state.last_action = {
-                "kind": action.kind,
-                "tool_name": "",
-                "content": f"{len(action.tool_calls)} tools",
-                "tool_names": [call.name for call in action.tool_calls],
-                "reasoning": action.reasoning,
-            }
-        else:
-            task_state.last_action = {
-                "kind": action.kind,
-                "tool_name": action.tool_name,
-                "content": action.content[:200],
-                "reasoning": action.reasoning,
-            }
-        assistant_history_extra = {
-            "action_kind": action.kind,
-            "reasoning": action.reasoning,
-            "raw_content": action.raw_content or response.text,
-            "model_profile": task_state.model_profile,
-        }
-        if action.kind == "tool":
-            assistant_history_extra.update(
-                {
-                    "tool_name": action.tool_name,
-                    "tool_args": action.tool_args or {},
-                }
-            )
-        elif action.kind == "tools":
-            assistant_history_extra.update(
-                {
-                    "tool_calls": [{"name": call.name, "args": call.args} for call in action.tool_calls],
-                }
-            )
-        elif action.kind == "final":
-            assistant_history_extra.update({"final_text": action.content})
-        assistant_content = (action.raw_content or response.text) if action.kind == "invalid" else action.content
-        self._append_history("assistant", assistant_content, task_state, **assistant_history_extra)
-        self._record_trace(run_dir, "model_parsed", task_state, action=task_state.last_action)
-        if action.kind == "invalid":
-            # 单独记录解析失败原文，便于排查模型到底输出了什么。
-            self._record_trace(
-                run_dir,
-                "model_parse_failed",
+    def _record_model_history(self, response, task_state) -> None:
+        """将模型原生响应写入结构化历史，供下一个 Responses 请求回放。"""
+        raw = response.raw if isinstance(response.raw, dict) else {}
+        output = raw.get("output", []) if isinstance(raw.get("output", []), list) else []
+        reasoning_items = [dict(item) for item in output if isinstance(item, dict) and item.get("type") == "reasoning"]
+        if response.text or reasoning_items:
+            self._append_history(
+                "assistant",
+                response.text,
                 task_state,
-                raw_content=action.raw_content or response.text,
-                error=action.content,
-                reasoning=action.reasoning,
-                response_text=self.redactor.redact(action.raw_content or response.text),
+                metadata={"deepseek_response_items": reasoning_items, "reasoning": response.reasoning, "model_profile": task_state.model_profile},
             )
-        return action
-
-    def _handle_final_action(self, action, task_state, run_dir, checkpoint) -> tuple[bool, str]:
-        decision = self.final_gate.check(action.content, task_state, self.working_memory, session=self.session, workspace=self.workspace)
-        self._record_trace(run_dir, "final_readiness_decision", task_state, **decision)
-        if decision["allowed"]:
-            self._create_checkpoint(checkpoint, task_state, run_dir, "final")
-            return True, action.content
-        self._append_history(
-            "tool",
-            decision["message"],
-            task_state,
-            name="final_gate",
-            tool_status="denied",
-        )
-        self.working_memory.observe_tool(decision["message"])
-        return False, ""
-
-    def _handle_invalid_action(self, action, task_state) -> None:
-        self._append_history("tool", action.content, task_state, name="parser", tool_status="error")
-        self.working_memory.observe_tool(action.content)
-
-    def _handle_tool_action(self, action, task_state, run_dir, checkpoint) -> None:
-        self._execute_tool_call(
-            action.tool_name,
-            action.tool_args or {},
-            task_state,
-            run_dir,
-            checkpoint,
-        )
-
-    def _handle_tool_sequence_action(self, action, task_state, run_dir, checkpoint) -> None:
-        sequence_id = f"{task_state.run_id}-seq-{task_state.step_index:03d}-{uuid.uuid4().hex[:6]}"
-        calls = list(action.tool_calls or [])
-        total_steps = len(calls)
-        started_at = time.monotonic()
-        results: list[dict] = []
-        self._record_trace(
-            run_dir,
-            "tool_sequence_requested",
-            task_state,
-            sequence_id=sequence_id,
-            step_count=total_steps,
-            tool_names=[call.name for call in calls],
-        )
-        for index, call in enumerate(calls, start=1):
-            if self.abort_requested:
-                self._record_trace(
-                    run_dir,
-                    "tool_sequence_aborted",
-                    task_state,
-                    sequence_id=sequence_id,
-                    step_index=index,
-                    step_count=total_steps,
-                    completed_steps=len(results),
-                    results=list(results),
-                )
-                return
-            step_meta = {
-                "sequence_id": sequence_id,
-                "sequence_index": index,
-                "sequence_length": total_steps,
-            }
-            step_started_at = time.monotonic()
-            self._record_trace(
-                run_dir,
-                "tool_sequence_step_requested",
+        for call in response.tool_calls or []:
+            self._append_history(
+                "tool_call",
+                "",
                 task_state,
-                name=call.name,
-                args=call.args,
-                **step_meta,
+                tool_name=call.name,
+                call_id=call.call_id,
+                arguments=call.arguments,
+                metadata={"deepseek_response_item": call.provider_metadata},
             )
-            result = self._execute_tool_call(
-                call.name,
-                call.args,
-                task_state,
-                run_dir,
-                checkpoint,
-                trace_meta=step_meta,
-                history_meta=step_meta,
-            )
-            results.append(
-                {
-                    "name": call.name,
-                    "status": result.status,
-                    "error_type": result.error_type,
-                    "changed_files": list(result.changed_files),
-                    "artifacts": list(result.artifacts),
-                    "duration_ms": int((time.monotonic() - step_started_at) * 1000),
-                }
-            )
-        self._record_trace(
-            run_dir,
-            "tool_sequence_completed",
-            task_state,
-            sequence_id=sequence_id,
-            step_count=total_steps,
-            completed_steps=len(results),
-            duration_ms=int((time.monotonic() - started_at) * 1000),
-            results=results,
-        )
+
 
     def _execute_tool_call(
         self,
@@ -507,13 +395,14 @@ class JCodeAgent:
         run_dir,
         checkpoint,
         *,
+        call_id: str = "",
         trace_meta: dict | None = None,
         history_meta: dict | None = None,
     ) -> ToolResult:
         """执行工具结果 + 记录工具执行前后工作区状态 + 记录工具执行结果到历史 + 记录工具执行结果到 trace"""
         trace_meta = dict(trace_meta or {})
         history_meta = dict(history_meta or {})
-        self._record_trace(run_dir, "tool_requested", task_state, name=tool_name, args=tool_args, **trace_meta)
+        self._record_trace(run_dir, "tool_requested", task_state, name=tool_name, args=tool_args, call_id=call_id, **trace_meta)
         if tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"}:
             result = self._handle_subagent_tool(tool_name, tool_args, task_state)
         else:
@@ -557,16 +446,19 @@ class JCodeAgent:
 
         task_state.record_tool(tool_name, result)
         self._append_history(
-            "tool",
+            "tool_result",
             result.text,
             task_state,
-            name=tool_name,
-            args=tool_args,
-            tool_status=result.status,
-            error_type=result.error_type,
-            changed_files=result.changed_files,
-            artifacts=result.artifacts,
-            metadata=result.metadata,
+            tool_name=tool_name,
+            call_id=call_id,
+            arguments=tool_args,
+            metadata={
+                **result.metadata,
+                "tool_status": result.status,
+                "error_type": result.error_type,
+                "changed_files": result.changed_files,
+                "artifacts": result.artifacts,
+            },
             **history_meta,
         )
         self.working_memory.observe_tool(f"{tool_name}: {result.status}: {result.text}")
@@ -579,6 +471,7 @@ class JCodeAgent:
             event_name,
             task_state,
             name=tool_name,
+            call_id=call_id,
             status=result.status,
             error_type=result.error_type,
             changed_files=result.changed_files,
@@ -593,8 +486,8 @@ class JCodeAgent:
     def _record_trace(self, run_dir, event: str, task_state, **payload) -> None:
         self.run_store.append_trace(run_dir, event, task_state.run_id, **payload)
 
-    def _append_history(self, role: str, content: str, task_state, **extra) -> None:
-        append_history(self.session, role, content, run_id=task_state.run_id, **extra)
+    def _append_history(self, kind: str, content: str, task_state, **extra) -> None:
+        append_history(self.session, kind, content, run_id=task_state.run_id, **extra)
 
     def _artifact_source_files(self, artifact_path: str) -> list[dict]:
         """从原始工具结果复用文件来源，保证 artifact 分段读取也能参与 stale 判断。"""
@@ -616,7 +509,7 @@ class JCodeAgent:
         if not changed:
             return
         for item in self.session.get("history", []):
-            if item.get("role") != "tool" or item.get("name") not in {"read_file", "search"}:
+            if item.get("kind") != "tool_result" or item.get("tool_name") not in {"read_file", "search"}:
                 continue
             metadata = item.get("metadata")
             if not isinstance(metadata, dict):
@@ -642,7 +535,14 @@ class JCodeAgent:
         task_state.finish("completed" if stop_reason == VALID_FINAL else "stopped", stop_reason, final_text)
         memory_audit = maintain_after_turn(self.memory_store, self.working_memory, task_state.user_request, final_text, agent=self)
         self._record_trace(run_dir, "memory_maintained", task_state, **memory_audit)
-        self._record_trace(run_dir, "run_finished", task_state, status=task_state.status, stop_reason=stop_reason)
+        self._record_trace(
+            run_dir,
+            "run_finished",
+            task_state,
+            status=task_state.status,
+            stop_reason=stop_reason,
+            final_text=self.redactor.redact(final_text),
+        )
         self.session_events.emit("turn_finished", run_id=task_state.run_id, status=task_state.status, stop_reason=stop_reason)
         trace = self.run_store.read_trace(run_dir)
         self.run_store.write_report(

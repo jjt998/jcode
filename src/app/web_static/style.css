@@ -274,6 +274,7 @@ h3 {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
 
 .message {
@@ -466,6 +467,36 @@ h3 {
   gap: 10px;
 }
 
+.final-head {
+  list-style: none;
+  cursor: pointer;
+}
+
+.final-head::-webkit-details-marker {
+  display: none;
+}
+
+.final-summary-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.final-toggle {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  color: var(--signal);
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 140ms ease;
+}
+
+.final-answer:not([open]) .final-toggle {
+  transform: rotate(-90deg);
+}
+
 .tool-call,
 .mini-detail {
   border: 1px solid var(--line);
@@ -546,6 +577,8 @@ h3 {
 
 .final-answer {
   width: min(940px, 92%);
+  max-width: 100%;
+  min-width: 0;
   align-self: center;
   padding: 14px 16px 16px;
   border-left: 5px solid var(--signal);
@@ -563,6 +596,10 @@ h3 {
 
 .final-answer pre {
   max-height: 360px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: auto;
+  overflow-wrap: anywhere;
 }
 
 .event-context_built {

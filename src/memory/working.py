@@ -20,6 +20,7 @@ class WorkingMemory:
     subagent_results: list[str] = field(default_factory=list)
     safety_notes: list[str] = field(default_factory=list)
     compact_summary: str = ""
+    runtime_context: str = ""  # 当前运行模式与工作区上下文
 
     @classmethod
     def from_dict(cls, data: dict, workspace_root: Path) -> "WorkingMemory":
@@ -44,6 +45,7 @@ class WorkingMemory:
             subagent_results=list(tools.get("subagent_results", data.get("subagent_results", []))),
             safety_notes=list(safety.get("notes", data.get("safety_notes", []))),
             compact_summary=str(compact.get("summary", data.get("compact_summary", ""))),
+            runtime_context=str(data.get("runtime_context", "")),
         )
 
     def to_dict(self) -> dict:
@@ -74,6 +76,7 @@ class WorkingMemory:
                 "summary": self.compact_summary,
             },
             "compact_summary": self.compact_summary,
+            "runtime_context": self.runtime_context,
         }
 
     def note_file_read(self, relpath: str, args: dict, freshness: str) -> None:
@@ -129,6 +132,8 @@ class WorkingMemory:
         #    lines.append("- summary:\n" + "\n".join(f"  - {x}" for x in self.compact_summary.splitlines()[:8]))
         if self.safety_notes:
             lines.append("- safety_notes:\n" + "\n".join(f"  - {x}" for x in self.safety_notes[-5:]))
+        if self.runtime_context:
+            lines.append("- runtime_context:\n" + self.runtime_context)
         return "\n".join(lines)
 
 

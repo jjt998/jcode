@@ -5,7 +5,7 @@ from src.state.model_selection import resolve_model_snapshot, validate_model_opt
 
 
 def test_session_reasoning_effort_overrides_profile_default():
-    profile = ModelProfile("deepseek", "deepseek", "deepseek-v4-pro", "", "https://api.deepseek.com", reasoning_mode="optional", thinking_enabled=True, reasoning_effort="high", reasoning_effort_options=("low", "high", "max"))
+    profile = ModelProfile("deepseek", "deepseek", "openai_responses", "deepseek-v4-pro", "", "https://api.deepseek.com", reasoning_mode="optional", thinking_enabled=True, reasoning_effort="high", reasoning_effort_options=("low", "high", "max"))
 
     snapshot = resolve_model_snapshot({"model_options": {"deepseek": {"thinking_enabled": True, "reasoning_effort": "max"}}}, profile)
 
@@ -14,7 +14,7 @@ def test_session_reasoning_effort_overrides_profile_default():
 
 
 def test_reasoning_options_reject_effort_not_declared_by_profile():
-    profile = ModelProfile("deepseek", "deepseek", "deepseek-v4-pro", "", "https://api.deepseek.com", reasoning_mode="optional", reasoning_effort="high", reasoning_effort_options=("low", "high"))
+    profile = ModelProfile("deepseek", "deepseek", "openai_responses", "deepseek-v4-pro", "", "https://api.deepseek.com", reasoning_mode="optional", reasoning_effort="high", reasoning_effort_options=("low", "high"))
 
     try:
         validate_model_options(profile, True, "max")

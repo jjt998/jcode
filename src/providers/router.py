@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.providers.base import ModelResponse
+from src.context.result import ContextResult
 from src.providers.registry import ModelRegistry
 
 
@@ -10,11 +11,11 @@ class ModelRouter:
     def __init__(self, registry: ModelRegistry):
         self.registry = registry
 
-    def complete(self, context: str, *, max_tokens: int, temperature: float, profile_id: str | None = None, model_profile: dict | None = None) -> ModelResponse:
+    def complete(self, context: ContextResult, *, max_tokens: int, temperature: float, profile_id: str | None = None, model_profile: dict | None = None) -> ModelResponse:
         profile = self.registry.profile(profile_id)
         client = self.registry.client(profile.id)
         return client.complete(
-            [{"role": "user", "content": context}],
+            context,
             model=profile.model,
             max_tokens=max_tokens,
             temperature=temperature,

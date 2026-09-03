@@ -1,26 +1,21 @@
 default_model = "deepseek-flash"
 
-[models.deepseek-flash]
-provider = "deepseek"
-model = "deepseek-v4-flash"
+[provider]
+name = "deepseek"
+api_protocol = "openai_responses"
 base_url = "https://api.deepseek.com"
-api_key = "sk-fa31d15031cb4e03802e9e100a3e92ac"
+api_key = "sk-27f8071e2af34f1789969770c98ca673"
+
+[models.deepseek-flash]
+model = "deepseek-v4-flash"
 reasoning_mode = "native"
 thinking_enabled = true
 reasoning_effort = "high"
 reasoning_effort_options = ["low", "high", "max"]
 
-[models.gpt-coding]
-provider = "openai"
-model = "gpt-5"
-base_url = "https://api.openai.com/v1"
-api_key_env = "OPENAI_API_KEY"
-reasoning_mode = "none"
-
-[security]
-approval = "ask"
-sandbox = "best_effort"
-
-[runtime]
-max_steps = 50
-max_new_tokens = 8192
+[models.deepseek-pro]
+model = "deepseek-v4-pro"
+reasoning_mode = "native"
+thinking_enabled = true
+reasoning_effort = "high"
+reasoning_effort_options = ["low", "high", "max"]

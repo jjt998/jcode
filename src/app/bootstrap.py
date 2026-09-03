@@ -14,7 +14,6 @@ from src.policy.secrets import SecretRedactor
 from src.policy.tool_rules import ToolPolicyChecker
 from src.policy.tool_profiles import build_tool_profiles
 from src.providers.deepseek import DeepSeekClient
-from src.providers.openai_compatible import OpenAICompatibleClient
 from src.providers.registry import ModelRegistry
 from src.providers.router import ModelRouter
 from src.runtime.agent import JCodeAgent
@@ -59,15 +58,14 @@ def build_agent(config: AppConfig) -> JCodeAgent:
         redactor=redactor,
     )
     model_registry = ModelRegistry(config.model_profiles, config.default_model_profile)
-    model_registry.register("deepseek", DeepSeekClient)
-    model_registry.register("openai", lambda profile: OpenAICompatibleClient(profile.api_key, profile.base_url, profile.model))
+    model_registry.register("deepseek", "openai_responses", DeepSeekClient)
     router = ModelRouter(model_registry)
     session_events = SessionEventBus(state_dir / "sessions" / f"{session['id']}.events.jsonl")
     if config.resume:
         session_events.emit("session_resumed", **working_memory.resume_context)
         session_events.emit("resume_checkpoint_evaluated", **working_memory.resume_context)
     workers = WorkerManager(workspace, state_dir / "workers", executor, router, config, session_events=session_events)
-    manager = ContextManager(workspace=workspace, durable_memory=memory_store, registry=registry, model_router=router, total_budget=400000)
+    manager = ContextManager(workspace=workspace, durable_memory=memory_store, registry=registry, total_budget=400000)
     agent = JCodeAgent(
         config=config,
         workspace=workspace,

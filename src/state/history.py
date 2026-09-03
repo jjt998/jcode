@@ -2,14 +2,16 @@ from __future__ import annotations
 
 from src.state.workspace import now_iso
 
-def append_history(session: dict, role: str, content: str, **extra) -> dict:
+
+def append_history(session: dict, kind: str, content: str, **extra) -> dict:
+    """追加 Provider 无关的结构化历史事件。"""
     session["event_seq"] = int(session.get("event_seq", 0)) + 1
     run_id = str(extra.pop("run_id", "")) if "run_id" in extra else ""
     turn_id = str(extra.pop("turn_id", "")) if "turn_id" in extra else ""
     if not turn_id:
         turn_id = run_id
     item = {
-        "role": role,
+        "kind": kind,
         "content": content,
         "event_id": f"event-{session['event_seq']:06d}",
         "created_at": now_iso(),

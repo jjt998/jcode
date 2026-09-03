@@ -5,17 +5,13 @@ import urllib.error
 import urllib.request
 
 from src.context.budget import estimate_tokens
-from src.providers.base import ModelResponse
+from src.context.result import ContextResult, HistoryEvent
+from src.providers.base import ModelResponse, ModelToolCall
 from src.providers.profiles import ModelProfile
 
 
 class DeepSeekClient:
-    """适配 DeepSeek 原生思考字段的 Chat Completions 客户端。"""
-
-    profile: ModelProfile
-    api_key: str
-    base_url: str
-    model: str
+    """使用 DeepSeek Responses API 的原生工具调用适配器。"""
 
     def __init__(self, profile: ModelProfile):
         self.profile = profile
@@ -23,50 +19,117 @@ class DeepSeekClient:
         self.base_url = profile.base_url.rstrip("/")
         self.model = profile.model
 
-    def complete(self, messages: list[dict], *, model: str, max_tokens: int, temperature: float, model_profile: dict | None = None) -> ModelResponse:
+    def complete(self, context: ContextResult, *, model: str, max_tokens: int, temperature: float, model_profile: dict | None = None) -> ModelResponse:
         if not self.api_key:
-            context = messages[-1].get("content", "") if messages else ""
             return ModelResponse(
-                text="<final>JCode is configured without an API key. The context was built but no provider request was sent.</final>",
-                input_tokens=estimate_tokens(context),
-                output_tokens=30,
+                text="JCode is configured without an API key. The context was built but no provider request was sent.",
+                finish_reason="missing_api_key",
+                input_tokens=self._estimate_context_tokens(context),
             )
-        payload_data: dict[str, object] = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": max_tokens,
-        }
-        # 按 DeepSeek OpenAI 格式显式控制思考模式。
-        options = dict(model_profile or self.profile.snapshot())
-        thinking_enabled = bool(options.get("thinking_enabled", False))
-        payload_data["thinking"] = {"type": "enabled" if thinking_enabled else "disabled"}
-        if thinking_enabled:
-            reasoning_effort = options.get("reasoning_effort")
-            if reasoning_effort:
-                payload_data["reasoning_effort"] = reasoning_effort
-        else:
-            payload_data["temperature"] = temperature
-        # 允许各模型档案传递 DeepSeek 专有的其他请求参数，但不允许覆盖思考控制字段。
-        payload_data.update({key: value for key, value in self.profile.extra.items() if key not in {"thinking", "reasoning_effort"}})
-        payload = json.dumps(payload_data).encode("utf-8")
-        req = urllib.request.Request(
-            self.base_url + "/chat/completions",
-            data=payload,
+        payload = self._compile_request(context, model=model, max_tokens=max_tokens, temperature=temperature, model_profile=model_profile)
+        request = urllib.request.Request(
+            self.base_url + "/responses",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
             headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=300) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+            with urllib.request.urlopen(request, timeout=300) as response:
+                data = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"deepseek provider error {exc.code}: {body[:500]}") from exc
-        message = data.get("choices", [{}])[0].get("message", {})
-        usage = data.get("usage", {})
+            raise RuntimeError(f"deepseek responses error {exc.code}: {body[:500]}") from exc
+        return self._parse_response(data)
+
+    def _compile_request(self, context: ContextResult, *, model: str, max_tokens: int, temperature: float, model_profile: dict | None) -> dict:
+        options = dict(model_profile or self.profile.snapshot())
+        payload: dict[str, object] = {
+            "model": model,
+            "instructions": context.prefix,
+            "input": self._compile_input(context),
+            "tools": [
+                {"type": "function", "name": tool.name, "description": tool.description, "parameters": tool.parameters}
+                for tool in context.tools
+            ],
+            "max_output_tokens": max_tokens,
+        }
+        if bool(options.get("thinking_enabled", False)):
+            payload["reasoning"] = {"effort": options["reasoning_effort"]}
+        else:
+            payload["temperature"] = temperature
+        payload.update({key: value for key, value in self.profile.extra.items() if key not in {"thinking", "reasoning", "reasoning_effort"}})
+        return payload
+
+    def _compile_input(self, context: ContextResult) -> list[dict]:
+        """按缓存友好顺序编译内部上下文、历史事件与当前请求。"""
+        items: list[dict] = []
+        if context.skill.strip():
+            items.append({"role": "user", "content": "[JCode Skill Context]\n" + context.skill})
+        for event in context.history:
+            items.extend(self._compile_history_event(event))
+        memory_text = context.working_memory.render().strip()
+        if memory_text:
+            items.append({"role": "user", "content": "[JCode Working Memory]\n" + memory_text})
+        items.append({"role": "user", "content": context.current_request})
+        return items
+
+    def _compile_history_event(self, event: HistoryEvent) -> list[dict]:
+        if event.kind == "compact_summary":
+            return []
+        if event.kind == "user":
+            return [{"role": "user", "content": event.content}]
+        if event.kind == "assistant":
+            native = event.metadata.get("deepseek_response_items")
+            if isinstance(native, list):
+                return [dict(item) for item in native if isinstance(item, dict)]
+            return [{"role": "assistant", "content": event.content}]
+        if event.kind == "tool_call":
+            native = event.metadata.get("deepseek_response_item")
+            if isinstance(native, dict):
+                return [dict(native)]
+            return [{"type": "function_call", "call_id": event.call_id, "name": event.tool_name, "arguments": json.dumps(event.arguments or {}, ensure_ascii=False)}]
+        if event.kind == "tool_result":
+            return [{"type": "function_call_output", "call_id": event.call_id, "output": event.content}]
+        return []
+
+    def _parse_response(self, data: dict) -> ModelResponse:
+        output = [item for item in data.get("output", []) if isinstance(item, dict)]
+        calls: list[ModelToolCall] = []
+        reasoning_parts: list[str] = []
+        text_parts: list[str] = []
+        for item in output:
+            item_type = str(item.get("type") or "")
+            if item_type == "function_call":
+                raw_arguments = item.get("arguments") or "{}"
+                try:
+                    arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else dict(raw_arguments)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    arguments = {}
+                calls.append(ModelToolCall(str(item.get("call_id") or item.get("id") or ""), str(item.get("name") or ""), arguments, dict(item)))
+            elif item_type == "reasoning":
+                reasoning_parts.extend(self._content_text(item.get("summary") or item.get("content")))
+            elif item_type == "message":
+                text_parts.extend(self._content_text(item.get("content")))
+        usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
         return ModelResponse(
-            text=str(message.get("content") or ""),
-            reasoning=str(message.get("reasoning_content") or ""),
-            input_tokens=int(usage.get("prompt_tokens", 0) or 0),
-            output_tokens=int(usage.get("completion_tokens", 0) or 0),
+            text=str(data.get("output_text") or "\n".join(text_parts)).strip(),
+            reasoning="\n".join(reasoning_parts).strip(),
+            tool_calls=calls,
+            finish_reason=str(data.get("status") or "completed"),
+            input_tokens=int(usage.get("input_tokens", 0) or 0),
+            output_tokens=int(usage.get("output_tokens", 0) or 0),
             raw=data,
         )
+
+    @staticmethod
+    def _content_text(content: object) -> list[str]:
+        if isinstance(content, str):
+            return [content]
+        if not isinstance(content, list):
+            return []
+        return [str(item.get("text") or "") for item in content if isinstance(item, dict) and str(item.get("text") or "")]
+
+    @staticmethod
+    def _estimate_context_tokens(context: ContextResult) -> int:
+        text = context.prefix + context.skill + context.current_request + context.working_memory.render()
+        return estimate_tokens(text + "\n".join(event.content for event in context.history))

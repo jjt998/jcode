@@ -5,7 +5,6 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Iterable
 
-from src.runtime.actions import parse_model_action
 
 
 def build_reasoning_steps(events: Iterable[dict], *, run_id: str = "") -> tuple[list[dict], str]:
@@ -35,7 +34,7 @@ class StepTimelineBuilder:
         patches: list[dict] = []
 
         if name == "context_built":
-            self.pending_context_text = str(event.get("context") or "")
+            self.pending_context_text = json.dumps(event.get("context_result") or {}, ensure_ascii=False, indent=2)
             if self.current_step is not None and not self.current_step.get("context_text"):
                 self.current_step["context_text"] = self.pending_context_text
                 self._push_detail(self.current_step, "context_built", "Context 拼凑", self.pending_context_text, event)
@@ -44,16 +43,15 @@ class StepTimelineBuilder:
 
         if name == "model_responded":
             self._finalize_current_step(success_if_open=True, end_at=created_at or self._last_event_at)
-            action = parse_model_action(str(event.get("response_text") or ""), str(event.get("reasoning_text") or ""))
             step = self._new_step(created_at)
             step["context_text"] = self.pending_context_text
             step["response_text"] = str(event.get("response_text") or "")
-            step["reasoning_text"] = action.reasoning
-            step["parsed_action"] = _action_to_dict(action)
+            step["reasoning_text"] = str(event.get("reasoning_text") or "")
+            step["parsed_action"] = {"tool_calls": list(event.get("native_tool_calls") or [])}
             step["status"] = "pending"
             step["error_text"] = ""
             self._push_detail(step, "model_responded", "模型原始返回", step["response_text"], event)
-            self._push_detail(step, "model_parsed", "模型解析结果", json.dumps(step["parsed_action"], ensure_ascii=False, indent=2), event)
+            self._push_detail(step, "native_tool_calls_received", "原生工具调用", json.dumps(step["parsed_action"], ensure_ascii=False, indent=2), event)
             self.current_step = step
             self.pending_context_text = ""
             self.steps.append(step)
@@ -62,29 +60,6 @@ class StepTimelineBuilder:
 
         step = self._ensure_step(created_at)
         if step is None:
-            return patches
-
-        if name == "model_parsed":
-            step["parsed_action"] = _action_to_dict(event.get("action") or {})
-            self._push_detail(step, name, "模型解析结果", json.dumps(event.get("action") or {}, ensure_ascii=False, indent=2), event)
-            patches.append(self._snapshot_step(step))
-            return patches
-
-        if name == "model_parse_failed":
-            step["status"] = "error"
-            if not step.get("error_text"):
-                step["error_text"] = str(event.get("error") or "")
-            content = json.dumps(
-                {
-                    "error": event.get("error") or "",
-                    "raw_content": event.get("raw_content") or "",
-                    "reasoning": event.get("reasoning") or "",
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            self._push_detail(step, name, "模型解析失败", content, event)
-            patches.append(self._snapshot_step(step))
             return patches
 
         if name in {"tool_requested", "tool_executed", "subagent_completed"}:
@@ -281,8 +256,7 @@ def _event_title(name: str, event: dict) -> str:
     labels = {
         "context_built": "Context 拼凑",
         "model_responded": "模型原始返回",
-        "model_parsed": "模型解析结果",
-        "model_parse_failed": "模型解析失败",
+        "native_tool_calls_received": "原生工具调用",
         "tool_requested": f"工具请求{f': {tool}' if tool else ''}",
         "tool_executed": f"工具结果{f': {tool}' if tool else ''}",
         "subagent_completed": f"子任务结果{f': {tool}' if tool else ''}",
@@ -291,7 +265,6 @@ def _event_title(name: str, event: dict) -> str:
         "tool_sequence_completed": "工具序列完成",
         "tool_sequence_aborted": "工具序列中止",
         "checkpoint_created": "Checkpoint",
-        "final_readiness_decision": "Final gate",
         "memory_maintained": "记忆整理",
         "run_finished": "运行结束",
         "approval_required": "等待确认",
@@ -305,27 +278,13 @@ def _event_title(name: str, event: dict) -> str:
 
 def _event_content(name: str, event: dict) -> str:
     if name == "context_built":
-        return str(event.get("context") or "")
+        return json.dumps(event.get("context_result") or {}, ensure_ascii=False, indent=2)
     if name == "model_responded":
         return str(event.get("response_text") or "")
-    if name == "model_parsed":
-        return json.dumps(event.get("action") or {}, ensure_ascii=False, indent=2)
-    if name == "model_parse_failed":
-        return json.dumps(
-            {
-                "error": event.get("error") or "",
-                "raw_content": event.get("raw_content") or "",
-                "reasoning": event.get("reasoning") or "",
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
     if name in {"tool_requested", "tool_executed", "subagent_completed"}:
         if name == "tool_requested":
             return _stringify_payload(event.get("args") or {})
         return _stringify_payload(event.get("result") or event.get("content") or "")
-    if name == "final_readiness_decision":
-        return json.dumps({k: v for k, v in event.items() if k not in {"event", "created_at", "run_id"}}, ensure_ascii=False, indent=2)
     if name in {"checkpoint_created", "tool_sequence_requested", "tool_sequence_step_requested", "tool_sequence_completed", "tool_sequence_aborted", "memory_maintained", "run_finished", "approval_required", "approval_answered", "web_run_completed", "run_failed", "run_aborted"}:
         return json.dumps({k: v for k, v in event.items() if k not in {"event", "created_at", "run_id"}}, ensure_ascii=False, indent=2)
     return json.dumps({k: v for k, v in event.items() if k not in {"event", "created_at", "run_id"}}, ensure_ascii=False, indent=2)
@@ -380,25 +339,6 @@ def _parse_time(value: str) -> datetime | None:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
-
-
-def _action_to_dict(action) -> dict:
-    if isinstance(action, dict):
-        return dict(action)
-    if getattr(action, "kind", "") == "tools":
-        return {
-            "kind": action.kind,
-            "content": action.content,
-            "reasoning": action.reasoning,
-            "tool_calls": [{"name": call.name, "args": call.args} for call in getattr(action, "tool_calls", [])],
-        }
-    return {
-        "kind": getattr(action, "kind", ""),
-        "content": getattr(action, "content", ""),
-        "reasoning": getattr(action, "reasoning", ""),
-        "tool_name": getattr(action, "tool_name", ""),
-        "tool_args": getattr(action, "tool_args", {}),
-    }
 
 
 def _normalize_status(value: str, *, default: str = "success") -> str:

@@ -45,7 +45,6 @@ const STREAM_EVENTS = [
   "model_requested",
   "model_responded",
   "model_parsed",
-  "model_parse_failed",
   "tool_requested",
   "tool_executed",
   "tool_sequence_requested",
@@ -218,7 +217,7 @@ function renderModelProfiles(profiles, selected) {
   for (const profile of profiles) {
     const option = document.createElement("option");
     option.value = profile.id;
-    option.textContent = `${profile.provider} · ${profile.model} (${profile.id})`;
+    option.textContent = profile.model;
     option.selected = profile.id === selected;
     els.modelProfile.append(option);
   }
@@ -283,13 +282,17 @@ function messageNode(role, content) {
 }
 
 function finalAnswerNode(content) {
-  const node = document.createElement("section");
+  const node = document.createElement("details");
   node.className = "final-answer";
+  node.open = true;
   node.innerHTML = `
-    <div class="final-head">
+    <summary class="final-head">
       <span class="eyebrow">最终答案</span>
-      <span class="final-chip">完成</span>
-    </div>
+      <span class="final-summary-actions">
+        <span class="final-chip">完成</span>
+        <span class="final-toggle" aria-hidden="true">⌄</span>
+      </span>
+    </summary>
     <pre>${escapeHtml(content)}</pre>
   `;
   return node;

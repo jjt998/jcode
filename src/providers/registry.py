@@ -11,7 +11,7 @@ class ModelRegistry:
 
     profiles: dict[str, ModelProfile]
     default_profile_id: str
-    _factories: dict[str, Callable[[ModelProfile], ModelClient]]
+    _factories: dict[tuple[str, str], Callable[[ModelProfile], ModelClient]]
     _clients: dict[str, ModelClient]
 
     def __init__(self, profiles: dict[str, ModelProfile], default_profile_id: str):
@@ -22,8 +22,8 @@ class ModelRegistry:
         self._factories = {}
         self._clients = {}
 
-    def register(self, provider: str, factory: Callable[[ModelProfile], ModelClient]) -> None:
-        self._factories[provider] = factory
+    def register(self, provider: str, api_protocol: str, factory: Callable[[ModelProfile], ModelClient]) -> None:
+        self._factories[(provider, api_protocol)] = factory
 
     def profile(self, profile_id: str | None = None) -> ModelProfile:
         selected = profile_id or self.default_profile_id
@@ -36,9 +36,9 @@ class ModelRegistry:
         profile = self.profile(profile_id)
         if profile.id not in self._clients:
             try:
-                factory = self._factories[profile.provider]
+                factory = self._factories[(profile.provider, profile.api_protocol)]
             except KeyError as exc:
-                raise ValueError(f"unregistered provider: {profile.provider}") from exc
+                raise ValueError(f"unregistered provider protocol: {profile.provider}/{profile.api_protocol}") from exc
             self._clients[profile.id] = factory(profile)
         return self._clients[profile.id]
 

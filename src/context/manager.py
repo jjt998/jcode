@@ -11,7 +11,7 @@ from src.context.prefix import render_prefix
 from src.context.skills import render_skill_section
 from src.runtime.plan import render_runtime_mode_text
 from src.state.workspace import now_iso
-from src.providers.router import ModelRouter
+from src.context.result import ContextResult, HistoryEvent
 
 
 # 将动态请求放在最后，保留前部稳定内容的连续前缀，便于模型前缀缓存。
@@ -53,15 +53,6 @@ def compute_section_budgets(total_budget_chars: int, ratios: dict | None = None)
 
 
 @dataclass
-class ContextBuildResult:
-    context: str
-    ctx_info: dict
-    should_compact: bool = False
-    compact_trigger: str | None = None
-    compact_audit: dict | None = None
-
-
-@dataclass
 class _SectionRender:
     raw: str
     rendered: str
@@ -81,17 +72,15 @@ class ContextManager:
     workspace: object
     durable_memory: object
     registry: object
-    model_router: ModelRouter | None
     total_budget: int
 
-    def __init__(self, workspace, durable_memory, registry, model_router: ModelRouter | None = None, total_budget: int = 60000):
+    def __init__(self, workspace, durable_memory, registry, total_budget: int = 60000):
         self.workspace = workspace
         self.durable_memory = durable_memory
         self.registry = registry
-        self.model_router = model_router
         self.total_budget = int(total_budget)
 
-    def build(self, session: dict, working_memory, user_message: str) -> ContextBuildResult:
+    def build(self, session: dict, working_memory, user_message: str, *, allowed_tools: frozenset[str] | None = None) -> ContextResult:
         user_message = str(user_message)
         self._sync_compact_summary_from_history(session, working_memory)
 
@@ -134,13 +123,100 @@ class ContextManager:
 
         session["ctx_info"] = ctx_info
 
-        return ContextBuildResult(
-            context=final_prompt,
+        # 预算仍以文本近似估算，但 Provider 永远消费结构化事件而非最终拼接文本。
+        memory_snapshot = type(working_memory).from_dict(working_memory.to_dict(), self.workspace.root)
+        memory_snapshot.runtime_context = "\n".join(
+            part for part in (render_runtime_mode_text(session), self.workspace.runtime_text()) if part
+        )
+        structured_history, history_records = self._build_structured_history(
+            session,
+            pressure_level=int(final_pressure.get("level", 0)),
+            current_request=user_message,
+        )
+        ctx_info["history"]["compression_records"] = history_records
+        ctx_info["context_result"] = {
+            "history_event_count": len(structured_history),
+            "tool_count": len(self.registry.definitions(allowed_tools)),
+            "history_is_text_clipped": False,
+        }
+        return ContextResult(
+            prefix=render_prefix(self.workspace, self.registry),
+            skill=compressed_section_texts["skill"],
+            history=structured_history,
+            working_memory=memory_snapshot,
+            current_request=user_message,
+            tools=self.registry.definitions(allowed_tools),
             ctx_info=ctx_info,
-            should_compact=bool(compression_info.get("compact", {}).get("should_compact", False)),
-            compact_trigger=str(compression_info.get("compact", {}).get("trigger", "") or "") or None,
             compact_audit=compact_audit,
         )
+
+    def _build_structured_history(self, session: dict, *, pressure_level: int, current_request: str) -> tuple[list[HistoryEvent], list[dict]]:
+        """按回合窗口压缩工具正文，但不对最终 history 文本做尾部截断。"""
+        history = [HistoryEvent.from_dict(item) for item in session.get("history", [])]
+        normal = [event for event in history if event.kind != "compact_summary"]
+        turn_ids: list[str] = []
+        for event in normal:
+            if event.turn_id and event.turn_id not in turn_ids:
+                turn_ids.append(event.turn_id)
+        recent_turns = set(turn_ids[-self._history_window_for_level(pressure_level):])
+        records: list[dict] = []
+        seen_read_paths: set[str] = set()
+        result: list[HistoryEvent] = []
+        for event in history:
+            # 当前请求由 ContextResult.current_request 在末尾单独发送，避免重复 user message。
+            if event.kind == "user" and event.turn_id == (turn_ids[-1] if turn_ids else "") and event.content == current_request:
+                continue
+            if event.kind == "compact_summary":
+                result.append(event)
+                continue
+            if event.kind != "tool_result" or event.turn_id in recent_turns or pressure_level == 0:
+                result.append(event)
+                continue
+            compressed, record = self._compress_structured_tool_event(event, seen_read_paths)
+            result.append(compressed)
+            if record:
+                records.append(record)
+        return result, records
+
+    def _compress_structured_tool_event(self, event: HistoryEvent, seen_read_paths: set[str]) -> tuple[HistoryEvent, dict | None]:
+        """只替换窗外工具结果正文，调用参数与 call_id 始终保持完整。"""
+        item = event.to_dict()
+        item.update({"role": "tool", "name": event.tool_name or "", "args": event.arguments or {}, "tool_status": event.metadata.get("tool_status", "success")})
+        if not self._can_compress_tool_history_item(item):
+            return event, None
+        content = event.content
+        replacement = content
+        rule = ""
+        if event.tool_name == "read_file" and self._is_stale_read_file(item):
+            replacement, rule = self._stale_read_file_message(item), "stale_read_file_replaced"
+        elif event.metadata.get("full_output_artifact"):
+            replacement, rule = (
+                f"Large tool output stored at: {event.metadata['full_output_artifact']}\n"
+                f"Summary: {content[:240]}",
+                "artifact_path_and_summary",
+            )
+        elif event.tool_name == "read_file":
+            path = str((event.arguments or {}).get("path", ""))
+            if path and path in seen_read_paths:
+                replacement, rule = f"[read_file:{path}] duplicate old read omitted", "read_file_duplicate_omitted"
+            if path:
+                seen_read_paths.add(path)
+        elif event.tool_name == "run_shell":
+            replacement, rule = "\n".join(self._run_shell_preview_lines(content)) or "(empty)", "run_shell_first_three_non_empty_lines"
+        else:
+            replacement, rule = content[:80], "tool_first_80_chars"
+        if not rule or replacement == content:
+            return event, None
+        metadata = dict(event.metadata)
+        metadata["compressed"] = True
+        return HistoryEvent(event.kind, event.event_id, event.turn_id, replacement, event.tool_name, event.call_id, event.arguments, metadata), {
+            "turn_id": event.turn_id,
+            "tool_name": event.tool_name,
+            "call_id": event.call_id,
+            "rule": rule,
+            "before_chars": len(content),
+            "after_chars": len(replacement),
+        }
 
     def _build_prompt(self, section_texts: dict) -> str:
         return "\n\n".join(str(section_texts.get(section, "")).strip() for section in SECTION_ORDER).strip()
@@ -235,7 +311,7 @@ class ContextManager:
             case 4:
                 selected_budgets["skill"] = max(MIN_SECTION_BUDGETS["skill"], int(budgets["skill"] * 0.5))
                 selected_budgets["working_memory"] = max(MIN_SECTION_BUDGETS["working_memory"], int(budgets["working_memory"] * 0.7))
-                compact_info, compact_audit = self.compact_history(session, working_memory, retain_turns=2, summary_mode="llm")
+                compact_info, compact_audit = self.compact_history(session, working_memory, retain_turns=2, summary_mode="deterministic")
                 compact_info["trigger"] = "semantic_summary"
                 compact_info["should_compact"] = True
                 compact_info["eligible"] = True
@@ -619,7 +695,7 @@ class ContextManager:
     def _build_history_item_text(self, item: dict, line_limit: int | None) -> list[str]:
         if item.get("kind") == "compact_summary":
             return []
-        role = str(item.get("role", ""))
+        role = self._history_role(item)
         if role == "tool":
             return self._render_tool_history_block(item, line_limit)
         if role == "assistant":
@@ -649,7 +725,7 @@ class ContextManager:
         for item in items:
             if item.get("kind") == "compact_summary":
                 continue
-            role = str(item.get("role", ""))
+            role = self._history_role(item)
             if role == "user":
                 self._append_history_block(lines, self._build_history_item_text(item, None))
                 continue
@@ -685,23 +761,15 @@ class ContextManager:
         lines.extend(block)
 
     def _render_assistant_history_block(self, item: dict, line_limit: int | None) -> list[str]:
-        action_kind = str(item.get("action_kind", "")).strip()
-        reasoning = str(item.get("reasoning", "")).strip()
+        action_kind = str(item.get("kind", "")).strip()
+        reasoning = str(item.get("metadata", {}).get("reasoning", "")).strip() if isinstance(item.get("metadata"), dict) else ""
         content = str(item.get("content", ""))
-        if line_limit is not None and action_kind == "final":
+        if line_limit is not None and action_kind == "assistant":
             content = tail_clip(content, max(20, int(line_limit)))
         lines = ["[Assistant]"]
         if reasoning:
-            # 原生思考仅作为历史元数据，不能伪装成模型输出协议。
             lines.extend(["[Reasoning]:", reasoning])
-        if action_kind == "final":
-            lines.append(f"<final>{content}</final>")
-        elif action_kind in {"tool", "tools"}:
-            lines.append(content if content else "")
-        elif action_kind == "invalid":
-            lines.append(str(item.get("raw_content", "") or content))
-        else:
-            lines.append("")
+        lines.append(content)
         return lines
 
     def _render_tool_history_block(self, item: dict, line_limit: int | None) -> list[str]:
@@ -870,22 +938,7 @@ class ContextManager:
         return text[:limit].rstrip() + f"...[{len(text) - limit} chars]"
 
     def _summarize_compacted_history(self, items: list[dict], *, session: dict, summary_mode: str) -> tuple[str, dict]:
-        if summary_mode == "llm":
-            summary_text, audit = self._summarize_compacted_history_llm(items, session=session)
-            if summary_text:
-                return summary_text, audit
-            summary_text = self._summarize_compacted_history_deterministic(items, session=session)
-            audit = dict(audit or {})
-            audit.update(
-                {
-                    "source": "deterministic",
-                    "mode": "llm",
-                    "status": "fallback",
-                    "summary_text": summary_text,
-                }
-            )
-            audit.setdefault("fallback_reason", "llm_summary_unavailable")
-            return summary_text, audit
+        """语义压缩只读取结构化历史，避免为摘要再引入非原生文本模型调用。"""
         summary_text = self._summarize_compacted_history_deterministic(items, session=session)
         return summary_text, {
             "source": "deterministic",
@@ -919,101 +972,11 @@ class ContextManager:
         lines.extend(["", "## Next Steps", *[f"- {item}" for item in next_steps]])
         return "\n".join(lines).strip()
 
-    def _summarize_compacted_history_llm(self, items: list[dict], *, session: dict) -> tuple[str, dict]:
-        if self.model_router is None:
-            return "", {
-                "source": "deterministic",
-                "mode": "llm",
-                "status": "fallback",
-                "fallback_reason": "model_router_missing",
-                "prompt": "",
-                "response": "",
-                "summary_text": "",
-            }
-        has_api_key = getattr(self.model_router, "has_api_key", None)
-        if callable(has_api_key) and not has_api_key(str(session.get("active_model_profile") or "")):
-            return "", {
-                "source": "deterministic",
-                "mode": "llm",
-                "status": "fallback",
-                "fallback_reason": "missing_api_key",
-                "prompt": "",
-                "response": "",
-                "summary_text": "",
-            }
-        prompt = self._build_compact_summary_prompt(items, session=session)
-        try:
-            kwargs = {"max_tokens": 900, "temperature": 0.0}
-            if callable(has_api_key):
-                kwargs["profile_id"] = str(session.get("active_model_profile") or "")
-            response = self.model_router.complete(prompt, **kwargs)
-            text = str(response.text or "").strip()
-            if not text:
-                return "", {
-                    "source": "deterministic",
-                    "mode": "llm",
-                    "status": "fallback",
-                    "fallback_reason": "empty_llm_response",
-                    "prompt": prompt,
-                    "response": "",
-                    "summary_text": "",
-                }
-            return text, {
-                "source": "llm",
-                "mode": "llm",
-                "status": "success",
-                "fallback_reason": "",
-                "prompt": prompt,
-                "response": text,
-                "summary_text": text,
-            }
-        except Exception as exc:
-            return "", {
-                "source": "deterministic",
-                "mode": "llm",
-                "status": "fallback",
-                "fallback_reason": f"{type(exc).__name__}: {exc}",
-                "prompt": prompt,
-                "response": "",
-                "summary_text": "",
-            }
-
-    def _build_compact_summary_prompt(self, items: list[dict], *, session: dict) -> str:
-        transcript = self._build_history_text(
-            items,
-            recent_turn_window=max(1, len(self._group_turns(items))),
-            compress_old_tools=False,
-            include_older_turns=True,
-        )[0]
-        return "\n".join(
-            [
-                "You are summarizing old context for a coding agent.",
-                "Return Markdown only, with these sections in this exact order:",
-                "## Goal",
-                "## Constraints",
-                "## Files Read",
-                "## Files Modified",
-                "## Key Decisions",
-                "## Blockers",
-                "## Next Steps",
-                "Rules:",
-                "- Be concise and factual.",
-                "- Preserve file paths, constraints, decisions, blockers, and next steps.",
-                "- If a section has no content, still include the heading with '- none'.",
-                "- Do not mention that this is a summary prompt.",
-                "",
-                f"Current goal: {self._latest_user_message(session.get('history', [])) or 'Continue the current task.'}",
-                "",
-                "Transcript to summarize:",
-                transcript,
-            ]
-        ).strip()
-
     def _collect_sentences(self, items: list[dict], patterns: tuple[str, ...]) -> list[str]:
         found: list[str] = []
         lowered_patterns = tuple(pattern.lower() for pattern in patterns)
         for item in items:
-            if item.get("role") not in {"user", "assistant", "tool"}:
+            if self._history_role(item) not in {"user", "assistant", "tool"}:
                 continue
             text = str(item.get("content", "")).strip()
             if not text:
@@ -1043,11 +1006,11 @@ class ContextManager:
         blockers: list[str] = []
         for item in items:
             status = str(item.get("tool_status", "")).strip()
-            if item.get("role") == "tool" and status and status != "success":
+            if self._history_role(item) == "tool" and status and status != "success":
                 text = str(item.get("content", "")).strip()
                 if text and text not in blockers:
                     blockers.append(text)
-            if item.get("role") == "assistant":
+            if self._history_role(item) == "assistant":
                 text = str(item.get("content", "")).strip()
                 if any(marker in text.lower() for marker in ("blocked", "unable", "cannot", "failed")) and text not in blockers:
                     blockers.append(text)
@@ -1055,7 +1018,7 @@ class ContextManager:
 
     def _collect_next_steps(self, items: list[dict]) -> list[str]:
         for item in reversed(items):
-            if item.get("role") != "assistant":
+            if self._history_role(item) != "assistant":
                 continue
             text = str(item.get("content", "")).strip()
             if text:
@@ -1067,7 +1030,7 @@ class ContextManager:
 
     def _latest_user_message(self, items: list[dict]) -> str:
         for item in reversed(items):
-            if item.get("role") == "user":
+            if self._history_role(item) == "user":
                 text = str(item.get("content", "")).strip()
                 if text:
                     return text
@@ -1079,6 +1042,19 @@ class ContextManager:
             turn_id = str(item.get("turn_id") or item.get("run_id") or f"legacy-{index:06d}")
             turns.setdefault(turn_id, []).append(item)
         return turns
+
+    @staticmethod
+    def _history_role(item: dict) -> str:
+        """为压缩审计提供统一角色视图，不把旧协议写回 session。"""
+        role = str(item.get("role") or "")
+        if role:
+            return role
+        return {
+            "user": "user",
+            "assistant": "assistant",
+            "tool_call": "assistant",
+            "tool_result": "tool",
+        }.get(str(item.get("kind") or ""), "")
 
     def _sync_compact_summary_from_history(self, session: dict, working_memory) -> None:
         for item in reversed(session.get("history", [])):

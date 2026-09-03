@@ -2,7 +2,7 @@
 
 JCode 是一个本地 Coding Agent，保留更小的代码体量和更直接的工程链路。
 
-它覆盖本地代码代理最核心的一条链路：命令行入口、运行时装配、ReAct 循环、上下文构建、模型调用、工具执行、子 Agent、策略治理、工作记忆、运行证据、Checkpoint 和最终回答。
+它覆盖本地代码代理最核心的一条链路：命令行入口、运行时装配、原生工具调用循环、结构化上下文、DeepSeek Responses API、工具执行、子 Agent、策略治理、工作记忆、运行证据、Checkpoint 和最终回答。
 
 JCode 已包含受限 Dream 子 Agent、会话级 plan mode、Explore 子 Agent 和工具 Profile，但还不包含 TUI、完整评测套件、复杂多 Provider 路由、大规模 benchmark、vision/media 工具等非核心能力。
 
@@ -31,22 +31,18 @@ $env:DEEPSEEK_API_KEY="sk-..."
 ```toml
 default_model = "deepseek-reasoner"
 
-[models.deepseek-reasoner]
-provider = "deepseek"
-model = "deepseek-v4-pro"
-api_key_env = "DEEPSEEK_API_KEY"
+[provider]
+name = "deepseek"
+api_protocol = "openai_responses"
 base_url = "https://api.deepseek.com"
+api_key_env = "DEEPSEEK_API_KEY"
+
+[models.deepseek-reasoner]
+model = "deepseek-v4-pro"
 reasoning_mode = "native"
 thinking_enabled = true
 reasoning_effort = "high"
 reasoning_effort_options = ["low", "high", "max"]
-
-[models.gpt-coding]
-provider = "openai"
-model = "gpt-5"
-api_key_env = "OPENAI_API_KEY"
-base_url = "https://api.openai.com/v1"
-reasoning_mode = "none"
 
 [security]
 approval = "ask"
@@ -57,7 +53,9 @@ max_steps = 50
 max_new_tokens = 8192
 ```
 
-如果模型档案没有配置 API key，JCode 仍会构建上下文并写入运行证据，但不会发送真实模型请求。DeepSeek 原生思考内容会独立保存，不参与工具协议解析。
+Provider 和 API 协议由 `[provider]` 固定，当前仅支持 `deepseek + openai_responses`。Web 与 session 只允许在 run 之间切换该 Provider 下已配置的模型档案和 reasoning effort，不能切换 Provider。
+
+如果没有设置 `DEEPSEEK_API_KEY`，JCode 仍会构建上下文并写入运行证据，但不会发送真实模型请求。DeepSeek 原生思考和工具调用以 API 结构保存，不进入文本协议解析。
 
 ## 运行
 
@@ -72,7 +70,7 @@ python -m jcode --help
 jcode --cwd . "帮我查看项目结构"
 jcode --resume latest "继续"
 jcode --session-id demo-session "实现一个小功能"
-jcode --resume demo-session --model gpt-coding "继续，但换用 GPT"
+jcode --resume demo-session --model deepseek-reasoner "继续，并使用该 Provider 下的另一模型档案"
 ```
 
 ## Web 模式
@@ -149,7 +147,7 @@ JCode 现在提供这些正式入口：
     logs/YYYY/MM/YYYY-MM-DD.md
     topics/*.md
     dream_reports/*.json
-    notes.jsonl  # legacy compatibility
+    notes.jsonl
   workers/
 ```
 
@@ -167,10 +165,10 @@ jcode.app.cli
 主要职责分层：
 
 - `app`：命令行参数、配置读取和运行时装配。
-- `runtime`：Agent 主循环、模型动作解析、终态收口和异常停止。
-- `context`：模型上下文分段构建、prefix 渲染、动态工具定义注入、项目规则注入、预算估算和技能提示注入。
+- `runtime`：Agent 主循环、Provider 原生工具调用执行、终态收口和异常停止。
+- `context`：`ContextResult` 构建、prefix/skill/history/working memory 治理、预算估算和历史压缩。
 - `tools`：工具注册、参数校验、工作区读写、shell、patch 和子任务工具。
-- `policy`：权限、工具规则、重复调用、sandbox、Final Gate 和敏感信息处理。
+- `policy`：权限、工具规则、重复调用、sandbox 和敏感信息处理。
 - `state`：Session、TaskState、History、Checkpoint 和 Workspace。
 - `memory`：Working_Memory、Daily Log、Durable Memory、检索、安全过滤和轮次整理。
 - `workers`：子 Agent 的创建、消息、等待、结果和 trace；plan mode 下只允许 Explore 子 Agent。
@@ -182,7 +180,7 @@ jcode.app.cli
 
 ## 上下文结构
 
-JCode 始终使用稳定的上下文结构，即使用户只输入一个很短的问题：
+JCode 始终构建结构化 `ContextResult`，即使用户只输入一个很短的问题：
 
 ```text
 prefix
@@ -194,15 +192,15 @@ current_request
 
 其中：
 
-- `prefix` 放稳定系统提示词，包括系统规则、输出协议、动态工具定义、工作区 `JCODE.md` 项目规则和安全规则。
+- `prefix` 放稳定系统提示词，包括系统规则、工作区 `JCODE.md` 项目规则和安全规则；DeepSeek Adapter 将其发送至顶层 `instructions`。
 - `skill` 放技能相关提示。
-- `history` 放当前 session 的历史对话和工具结果。
+- `history` 放当前 session 的结构化历史事件，包括用户、助手、原生工具调用和工具结果。
 - `working_memory` 放 `Working_Memory` 渲染结果，包括当前任务目标、最近文件、文件 freshness、恢复上下文、检索到的长期记忆、子 Agent 结果和工具观察。
 - `current_request` 放本轮用户请求。
 
-`prefix` 的工具定义来自运行时 `ToolRegistry`，并动态渲染工具名、说明、读写风险标记和 Pydantic 参数 schema，避免模型猜测不存在的工具名。`prefix` 还会读取当前工作区根目录的 `JCODE.md` 作为项目规则；如果文件不存在，则项目规则层渲染为 `(none)`。
+DeepSeek Responses 请求按以下顺序编译：`prefix -> instructions`；`skill -> history 前的内部 user message`；`history -> 原生 input items`；`working_memory -> history 后的内部 user message`；`current_request -> 最后一个真实 user message`。工具 schema 独立以 API 原生 `tools` 字段发送，不混入 prefix。
 
-变化较快的事实不会塞进稳定前缀，而是进入 `working_memory` 或 `history`。工具定义和 `JCODE.md` 虽然由运行时渲染，但它们属于本轮稳定规则输入，不属于工作记忆。
+变化较快的事实不会塞进稳定前缀，而是进入 `working_memory` 或 `history`。上下文压力达到阈值时，JCode 会压缩窗口外工具结果；等级 4 会把旧 completed turn 压缩为 `compact_summary`，不会对最终 history 文本整体截断。
 
 ## 工具安全链
 
@@ -230,7 +228,7 @@ current_request
 - shell timeout 和 sandbox 拦截。
 - 工具执行失败或部分成功。
 - 结果中的敏感信息脱敏。
-- Final Gate 对空回答和未交代失败工具的拦截。
+- 无工具调用且 content 为空时，以 `empty_model_content` 结束，不重试。
 
 ## 记忆与恢复
 
@@ -238,7 +236,7 @@ JCode 对外统一使用三层记忆认知：
 
 - `Working_Memory`：当前回合的短期推理状态，包含 `task`、`files`、`retrieval`、`tools`、`safety`。它服务当前上下文构建和工具策略，不追求长期保存。
 - `Daily Log`：每轮追加的过程层日志，位于 `.jcode/memory/logs/YYYY/MM/YYYY-MM-DD.md`，记录当天发生了什么、做了什么和本轮摘要。它是整理输入，不是最终知识库。
-- `Durable Memory`：长期稳定结论层，包括 `.jcode/memory/MEMORY.md`、`.jcode/memory/topics/*.md`、未来的结构化记忆文件和可检索沉淀内容。`notes.jsonl` 仅作为旧版本兼容入口保留。
+- `Durable Memory`：长期稳定结论层，包括 `.jcode/memory/MEMORY.md`、`.jcode/memory/topics/*.md`、未来的结构化记忆文件和可检索沉淀内容。
 
 每轮结束时，JCode 会先把摘要写入 Daily Log，再把过程信号整理到 Durable Memory 的 topic 和索引里。包含明显密钥、token、password、secret 等敏感特征的内容不会进入长期结论层。
 
@@ -269,7 +267,7 @@ JCode 支持子 Agent 工具：
 
 JCode 的每次运行都可以审计：
 
-- `trace.jsonl`：逐事件记录 run started、context built、model parsed、tool executed、checkpoint created、memory maintained、run finished 等事件。
+- `trace.jsonl`：逐事件记录 run started、context built、model responded、native tool calls、tool executed、checkpoint created、memory maintained、run finished 等事件。
 - `task_state.json`：当前任务状态、步数、工具数、失败工具、变更文件和最终答案。
 - `checkpoint.json`：恢复所需的运行状态和工作区指纹。
 - `report.json`：运行汇总、事件计数、worker refs、memory audit 和最终回答长度。

@@ -62,9 +62,9 @@ def _build_turn(run_id: str, runs_root: Path, history: list[dict]) -> dict:
 def _orphan_history_turns(history: list[dict]) -> list[dict]:
     turns: list[dict] = []
     for index, item in enumerate(history):
-        if item.get("run_id") or item.get("role") == "tool":
+        if item.get("run_id") or item.get("kind") == "tool_result":
             continue
-        role = str(item.get("role") or "message")
+        role = str(item.get("kind") or "message")
         content = str(item.get("content") or "")
         turns.append(
             {
@@ -89,8 +89,8 @@ def _fallback_steps(items: list[dict], run_id: str) -> list[dict]:
     reasoning = ""
     context = ""
     for item in items:
-        if item.get("role") == "assistant" and not reasoning:
-            reasoning = str(item.get("reasoning") or "").strip()
+        if item.get("kind") == "assistant" and not reasoning:
+            reasoning = str(item.get("metadata", {}).get("reasoning") or "").strip()
         if item.get("kind") == "context_built":
             context = str(item.get("content") or "")
     if not reasoning and not context:
@@ -118,14 +118,14 @@ def _fallback_steps(items: list[dict], run_id: str) -> list[dict]:
 
 def _first_content(items: list[dict], role: str) -> str:
     for item in items:
-        if item.get("role") == role:
+        if item.get("kind") == role:
             return str(item.get("content") or "")
     return ""
 
 
 def _last_content(items: list[dict], role: str) -> str:
     for item in reversed(items):
-        if item.get("role") == role:
+        if item.get("kind") == role:
             return str(item.get("content") or "")
     return ""
 

@@ -24,6 +24,7 @@ from src.tools.subagents import tool_send_subagent_message, tool_spawn_subagent,
 from src.tools.shell import run_shell
 from src.tools.todos import tool_todo_add, tool_todo_list, tool_todo_update
 from src.tools.workspace import apply_text_patch, list_files, read_file, search, write_file
+from src.context.result import ToolDefinition
 
 
 class ToolRegistry:
@@ -37,6 +38,26 @@ class ToolRegistry:
 
     def get(self, name: str) -> Tool | None:
         return self.tools.get(name)
+
+    def definitions(self, allowed_tools: frozenset[str] | None = None) -> list[ToolDefinition]:
+        """导出当前工具集可见的原生函数定义。"""
+        allowed = allowed_tools if allowed_tools is not None else frozenset(self.tools)
+        definitions: list[ToolDefinition] = []
+        for name in sorted(allowed):
+            tool = self.tools.get(name)
+            if tool is None:
+                continue
+            schema = tool.schema.model_json_schema() if hasattr(tool.schema, "model_json_schema") else {}
+            definitions.append(
+                ToolDefinition(
+                    name=tool.name,  # 工具函数名称
+                    description=tool.description,  # 工具说明
+                    parameters=schema,  # Pydantic 导出的 JSON Schema
+                    read_only=tool.read_only,  # 只读标记
+                    risky=tool.risky,  # 风险标记
+                )
+            )
+        return definitions
 
 
 def build_default_registry() -> ToolRegistry:

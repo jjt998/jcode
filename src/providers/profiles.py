@@ -13,6 +13,7 @@ class ModelProfile:
 
     id: str
     provider: str
+    api_protocol: str  # Provider 固定的原生 API 协议
     model: str
     api_key: str
     base_url: str
@@ -27,6 +28,7 @@ class ModelProfile:
         return {
             "id": self.id,
             "provider": self.provider,
+            "api_protocol": self.api_protocol,
             "model": self.model,
             "reasoning_mode": self.reasoning_mode,
             "thinking_enabled": self.thinking_enabled,
