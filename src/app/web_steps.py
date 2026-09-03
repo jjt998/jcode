@@ -48,11 +48,11 @@ class StepTimelineBuilder:
 
         if name == "model_responded":
             self._finalize_current_step(success_if_open=True, end_at=created_at or self._last_event_at)
-            action = parse_model_action(str(event.get("response_text") or ""))
+            action = parse_model_action(str(event.get("response_text") or ""), str(event.get("reasoning_text") or ""))
             step = self._new_step(created_at)
             step["context_text"] = self.pending_context_text
             step["response_text"] = str(event.get("response_text") or "")
-            step["reasoning_text"] = action.reasoning or _extract_reasoning(step["response_text"])
+            step["reasoning_text"] = action.reasoning
             step["parsed_action"] = _action_to_dict(action)
             step["status"] = "pending"
             step["error_text"] = ""

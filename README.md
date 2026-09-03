@@ -18,25 +18,35 @@ pip install -e .
 
 ## 配置
 
-可以通过 `.jcode.toml` 或环境变量配置模型服务。
+模型服务配置固定读取 JCode 安装目录中的 `.jcode.toml`；`--cwd` 只指定当前工作项目，不会读取该项目内的 `.jcode.toml`。也可以通过显式 `--config` 指定另一份全局配置。
 
 Windows PowerShell 示例：
 
 ```powershell
-$env:JCODE_API_KEY="sk-..."
-$env:JCODE_BASE_URL="https://api.openai.com/v1"
-$env:JCODE_MODEL="gpt-5"
+$env:DEEPSEEK_API_KEY="sk-..."
 ```
 
 `.jcode.toml` 示例：
 
 ```toml
-provider = "openai"
+default_model = "deepseek-reasoner"
 
-[providers.openai]
-api_key = "sk-..."
-base_url = "https://api.openai.com/v1"
+[models.deepseek-reasoner]
+provider = "deepseek"
+model = "deepseek-v4-pro"
+api_key_env = "DEEPSEEK_API_KEY"
+base_url = "https://api.deepseek.com"
+reasoning_mode = "native"
+thinking_enabled = true
+reasoning_effort = "high"
+reasoning_effort_options = ["low", "high", "max"]
+
+[models.gpt-coding]
+provider = "openai"
 model = "gpt-5"
+api_key_env = "OPENAI_API_KEY"
+base_url = "https://api.openai.com/v1"
+reasoning_mode = "none"
 
 [security]
 approval = "ask"
@@ -47,7 +57,7 @@ max_steps = 50
 max_new_tokens = 8192
 ```
 
-如果没有配置 `JCODE_API_KEY`，JCode 仍会构建上下文并写入运行证据，但不会发送真实模型请求。
+如果模型档案没有配置 API key，JCode 仍会构建上下文并写入运行证据，但不会发送真实模型请求。DeepSeek 原生思考内容会独立保存，不参与工具协议解析。
 
 ## 运行
 
@@ -62,6 +72,7 @@ python -m jcode --help
 jcode --cwd . "帮我查看项目结构"
 jcode --resume latest "继续"
 jcode --session-id demo-session "实现一个小功能"
+jcode --resume demo-session --model gpt-coding "继续，但换用 GPT"
 ```
 
 ## Web 模式

@@ -11,8 +11,9 @@ class WorkerRuntime:
     messages: list[str]
     status: str
     result: str
+    model_profile: dict
 
-    def __init__(self, worker_id: str, prompt: str, subagent_type: str = "worker", write_scope: list[str] | None = None):
+    def __init__(self, worker_id: str, prompt: str, subagent_type: str = "worker", write_scope: list[str] | None = None, model_profile: dict | None = None):
         self.worker_id = worker_id
         self.prompt = prompt
         self.subagent_type = subagent_type
@@ -20,6 +21,7 @@ class WorkerRuntime:
         self.messages: list[str] = []
         self.status = "created"
         self.result = ""
+        self.model_profile = dict(model_profile or {})
 
     def send(self, message: str) -> None:
         self.messages.append(message)

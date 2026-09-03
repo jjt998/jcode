@@ -13,7 +13,8 @@ from src.state.workspace import now_iso
 from src.providers.router import ModelRouter
 
 
-SECTION_ORDER = ("prefix", "skill", "working_memory", "history", "current_request")
+# 将动态请求放在最后，保留前部稳定内容的连续前缀，便于模型前缀缓存。
+SECTION_ORDER = ("prefix", "skill", "history", "working_memory", "current_request")
 CURRENT_REQUEST_SECTION = "current_request"
 MIN_SECTION_BUDGETS = {
     "prefix": 40000,
@@ -764,7 +765,11 @@ class ContextManager:
         )
 
     def _tool_args_json(self, item: dict) -> str:
-        return json.dumps(item.get("args", {}) or {}, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        args = dict(item.get("args", {}) or {})
+        if item.get("name") == "write_file":
+            # write_file 的 content 可能很大，history 只展示定位和控制参数。
+            args.pop("content", None)
+        return json.dumps(args, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
 
     def _can_compress_tool_history_item(self, item: dict) -> bool:
         name = str(item.get("name", ""))
@@ -923,8 +928,8 @@ class ContextManager:
                 "response": "",
                 "summary_text": "",
             }
-        client = getattr(self.model_router, "client", None)
-        if getattr(client, "api_key", "") == "":
+        has_api_key = getattr(self.model_router, "has_api_key", None)
+        if callable(has_api_key) and not has_api_key(str(session.get("active_model_profile") or "")):
             return "", {
                 "source": "deterministic",
                 "mode": "llm",
@@ -936,7 +941,10 @@ class ContextManager:
             }
         prompt = self._build_compact_summary_prompt(items, session=session)
         try:
-            response = self.model_router.complete(prompt, max_tokens=900, temperature=0.0)
+            kwargs = {"max_tokens": 900, "temperature": 0.0}
+            if callable(has_api_key):
+                kwargs["profile_id"] = str(session.get("active_model_profile") or "")
+            response = self.model_router.complete(prompt, **kwargs)
             text = str(response.text or "").strip()
             if not text:
                 return "", {

@@ -117,6 +117,7 @@ class FakeWorkspace:
 
 
 class DummyConfig:
+    default_model_profile = "fake"
     max_steps = 3
     max_new_tokens = 32
     temperature = 0.0
@@ -181,10 +182,8 @@ def test_parse_model_action_supports_tool_sequence():
     assert action.tool_calls[0].args == {"path": "a.txt"}
 
 
-def test_parse_model_action_supports_reasoning_with_tool():
-    action = parse_model_action(
-        '<reasoning>先检查文件。</reasoning><tool name="read_file">{"path":"a.txt"}</tool>'
-    )
+def test_parse_model_action_accepts_separate_native_reasoning():
+    action = parse_model_action('<tool name="read_file">{"path":"a.txt"}</tool>', "先检查文件。")
 
     assert action.kind == "tool"
     assert action.reasoning == "先检查文件。"
@@ -193,13 +192,9 @@ def test_parse_model_action_supports_reasoning_with_tool():
     assert action.tool_args == {"path": "a.txt"}
 
 
-def test_parse_model_action_supports_reasoning_with_tools_and_final():
-    tools_action = parse_model_action(
-        '<reasoning>分两步执行。</reasoning><tools>[{"name":"read_file","args":{"path":"a.txt"}},{"name":"write_file","args":{"path":"b.txt","content":"x"}}]</tools>'
-    )
-    final_action = parse_model_action(
-        "<reasoning>已经完成。</reasoning><final>done</final>"
-    )
+def test_parse_model_action_accepts_separate_native_reasoning_for_tools_and_final():
+    tools_action = parse_model_action('<tools>[{"name":"read_file","args":{"path":"a.txt"}},{"name":"write_file","args":{"path":"b.txt","content":"x"}}]</tools>', "分两步执行。")
+    final_action = parse_model_action("<final>done</final>", "已经完成。")
 
     assert tools_action.kind == "tools"
     assert tools_action.reasoning == "分两步执行。"
@@ -208,6 +203,12 @@ def test_parse_model_action_supports_reasoning_with_tools_and_final():
     assert final_action.kind == "final"
     assert final_action.reasoning == "已经完成。"
     assert final_action.content == "done"
+
+
+def test_parse_model_action_rejects_legacy_reasoning_tag():
+    action = parse_model_action('<reasoning>旧协议</reasoning><final>done</final>')
+
+    assert action.kind == "invalid"
 
 
 def test_parse_model_action_rejects_mixed_protocol():

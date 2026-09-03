@@ -11,6 +11,7 @@ class TaskState:
     run_id: str
     task_id: str
     user_request: str
+    model_profile: dict = field(default_factory=dict)
     step_index: int = 0
     attempts: int = 0
     tool_steps: int = 0
@@ -26,8 +27,8 @@ class TaskState:
     updated_at: str = field(default_factory=now_iso)
 
     @classmethod
-    def create(cls, user_request: str) -> "TaskState":
-        return cls(run_id=f"run-{uuid.uuid4().hex[:10]}", task_id=f"task-{uuid.uuid4().hex[:10]}", user_request=user_request)
+    def create(cls, user_request: str, model_profile: dict | None = None) -> "TaskState":
+        return cls(run_id=f"run-{uuid.uuid4().hex[:10]}", task_id=f"task-{uuid.uuid4().hex[:10]}", user_request=user_request, model_profile=dict(model_profile or {}))
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)

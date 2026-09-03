@@ -91,12 +91,6 @@ def _fallback_steps(items: list[dict], run_id: str) -> list[dict]:
     for item in items:
         if item.get("role") == "assistant" and not reasoning:
             reasoning = str(item.get("reasoning") or "").strip()
-            if not reasoning:
-                content = str(item.get("content") or "")
-                if "<reasoning>" in content and "</reasoning>" in content:
-                    start = content.find("<reasoning>") + len("<reasoning>")
-                    end = content.find("</reasoning>")
-                    reasoning = content[start:end].strip()
         if item.get("kind") == "context_built":
             context = str(item.get("content") or "")
     if not reasoning and not context:

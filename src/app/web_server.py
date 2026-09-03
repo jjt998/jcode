@@ -16,6 +16,11 @@ class MessageRequest(BaseModel):
     message: str
 
 
+class ModelSwitchRequest(BaseModel):
+    model_profile: str
+    reasoning_effort: str = ""
+
+
 class ApprovalRequest(BaseModel):
     answer: str
 
@@ -91,6 +96,15 @@ def create_app(manager: WebRunManager) -> FastAPI:
         except RuntimeError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return run.snapshot()
+
+    @app.post("/api/projects/{project_id}/sessions/{session_id}/model")
+    def switch_project_session_model(project_id: str, session_id: str, request: ModelSwitchRequest):
+        try:
+            return manager.switch_model(session_id, request.model_profile, request.reasoning_effort, project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="project or session not found") from exc
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.get("/api/projects/{project_id}/runs/{run_id}/events")
     async def project_run_events(project_id: str, run_id: str):

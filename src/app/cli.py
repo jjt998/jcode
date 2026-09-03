@@ -11,10 +11,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("prompt", nargs="*", help="Optional one-shot prompt")
     parser.add_argument("--cwd", default=".", help="Workspace directory")
     parser.add_argument("--config", default=None, help="Path to .jcode.toml")
-    parser.add_argument("--provider", default=None, help="Provider profile name")
+    parser.add_argument("--provider", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--api-key", default=None, help="Provider API key override")
     parser.add_argument("--base-url", default=None, help="Provider base URL override")
-    parser.add_argument("--model", default=None, help="Provider model override")
+    parser.add_argument("--model", default=None, help="Model profile name")
     parser.add_argument("--resume", default=None, help="Session id to resume or latest")
     parser.add_argument("--session-id", default=None, help="Create or resume a fixed session id")
     parser.add_argument("--plan-topic", default=None, help="Enter plan mode with the given topic")
@@ -32,6 +32,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     config = load_config(args)
     agent = build_agent(config)
+    if args.model:
+        agent.switch_model_profile(args.model, source="cli")
     prompt = " ".join(args.prompt).strip()
     if not prompt:
         parser.print_help()

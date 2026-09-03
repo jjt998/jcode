@@ -1,1 +1,1 @@
-SECTION_ORDER = ("prefix", "skill", "working_memory", "history", "current_request")
+SECTION_ORDER = ("prefix", "skill", "history", "working_memory", "current_request")

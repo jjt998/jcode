@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Literal
+
+
+ReasoningMode = Literal["none", "native", "optional"]
+
+
+@dataclass(frozen=True)
+class ModelProfile:
+    """描述一个可被 session 选择的模型档案。"""
+
+    id: str
+    provider: str
+    model: str
+    api_key: str
+    base_url: str
+    reasoning_mode: ReasoningMode = "none"
+    thinking_enabled: bool = False
+    reasoning_effort: str = ""
+    reasoning_effort_options: tuple[str, ...] = ()
+    extra: dict[str, object] = field(default_factory=dict)
+
+    def snapshot(self) -> dict:
+        """生成可写入 run 证据的无密钥快照。"""
+        return {
+            "id": self.id,
+            "provider": self.provider,
+            "model": self.model,
+            "reasoning_mode": self.reasoning_mode,
+            "thinking_enabled": self.thinking_enabled,
+            "reasoning_effort": self.reasoning_effort,
+            "reasoning_effort_options": list(self.reasoning_effort_options),
+        }

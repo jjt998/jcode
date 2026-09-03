@@ -18,7 +18,7 @@ class OpenAICompatibleClient:
         self.base_url = base_url.rstrip("/")
         self.model = model
 
-    def complete(self, messages: list[dict], *, model: str, max_tokens: int, temperature: float) -> ModelResponse:
+    def complete(self, messages: list[dict], *, model: str, max_tokens: int, temperature: float, model_profile: dict | None = None) -> ModelResponse:
         if not self.api_key:
             context = messages[-1].get("content", "") if messages else ""
             return ModelResponse(

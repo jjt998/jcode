@@ -12,7 +12,8 @@ def test_build_reasoning_steps_groups_tools_into_the_current_step():
         {
             "event": "model_responded",
             "created_at": "2026-08-30T15:23:41Z",
-            "response_text": '<reasoning>第一步检查。</reasoning><tool name="read_file">{"path":"README.md"}</tool>',
+                "response_text": '<reasoning>第一步检查。</reasoning><tool name="read_file">{"path":"README.md"}</tool>',
+                "reasoning_text": "第一步检查。",
         },
         {
             "event": "tool_requested",
@@ -30,7 +31,8 @@ def test_build_reasoning_steps_groups_tools_into_the_current_step():
         {
             "event": "model_responded",
             "created_at": "2026-08-30T15:23:44Z",
-            "response_text": "<reasoning>第二步收尾。</reasoning><final>done</final>",
+                "response_text": "<reasoning>第二步收尾。</reasoning><final>done</final>",
+                "reasoning_text": "第二步收尾。",
         },
         {
             "event": "web_run_completed",
@@ -143,7 +145,8 @@ def test_build_session_turns_uses_step_list_and_falls_back_without_trace(tmp_pat
         {
             "event": "model_responded",
             "created_at": "2026-08-30T15:23:41Z",
-            "response_text": "<reasoning>第一段</reasoning><final>done</final>",
+                "response_text": "<reasoning>第一段</reasoning><final>done</final>",
+                "reasoning_text": "第一段",
         },
         {
             "event": "web_run_completed",

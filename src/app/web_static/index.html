@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>JCode Web</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css?v=20260903-model-controls" />
   </head>
   <body>
     <div class="shell">
@@ -42,6 +42,17 @@
         <form class="composer" id="composer">
           <textarea id="messageInput" rows="3" placeholder="给 JCode 一个任务"></textarea>
           <div class="composer-actions">
+            <div class="model-controls" aria-label="模型设置">
+              <label class="control-field">
+                <span>模型</span>
+                <select id="modelProfile" aria-label="模型"></select>
+              </label>
+              <label class="control-field">
+                <span>思考强度</span>
+                <select id="reasoningEffort" aria-label="思考强度"></select>
+              </label>
+              <span id="reasoningSupport" class="reasoning-support"></span>
+            </div>
             <button type="button" class="secondary" id="stopRun">停止</button>
             <button type="submit" id="sendMessage">发送</button>
           </div>
@@ -49,6 +60,6 @@
       </main>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=20260903-model-controls"></script>
   </body>
 </html>

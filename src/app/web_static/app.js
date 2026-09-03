@@ -9,6 +9,7 @@ const state = {
   eventIds: new Set(),
   eventSource: null,
   openDetails: new Map(),
+  modelProfiles: [],
 };
 
 const els = {
@@ -26,6 +27,9 @@ const els = {
   composer: document.querySelector("#composer"),
   messageInput: document.querySelector("#messageInput"),
   stopRun: document.querySelector("#stopRun"),
+  modelProfile: document.querySelector("#modelProfile"),
+  reasoningEffort: document.querySelector("#reasoningEffort"),
+  reasoningSupport: document.querySelector("#reasoningSupport"),
 };
 
 const STREAM_EVENTS = [
@@ -103,6 +107,8 @@ function formatDuration(value) {
 function setRunStatus(status) {
   els.runState.textContent = status || "idle";
   els.runState.dataset.status = status || "idle";
+  els.modelProfile.disabled = ["running", "waiting_approval", "aborting"].includes(status);
+  els.reasoningEffort.disabled = els.modelProfile.disabled || els.reasoningEffort.dataset.supported !== "true";
 }
 
 function summarizeText(text, limit = 20) {
@@ -201,8 +207,38 @@ async function selectSession(sessionId) {
   els.projectRoot.textContent = session.project_root || "";
   renderSessions();
   setRunStatus(session.active_status || "idle");
+  state.modelProfiles = session.model_profiles || [];
+  renderModelProfiles(state.modelProfiles, session.active_model_profile || "");
   await loadTurns();
   if (state.activeRunId) connectEvents(state.activeRunId);
+}
+
+function renderModelProfiles(profiles, selected) {
+  els.modelProfile.innerHTML = "";
+  for (const profile of profiles) {
+    const option = document.createElement("option");
+    option.value = profile.id;
+    option.textContent = `${profile.provider} · ${profile.model} (${profile.id})`;
+    option.selected = profile.id === selected;
+    els.modelProfile.append(option);
+  }
+  updateReasoningControls(profiles, selected);
+}
+
+function updateReasoningControls(profiles, selected) {
+  const profile = profiles.find((item) => item.id === selected);
+  const supported = Boolean(profile && profile.reasoning_mode !== "none");
+  els.reasoningEffort.dataset.supported = supported ? "true" : "false";
+  els.reasoningEffort.innerHTML = "";
+  for (const effort of (profile?.reasoning_effort_options || [])) {
+    const option = document.createElement("option");
+    option.value = effort;
+    option.textContent = effort;
+    option.selected = effort === profile.reasoning_effort;
+    els.reasoningEffort.append(option);
+  }
+  els.reasoningSupport.textContent = supported ? "下一轮生效" : "该模型不支持思考";
+  setRunStatus(els.runState.dataset.status || "idle");
 }
 
 async function loadTurns() {
@@ -743,6 +779,30 @@ els.stopRun.addEventListener("click", async () => {
     renderTurns();
   }
 });
+
+els.modelProfile.addEventListener("change", async () => {
+  if (!state.projectId || !state.sessionId) return;
+  updateReasoningControls(state.modelProfiles, els.modelProfile.value);
+  const session = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions/${encodeURIComponent(state.sessionId)}/model`, {
+    method: "POST",
+    body: JSON.stringify({ model_profile: els.modelProfile.value, reasoning_effort: els.reasoningEffort.value }),
+  });
+  state.modelProfiles = session.model_profiles || [];
+  renderModelProfiles(state.modelProfiles, session.active_model_profile || "");
+  await loadSessions(false);
+});
+
+async function saveReasoningOptions() {
+  if (!state.projectId || !state.sessionId || els.reasoningEffort.dataset.supported !== "true") return;
+  const session = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions/${encodeURIComponent(state.sessionId)}/model`, {
+    method: "POST",
+    body: JSON.stringify({ model_profile: els.modelProfile.value, reasoning_effort: els.reasoningEffort.value }),
+  });
+  state.modelProfiles = session.model_profiles || [];
+  renderModelProfiles(state.modelProfiles, session.active_model_profile || "");
+}
+
+els.reasoningEffort.addEventListener("change", saveReasoningOptions);
 
 loadProjects(true).catch((error) => {
   state.turns = [

@@ -7,6 +7,8 @@ from typing import Protocol
 @dataclass
 class ModelResponse:
     text: str
+    # 原生思考内容与动作协议分离，避免影响工具动作解析。
+    reasoning: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
     raw: dict | None = None

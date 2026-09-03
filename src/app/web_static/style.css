@@ -650,8 +650,42 @@ h3 {
 .composer-actions {
   margin-top: 10px;
   display: flex;
-  justify-content: flex-end;
+  align-items: end;
+  justify-content: space-between;
   gap: 10px;
+}
+
+.model-controls {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.control-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+}
+
+.control-field select {
+  min-width: 148px;
+  max-width: 260px;
+  padding: 8px 30px 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: 12px Consolas, "Cascadia Mono", monospace;
+}
+
+.reasoning-support {
+  padding-bottom: 9px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .composer button {
@@ -717,6 +751,17 @@ summary:focus-visible {
 
   .approval-actions {
     flex-direction: column;
+  }
+
+  .composer-actions,
+  .model-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .control-field select {
+    max-width: none;
+    width: 100%;
   }
 }
 

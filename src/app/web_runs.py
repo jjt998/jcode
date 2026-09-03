@@ -4,17 +4,19 @@ import json
 import threading
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from types import MethodType, SimpleNamespace
+from types import MethodType
 from typing import Any
 
 from src.app.bootstrap import build_agent
-from src.app.config import AppConfig, load_config
+from src.app.config import AppConfig
 from src.app.web_projects import WebProject, WebProjectStore
 from src.app.web_steps import StepTimelineBuilder
 from src.app.web_turns import build_session_turns
+from src.evidence.session_log import SessionEventBus
 from src.state.session import SessionStore
+from src.state.model_selection import resolve_model_snapshot, validate_model_options
 from src.state.workspace import Workspace, now_iso
 
 
@@ -132,6 +134,7 @@ class WebRunManager:
                     "latest_run_id": store.latest_run_id(session),
                     "active_run_id": self.session_active.get(self._session_key(project.id, session_id), ""),
                     "active_status": self._active_status(project.id, session_id),
+                    "active_model_profile": session.get("active_model_profile", ""),
                 }
             )
         return sessions
@@ -142,12 +145,46 @@ class WebRunManager:
         session = self._read_session(path)
         if not session:
             raise KeyError(session_id)
+        if not session.get("active_model_profile"):
+            session["active_model_profile"] = self.config.default_model_profile
+            self._session_store(project).save(session)
         session["project_id"] = project.id
         session["project_root"] = str(project.root)
         session["latest_run_id"] = self._session_store(project).latest_run_id(session)
         session["active_run_id"] = self.session_active.get(self._session_key(project.id, session_id), "")
         session["active_status"] = self._active_status(project.id, session_id)
+        session["model_profiles"] = self.model_profiles(session)
         return session
+
+    def model_profiles(self, session: dict | None = None) -> list[dict]:
+        return [resolve_model_snapshot(session or {}, profile) for profile in self.config.model_profiles.values()]
+
+    def switch_model(self, session_id: str, profile_id: str, reasoning_effort: str = "", project_id: str = "default") -> dict:
+        project = self.project_store.get(project_id)
+        if profile_id not in self.config.model_profiles:
+            raise ValueError(f"unknown model profile: {profile_id}")
+        if self._active_status(project.id, session_id) in ACTIVE_STATUSES:
+            raise RuntimeError("cannot switch model during an active run")
+        store = self._session_store(project)
+        session = store.load_requested(session_id, None, project.root)
+        if str(session.get("id") or "") != session_id:
+            raise KeyError(session_id)
+        previous = str(session.get("active_model_profile") or "")
+        profile = self.config.model_profiles[profile_id]
+        options = validate_model_options(profile, profile.thinking_enabled, reasoning_effort)
+        session["active_model_profile"] = profile_id
+        if options:
+            session.setdefault("model_options", {})[profile_id] = options
+        session.setdefault("model_switches", []).append({"from": previous, "to": profile_id, "at": now_iso(), "source": "web"})
+        store.save(session)
+        # Web 切换没有常驻 Agent，直接写入同一份 session 事件流。
+        SessionEventBus(store.root / f"{session_id}.events.jsonl").emit(
+            "model_switched",
+            previous_model_profile=previous,
+            model_profile=resolve_model_snapshot(session, profile),
+            source="web",
+        )
+        return self.get_session(session_id, project.id)
 
     def get_session_turns(self, session_id: str, project_id: str = "default") -> dict:
         project = self.project_store.get(project_id)
@@ -262,24 +299,17 @@ class WebRunManager:
         return run.status if run else ""
 
     def _config_for_session(self, project: WebProject, session_id: str) -> AppConfig:
-        args = SimpleNamespace(
-            cwd=str(project.root),
-            config=None,
-            provider=self.config.provider,
-            api_key=self.config.api_key,
-            base_url=self.config.base_url,
-            model=self.config.model,
-            approval=self.config.approval,
-            sandbox=self.config.sandbox,
-            max_steps=self.config.max_steps,
-            max_new_tokens=self.config.max_new_tokens,
-            temperature=self.config.temperature,
-            plan_topic=None,
-            plan_path=None,
+        return replace(
+            self.config,
+            cwd=project.root,
+            default_model_profile=self._session_model_profile(project, session_id),
             session_id=session_id,
             resume=session_id,
         )
-        return load_config(args)
+
+    def _session_model_profile(self, project: WebProject, session_id: str) -> str:
+        session = self._session_store(project).load_requested(session_id, None, project.root)
+        return str(session.get("active_model_profile") or self.config.default_model_profile)
 
     def _approval_callback(self, run: WebRun):
         def callback(question: str, choices: list[str]) -> str:

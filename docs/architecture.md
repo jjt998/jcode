@@ -14,7 +14,7 @@ app
 - `runtime` 由 `JCodeAgent` 持有主循环，负责 run 生命周期、动作解析、工具分发、终态收口和恢复后的运行衔接。
 - `runtime_mode` 是 session 级状态；当前支持 `default` 与 `plan`，并由 `JCodeAgent` 的 plan controller 驱动工具面和 final gate。
 - `context` 只负责模型上下文拼装、prefix 渲染、动态工具定义注入、项目规则注入、预算估算和上下文区块渲染。
-- `providers` 只负责模型协议适配和模型响应包装。
+- `providers` 只负责模型协议适配、模型档案路由和模型响应包装；session 保存当前模型档案，run 固化不可变档案快照。
 - `tools` 只负责工具定义、参数校验后的执行和工具结果返回；工具注册表不持有 workspace。
 - `policy` 负责权限、工具规则、sandbox、重复调用和 final gate，策略检查不得长期持有会被 resume 替换的 working memory。
 - `state` 负责 session、task、history、checkpoint、workspace fingerprint 和 resume context 的持久形状。

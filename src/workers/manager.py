@@ -39,13 +39,13 @@ class WorkerManager:
     def worker_refs(self) -> list[str]:
         return sorted(self.workers)
 
-    def spawn(self, prompt: str, *, subagent_type: str = "worker", write_scope: list[str] | None = None) -> ToolResult:
+    def spawn(self, prompt: str, *, subagent_type: str = "worker", write_scope: list[str] | None = None, model_profile: dict | None = None) -> ToolResult:
         subagent_type = _clean_subagent_type(subagent_type)
         parsed = SpawnSubagentArgs.model_validate(
             {"prompt": prompt, "subagent_type": subagent_type, "write_scope": list(write_scope or [])}
         )
         worker_id = "worker-" + uuid.uuid4().hex[:8]
-        worker = WorkerRuntime(worker_id, parsed.prompt, subagent_type=parsed.subagent_type, write_scope=list(parsed.write_scope))
+        worker = WorkerRuntime(worker_id, parsed.prompt, subagent_type=parsed.subagent_type, write_scope=list(parsed.write_scope), model_profile=model_profile)
         self.workers[worker_id] = worker
         worker_dir = self.root / worker_id
         worker_dir.mkdir(parents=True, exist_ok=True)
@@ -55,6 +55,7 @@ class WorkerManager:
             "prompt": parsed.prompt,
             "subagent_type": worker.subagent_type,
             "write_scope": list(worker.write_scope),
+            "model_profile": worker.model_profile,
         }
         (worker_dir / "task_state.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         if self.session_events:

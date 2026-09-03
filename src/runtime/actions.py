@@ -25,16 +25,9 @@ class ModelToolCall:
 FINAL_RE = re.compile(r"^\s*<final>(.*?)</final>\s*$", re.DOTALL)
 TOOL_RE = re.compile(r"^\s*<tool\s+name=[\"']([^\"']+)[\"']\s*>(.*?)</tool>\s*$", re.DOTALL)
 TOOLS_RE = re.compile(r"^\s*<tools>\s*(.*?)\s*</tools>\s*$", re.DOTALL)
-REASONING_RE = re.compile(r"^\s*<reasoning>(.*?)</reasoning>\s*(.*)$", re.DOTALL)
-
-
-def parse_model_action(text: str) -> ModelAction:
-    reasoning = ""
+def parse_model_action(text: str, reasoning: str = "") -> ModelAction:
+    """只解析动作协议，原生思考由 Provider 通过独立字段传入。"""
     body = text
-    reasoning_match = REASONING_RE.fullmatch(text)
-    if reasoning_match:
-        reasoning = reasoning_match.group(1).strip()
-        body = reasoning_match.group(2)
 
     final = FINAL_RE.fullmatch(body)
     if final:

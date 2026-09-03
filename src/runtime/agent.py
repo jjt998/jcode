@@ -17,6 +17,7 @@ from src.state.checkpoint import CheckpointManager
 from src.state.history import append_history
 from src.state.resume import build_resume_context
 from src.state.task import TaskState
+from src.state.model_selection import resolve_model_snapshot
 from src.state.todo import TodoLedger
 from src.tools.base import ToolResult
 
@@ -114,6 +115,15 @@ class JCodeAgent:
         if name not in self.tool_profiles:
             raise ValueError(f"unknown tool profile: {name}")
         self.active_tool_profile_name = name
+
+    def switch_model_profile(self, profile_id: str, *, source: str = "runtime") -> None:
+        """在 run 之间切换 session 的默认模型档案。"""
+        profile = self.model_router.registry.profile(profile_id)
+        previous = str(self.session.get("active_model_profile") or "")
+        self.session["active_model_profile"] = profile.id
+        self.session.setdefault("model_switches", []).append({"from": previous, "to": profile.id, "source": source})
+        self.session_store.save(self.session)
+        self.session_events.emit("model_switched", previous_model_profile=previous, model_profile=profile.snapshot(), source=source)
 
     def run_dream(self, quiet: bool = False, session_ids: list[str] | None = None) -> str:
         from src.memory.consolidation import run_dream
@@ -233,7 +243,9 @@ class JCodeAgent:
         return None
 
     def _begin_run(self, user_message: str):
-        task_state = TaskState.create(user_message)
+        profile_id = str(self.session.get("active_model_profile") or self.config.default_model_profile)
+        profile = self.model_router.registry.profile(profile_id)
+        task_state = TaskState.create(user_message, resolve_model_snapshot(self.session, profile))
         run_dir = self.run_store.start_run(task_state)
         checkpoint = CheckpointManager(run_dir, self.workspace)
         self.working_memory.task_goal = user_message
@@ -243,8 +255,9 @@ class JCodeAgent:
             run_id=task_state.run_id,
             task_id=task_state.task_id,
             user_request=user_message[:500],
+            model_profile=task_state.model_profile,
         )
-        self._record_trace(run_dir, "run_started", task_state, task_id=task_state.task_id, user_request=user_message[:500])
+        self._record_trace(run_dir, "run_started", task_state, task_id=task_state.task_id, user_request=user_message[:500], model_profile=task_state.model_profile)
         if self.working_memory.resume_context:
             self._record_trace(run_dir, "resume_evaluated", task_state, **self.working_memory.resume_context)
         return task_state, run_dir, checkpoint
@@ -316,6 +329,8 @@ class JCodeAgent:
             context_result.context,
             max_tokens=self.config.max_new_tokens,
             temperature=self.config.temperature,
+            profile_id=str(task_state.model_profile.get("id") or ""),
+            model_profile=task_state.model_profile,
         )
 
         self._record_trace(
@@ -325,11 +340,13 @@ class JCodeAgent:
             estimated_input_tokens=response.input_tokens,
             estimated_output_tokens=response.output_tokens,
             response_text=self.redactor.redact(response.text),
+            reasoning_text=self.redactor.redact(response.reasoning),
+            model_profile=task_state.model_profile,
         )
         return response
 
     def _parse_action(self, response, task_state, run_dir):
-        action = parse_model_action(response.text)
+        action = parse_model_action(response.text, str(getattr(response, "reasoning", "") or ""))
         if action.kind == "tools":
             task_state.last_action = {
                 "kind": action.kind,
@@ -349,6 +366,7 @@ class JCodeAgent:
             "action_kind": action.kind,
             "reasoning": action.reasoning,
             "raw_content": action.raw_content or response.text,
+            "model_profile": task_state.model_profile,
         }
         if action.kind == "tool":
             assistant_history_extra.update(

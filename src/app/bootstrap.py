@@ -13,7 +13,9 @@ from src.policy.sandbox import SandboxPolicy
 from src.policy.secrets import SecretRedactor
 from src.policy.tool_rules import ToolPolicyChecker
 from src.policy.tool_profiles import build_tool_profiles
+from src.providers.deepseek import DeepSeekClient
 from src.providers.openai_compatible import OpenAICompatibleClient
+from src.providers.registry import ModelRegistry
 from src.providers.router import ModelRouter
 from src.runtime.agent import JCodeAgent
 from src.state.resume import build_resume_context
@@ -56,8 +58,10 @@ def build_agent(config: AppConfig) -> JCodeAgent:
         call_guard=call_guard,
         redactor=redactor,
     )
-    client = OpenAICompatibleClient(config.api_key, config.base_url, config.model)
-    router = ModelRouter(client)
+    model_registry = ModelRegistry(config.model_profiles, config.default_model_profile)
+    model_registry.register("deepseek", DeepSeekClient)
+    model_registry.register("openai", lambda profile: OpenAICompatibleClient(profile.api_key, profile.base_url, profile.model))
+    router = ModelRouter(model_registry)
     session_events = SessionEventBus(state_dir / "sessions" / f"{session['id']}.events.jsonl")
     if config.resume:
         session_events.emit("session_resumed", **working_memory.resume_context)
@@ -83,6 +87,8 @@ def build_agent(config: AppConfig) -> JCodeAgent:
         active_tool_profile_name="default",
         write_scope=[],
     )
+    if not session.get("active_model_profile"):
+        agent.switch_model_profile(config.default_model_profile, source="bootstrap")
     if config.plan_topic or config.plan_path:
         agent.enter_plan_mode(config.plan_topic or "plan", config.plan_path)
     return agent

@@ -1,9 +1,21 @@
-provider = "openai"
+default_model = "deepseek-flash"
 
-[providers.openai]
+[models.deepseek-flash]
+provider = "deepseek"
+model = "deepseek-v4-flash"
 base_url = "https://api.deepseek.com"
 api_key = "sk-fa31d15031cb4e03802e9e100a3e92ac"
-model = "deepseek-v4-flash"
+reasoning_mode = "native"
+thinking_enabled = true
+reasoning_effort = "high"
+reasoning_effort_options = ["low", "high", "max"]
+
+[models.gpt-coding]
+provider = "openai"
+model = "gpt-5"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+reasoning_mode = "none"
 
 [security]
 approval = "ask"
