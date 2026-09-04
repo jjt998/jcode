@@ -6,6 +6,9 @@ api_protocol = "openai_responses"
 base_url = "https://api.deepseek.com"
 api_key = "sk-27f8071e2af34f1789969770c98ca673"
 
+[runtime]
+max_new_tokens = 32768
+
 [models.deepseek-flash]
 model = "deepseek-v4-flash"
 reasoning_mode = "native"
