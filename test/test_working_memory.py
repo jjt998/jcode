@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from src.memory.working import WorkingMemory
+from src.policy.final_gate import FinalGate
 from src.state.todo import TodoLedger
+from src.state.task import TaskState
 
 
 def test_tool_observation_keeps_summary_and_artifact_only(tmp_path):
@@ -42,3 +44,14 @@ def test_todo_list_renders_progress(tmp_path):
     rendered = ledger.render_list()
 
     assert rendered.splitlines()[0] == "Todo progress: 1/2 completed (50%), 1 in progress, 0 pending"
+
+
+def test_final_gate_requires_pending_todo_in_final_answer(tmp_path):
+    task = TaskState.create("完成任务")
+    session = {"todo_ledger": {"items": [{"todo_id": "todo_1", "status": "pending"}]}}
+
+    denied = FinalGate().check("任务处理完成。", task, WorkingMemory(tmp_path), session=session)
+    allowed = FinalGate().check("任务暂未完成，剩余 todo_1。", task, WorkingMemory(tmp_path), session=session)
+
+    assert denied["reason"] == "unaddressed_pending_todos"
+    assert allowed["allowed"] is True

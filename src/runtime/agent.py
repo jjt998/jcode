@@ -239,7 +239,17 @@ class JCodeAgent:
                     partial_text = self._combined_response_text(task_state, response.text)
                     return self._finish_run(task_state, run_dir, partial_text, MODEL_OUTPUT_INCOMPLETE)
                 if response.text:
-                    return self._finish_run(task_state, run_dir, self._combined_response_text(task_state, response.text), VALID_FINAL)
+                    final_text = self._combined_response_text(task_state, response.text)
+                    gate = self.final_gate.check(final_text, task_state, self.working_memory, session=self.session, workspace=self.workspace)
+                    if gate["allowed"]:
+                        return self._finish_run(task_state, run_dir, final_text, VALID_FINAL)
+                    # Gate 拒绝后保留模型回答，并将缺失动作注入下一轮上下文。
+                    self.working_memory.note_safety(gate["message"])
+                    self._record_trace(run_dir, "final_gate_denied", task_state, reason=gate["reason"], message=gate["message"])
+                    self._create_checkpoint(checkpoint, task_state, run_dir, "final_gate_denied")
+                    self.run_store.write_task_state(run_dir, task_state)
+                    step += 1
+                    continue
                 return self._finish_run(task_state, run_dir, "", "empty_model_content")
             self._record_trace(
                 run_dir,
