@@ -81,6 +81,34 @@ def test_write_file_allows_existing_file_after_read(tmp_path):
     assert target.read_text(encoding="utf-8") == "new"
 
 
+def test_apply_patch_allows_absolute_path_after_relative_read(tmp_path):
+    target = tmp_path / "existing.txt"
+    target.write_text("old", encoding="utf-8")
+    executor, working_memory, _ = build_executor(tmp_path)
+
+    assert executor.execute("read_file", {"path": "existing.txt"}, working_memory=working_memory).status == "success"
+    result = executor.execute(
+        "apply_patch",
+        {"path": str(target), "old_text": "old", "new_text": "new"},
+        working_memory=working_memory,
+    )
+
+    assert result.status == "success"
+    assert target.read_text(encoding="utf-8") == "new"
+
+
+def test_write_file_allows_absolute_path_after_relative_read(tmp_path):
+    target = tmp_path / "existing.txt"
+    target.write_text("old", encoding="utf-8")
+    executor, working_memory, _ = build_executor(tmp_path)
+
+    assert executor.execute("read_file", {"path": "existing.txt"}, working_memory=working_memory).status == "success"
+    result = executor.execute("write_file", {"path": str(target), "content": "new"}, working_memory=working_memory)
+
+    assert result.status == "success"
+    assert target.read_text(encoding="utf-8") == "new"
+
+
 def test_write_file_allows_after_external_change_without_freshness_match(tmp_path):
     target = tmp_path / "existing.txt"
     target.write_text("old", encoding="utf-8")

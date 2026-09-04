@@ -449,7 +449,7 @@ function toolCallNode(turn, step, tool, index) {
   body.className = "tool-body";
   body.append(detailBlock("参数", tool.args_text || "{}", `tool-args:${turnKey(turn)}:${step.step_id}:${tool.tool_id}`));
   if (tool.result_text) {
-    body.append(detailBlock("返回结果（脱敏摘要）", tool.result_text, `tool-result:${turnKey(turn)}:${step.step_id}:${tool.tool_id}`));
+    body.append(detailBlock("返回结果", tool.result_text, `tool-result:${turnKey(turn)}:${step.step_id}:${tool.tool_id}`));
   }
   if (tool.artifact_ref) {
     body.append(toolArtifactNode(tool.artifact_ref));

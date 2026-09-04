@@ -18,18 +18,16 @@ class ToolPolicyChecker:
 
     def check(self, tool: Tool, args: dict, working_memory: WorkingMemory, *, runtime_mode: str = "default", plan_path: str = "") -> PolicyDecision:
         path = args.get("path") or args.get("file")
-        if path:
-            self.workspace.resolve_path(path)
+        rel = self.workspace.relpath(self.workspace.resolve_path(path)) if path else ""
+        normalized_plan_path = self.workspace.relpath(self.workspace.resolve_path(plan_path)) if plan_path else ""
         if tool.name == "write_file":
-            rel = str(path or "").replace("\\", "/")
-            plan_mode_write = runtime_mode == "plan" and bool(plan_path) and rel == str(plan_path).replace("\\", "/")
+            plan_mode_write = runtime_mode == "plan" and rel == normalized_plan_path
             # 新文件允许直接创建；已有文件只要求路径曾经被成功读取，不校验 freshness。
             target_exists = bool(path) and self.workspace.resolve_path(path).is_file()
             if target_exists and rel not in working_memory.file_freshness and not plan_mode_write:
                 return PolicyDecision.deny("read_before_write", f"error: read {rel} before modifying it", layer="tool_policy")
         if tool.name == "apply_patch":
-            rel = str(path or "").replace("\\", "/")
-            plan_mode_write = runtime_mode == "plan" and bool(plan_path) and rel == str(plan_path).replace("\\", "/")
+            plan_mode_write = runtime_mode == "plan" and rel == normalized_plan_path
             if rel and rel not in working_memory.file_freshness and not plan_mode_write:
                 return PolicyDecision.deny("read_before_write", f"error: read {rel} before modifying it", layer="tool_policy")
         if tool.name == "apply_patch" and args.get("old_text") == args.get("new_text"):

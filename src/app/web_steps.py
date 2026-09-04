@@ -227,7 +227,7 @@ class StepTimelineBuilder:
         if not tool_call["args_text"]:
             tool_call["args_text"] = _stringify_payload(args)
         tool_call["status"] = _normalize_status(status, default="success")
-        # trace 仅记录脱敏摘要，Web 不从运行事件获取原始工具输出。
+        # trace 记录从运行事件获取的原始工具输出。
         tool_call["result_text"] = _stringify_payload(result if result is not None else event.get("result_summary") or event.get("result_text") or event.get("content") or "")
         tool_call["artifact_ref"] = str(event.get("artifact_ref") or "")
         tool_call["error_type"] = str(event.get("error_type") or "")
