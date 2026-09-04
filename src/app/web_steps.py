@@ -193,6 +193,7 @@ class StepTimelineBuilder:
                 "status": "running",
                 "duration_ms": None,
                 "result_text": "",
+                "artifact_ref": "",
                 "error_type": "",
                 "started_at": now,
                 "finished_at": "",
@@ -215,6 +216,7 @@ class StepTimelineBuilder:
                 "status": "running",
                 "duration_ms": None,
                 "result_text": "",
+                "artifact_ref": "",
                 "error_type": "",
                 "started_at": "",
                 "finished_at": "",
@@ -225,7 +227,9 @@ class StepTimelineBuilder:
         if not tool_call["args_text"]:
             tool_call["args_text"] = _stringify_payload(args)
         tool_call["status"] = _normalize_status(status, default="success")
-        tool_call["result_text"] = _stringify_payload(result if result is not None else event.get("result_text") or event.get("content") or "")
+        # trace 仅记录脱敏摘要，Web 不从运行事件获取原始工具输出。
+        tool_call["result_text"] = _stringify_payload(result if result is not None else event.get("result_summary") or event.get("result_text") or event.get("content") or "")
+        tool_call["artifact_ref"] = str(event.get("artifact_ref") or "")
         tool_call["error_type"] = str(event.get("error_type") or "")
         tool_call["finished_at"] = now
         tool_call["duration_ms"] = _duration_ms(tool_call.get("started_at", ""), now)

@@ -127,6 +127,24 @@ def create_app(manager: WebRunManager) -> FastAPI:
             raise HTTPException(status_code=404, detail="context audit not found")
         return json.loads(path.read_text(encoding="utf-8"))
 
+    @app.get("/api/projects/{project_id}/tool-artifact")
+    def get_tool_artifact(project_id: str, ref: str):
+        """读取当前项目某次运行外置的完整工具输出。"""
+        try:
+            project = manager.project_store.get(project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="project not found") from exc
+        normalized = Path(ref.replace("\\", "/"))
+        parts = normalized.parts
+        if normalized.is_absolute() or len(parts) < 5 or parts[:2] != (".jcode", "runs") or "artifacts" not in parts:
+            raise HTTPException(status_code=400, detail="invalid tool artifact reference")
+        path = (project.root / normalized).resolve()
+        runs_root = (project.root / ".jcode" / "runs").resolve()
+        relative_parts = path.relative_to(runs_root).parts if runs_root in path.parents else ()
+        if len(relative_parts) < 3 or relative_parts[1] != "artifacts" or not path.is_file():
+            raise HTTPException(status_code=404, detail="tool artifact not found")
+        return {"ref": str(normalized).replace("\\", "/"), "content": path.read_text(encoding="utf-8")}
+
     @app.get("/api/sessions")
     def list_sessions():
         return manager.list_sessions("default")

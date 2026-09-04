@@ -301,10 +301,19 @@ class JCodeAgent:
             "history": [event.to_dict() for event in context_result.history],
             "working_memory": context_result.working_memory.to_dict(),
             "current_request": context_result.current_request,
-            "tools": [tool.name for tool in context_result.tools],
         }
-        audit_ref = self.run_store.write_audit(run_dir, f"context-{task_state.step_index:04d}.json", {"context_result": context_snapshot, "ctx_info": context_result.ctx_info})
-        audit_sha256 = hashlib.sha256(json.dumps({"context_result": context_snapshot, "ctx_info": context_result.ctx_info}, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+        request_preview = self.model_router.request_preview(
+            context_result,
+            max_tokens=self.config.max_new_tokens,
+            temperature=self.config.temperature,
+            profile_id=str(task_state.model_profile.get("id") or ""),
+            model_profile=task_state.model_profile,
+        )
+        context_snapshot["tools"] = list(request_preview.get("tools", []))
+        context_snapshot["input"] = list(request_preview.get("input", []))
+        audit_data = {"context_result": context_snapshot, "ctx_info": context_result.ctx_info}
+        audit_ref = self.run_store.write_audit(run_dir, f"context-{task_state.step_index:04d}.json", audit_data)
+        audit_sha256 = hashlib.sha256(json.dumps(audit_data, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
         event_payload = self._context_event_payload(context_result, audit_ref, audit_sha256)
         self.session_events.emit("context_built", run_id=task_state.run_id, **event_payload)
         self._record_trace(run_dir, "context_built", task_state, **event_payload)

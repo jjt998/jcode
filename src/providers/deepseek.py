@@ -41,6 +41,16 @@ class DeepSeekClient:
             raise RuntimeError(f"deepseek responses error {exc.code}: {body[:500]}") from exc
         return self._parse_response(data)
 
+    def request_preview(self, context: ContextResult, *, model: str, max_tokens: int, temperature: float, model_profile: dict | None = None) -> dict:
+        """返回不含认证信息的实际请求编译结果，供 Context 审计展示。"""
+        return self._compile_request(
+            context,
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            model_profile=model_profile,
+        )
+
     def _compile_request(self, context: ContextResult, *, model: str, max_tokens: int, temperature: float, model_profile: dict | None) -> dict:
         options = dict(model_profile or self.profile.snapshot())
         payload: dict[str, object] = {
@@ -64,7 +74,7 @@ class DeepSeekClient:
         """按缓存友好顺序编译内部上下文、历史事件与当前请求。"""
         items: list[dict] = []
         if context.skill.strip():
-            items.append({"role": "user", "content": "[JCode Skill Context]\n" + context.skill})
+            items.append({"role": "user", "content": context.skill})
         for event in context.history:
             items.extend(self._compile_history_event(event, continuation_run_id=str(context.provider_continuation.get("run_id") or "")))
         continuation_items = context.provider_continuation.get("items", [])
@@ -72,7 +82,7 @@ class DeepSeekClient:
             items.extend(dict(item) for item in continuation_items if isinstance(item, dict))
         memory_text = context.working_memory.render().strip()
         if memory_text:
-            items.append({"role": "user", "content": "[JCode Working Memory]\n" + memory_text})
+            items.append({"role": "user", "content": memory_text})
         items.append({"role": "user", "content": context.current_request})
         return items
 

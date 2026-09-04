@@ -70,8 +70,8 @@ def test_deepseek_responses_compiles_cache_order_and_native_tools(monkeypatch, t
     assert payload["instructions"] == "stable prefix"
     assert payload["reasoning"] == {"effort": "high"}
     assert "temperature" not in payload
-    assert payload["input"][0]["content"].startswith("[JCode Skill Context]")
-    assert payload["input"][-2]["content"].startswith("[JCode Working Memory]")
+    assert payload["input"][0] == {"role": "user", "content": "use repository evidence"}
+    assert payload["input"][-2]["content"] == _context(tmp_path).working_memory.render()
     assert payload["input"][-1] == {"role": "user", "content": "do the task"}
     assert payload["input"][2]["type"] == "function_call"
     assert payload["input"][3] == {"type": "function_call_output", "call_id": "call-1", "output": "file content"}
@@ -89,6 +89,23 @@ def test_deepseek_responses_parses_function_calls(monkeypatch, tmp_path):
     assert response.text == ""
     assert response.reasoning == "inspect"
     assert [(call.call_id, call.name, call.arguments) for call in response.tool_calls or []] == [("call-2", "read_file", {"path": "a.py"})]
+
+
+def test_request_preview_matches_native_input_and_complete_tool_schema(tmp_path):
+    profile = _profile()
+    context = _context(tmp_path)
+    preview = DeepSeekClient(profile).request_preview(context, model=profile.model, max_tokens=100, temperature=0.2)
+
+    assert preview["input"][-1] == {"role": "user", "content": "do the task"}
+    assert preview["tools"] == [
+        {
+            "type": "function",
+            "name": "read_file",
+            "description": "read",
+            "parameters": {"type": "object"},
+        }
+    ]
+    assert "api_key" not in preview
 
 
 def test_deepseek_responses_replays_same_run_native_items_once(tmp_path):

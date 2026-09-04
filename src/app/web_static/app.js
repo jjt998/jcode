@@ -392,10 +392,40 @@ function toolCallNode(turn, step, tool, index) {
   body.className = "tool-body";
   body.append(detailBlock("参数", tool.args_text || "{}", `tool-args:${turnKey(turn)}:${step.step_id}:${tool.tool_id}`));
   if (tool.result_text) {
-    body.append(detailBlock("返回结果", tool.result_text, `tool-result:${turnKey(turn)}:${step.step_id}:${tool.tool_id}`));
+    body.append(detailBlock("返回结果（脱敏摘要）", tool.result_text, `tool-result:${turnKey(turn)}:${step.step_id}:${tool.tool_id}`));
+  }
+  if (tool.artifact_ref) {
+    body.append(toolArtifactNode(tool.artifact_ref));
   }
   details.append(body);
   return details;
+}
+
+function toolArtifactNode(ref) {
+  const section = document.createElement("section");
+  section.className = "tool-artifact";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "查看完整输出";
+  const path = document.createElement("code");
+  path.textContent = ref;
+  section.append(button, path);
+  button.addEventListener("click", async () => {
+    if (!state.projectId || button.dataset.loaded === "true") return;
+    button.disabled = true;
+    button.textContent = "加载中";
+    try {
+      const data = await api(`/api/projects/${encodeURIComponent(state.projectId)}/tool-artifact?ref=${encodeURIComponent(ref)}`);
+      section.append(detailBlock("完整输出", data.content || "", `tool-artifact:${state.projectId}:${ref}`));
+      button.dataset.loaded = "true";
+      button.textContent = "完整输出已加载";
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = "无法加载完整输出";
+      path.textContent = error.message;
+    }
+  });
+  return section;
 }
 
 function detailBlock(title, content, key) {

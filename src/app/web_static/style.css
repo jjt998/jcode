@@ -418,6 +418,7 @@ h3 {
   padding: 0 16px 16px;
   display: grid;
   gap: 12px;
+  min-width: 0;
 }
 
 .step-reasoning,
@@ -502,6 +503,8 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 7px;
   background: #fff;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .tool-call > summary,
@@ -562,10 +565,42 @@ h3 {
   gap: 8px;
 }
 
+.tool-artifact {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tool-artifact button {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--signal);
+  font-weight: 700;
+}
+
+.tool-artifact button:disabled {
+  cursor: default;
+  color: var(--muted);
+}
+
+.tool-artifact code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+}
+
 .mini-detail pre {
   margin: 0;
   padding: 10px 12px 12px;
   max-height: 320px;
+  max-width: 100%;
+  min-width: 0;
   overflow: auto;
   background: var(--code);
   color: #e7efe8;
@@ -573,6 +608,7 @@ h3 {
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .final-answer {
