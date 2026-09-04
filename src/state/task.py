@@ -23,6 +23,8 @@ class TaskState:
     changed_files: list[str] = field(default_factory=list)
     failed_tools: list[dict] = field(default_factory=list)
     provider_continuation: dict = field(default_factory=dict)  # 当前 run 的 Provider 原生续接项
+    output_continuation_count: int = 0  # 模型输出被截断后的续写次数
+    partial_response_parts: list[str] = field(default_factory=list)  # 截断响应中已保留的正文片段
     final_answer: str = ""
     created_at: str = field(default_factory=now_iso)
     updated_at: str = field(default_factory=now_iso)

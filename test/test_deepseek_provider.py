@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import urllib.error
 
 from src.context.result import ContextResult, HistoryEvent, ToolDefinition
 from src.memory.working import WorkingMemory
 from src.providers.deepseek import DeepSeekClient
+from src.providers.base import ProviderRequestError
 from src.providers.profiles import ModelProfile
 
 
@@ -131,3 +133,38 @@ def test_deepseek_responses_replays_same_run_native_items_once(tmp_path):
     assert sum(item.get("call_id") == "call-current" for item in items) == 2
     assert any(item.get("type") == "reasoning" for item in items)
     assert any(item.get("role") == "assistant" and item.get("content") == "I will inspect the current file." for item in items)
+
+
+def test_deepseek_response_exposes_incomplete_and_failed_details(monkeypatch, tmp_path):
+    replies = [
+        {"status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"}, "output": [{"type": "message", "content": [{"type": "output_text", "text": "partial"}]}]},
+        {"status": "failed", "error": {"code": "503", "message": "busy"}, "output": []},
+    ]
+
+    def fake_urlopen(request, timeout):
+        return FakeHttpResponse(replies.pop(0))
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    client = DeepSeekClient(_profile())
+    incomplete = client.complete(_context(tmp_path), model="deepseek-v4-pro", max_tokens=100, temperature=0.2)
+    failed = client.complete(_context(tmp_path), model="deepseek-v4-pro", max_tokens=100, temperature=0.2)
+
+    assert incomplete.incomplete_reason == "max_output_tokens"
+    assert incomplete.text == "partial"
+    assert failed.provider_error_code == "503"
+    assert failed.provider_error_message == "busy"
+
+
+def test_deepseek_http_error_is_structured_for_runtime_retry(monkeypatch, tmp_path):
+    def fake_urlopen(request, timeout):
+        raise urllib.error.HTTPError("https://api.deepseek.com/responses", 429, "rate limited", {"Retry-After": "2"}, None)
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    try:
+        DeepSeekClient(_profile()).complete(_context(tmp_path), model="deepseek-v4-pro", max_tokens=100, temperature=0.2)
+    except ProviderRequestError as exc:
+        assert exc.status_code == 429
+        assert exc.retry_after_seconds == 2
+    else:
+        raise AssertionError("expected ProviderRequestError")

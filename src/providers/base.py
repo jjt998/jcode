@@ -6,6 +6,16 @@ from typing import Protocol
 from src.context.result import ContextResult
 
 
+class ProviderRequestError(RuntimeError):
+    """Provider 请求失败，携带运行时恢复策略所需的结构化信息。"""
+
+    def __init__(self, message: str, *, status_code: int = 0, retry_after_seconds: float | None = None, transport_error: bool = False):
+        super().__init__(message)
+        self.status_code = int(status_code)  # HTTP 状态码，网络错误为 0
+        self.retry_after_seconds = retry_after_seconds  # 服务端建议的重试等待秒数
+        self.transport_error = bool(transport_error)  # 无 HTTP 状态的临时网络异常标记
+
+
 @dataclass
 class ModelToolCall:
     call_id: str  # Provider 返回的调用标识
@@ -23,6 +33,10 @@ class ModelResponse:
     input_tokens: int = 0
     output_tokens: int = 0
     raw: dict | None = None
+    incomplete_reason: str = ""  # incomplete_details.reason 的原始值
+    provider_error_code: str = ""  # Provider 响应错误码
+    provider_error_message: str = ""  # Provider 响应错误摘要
+    retry_after_seconds: float | None = None  # Provider 建议的等待秒数
 
 
 class ModelClient(Protocol):

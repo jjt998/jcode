@@ -11,6 +11,7 @@ from src.evidence.tool_artifacts import prepare_tool_result_observation
 from src.evidence.session_log import SessionEventBus
 from src.memory.consolidation import maintain_after_turn
 from src.policy.decisions import PolicyDecision
+from src.providers.base import ModelResponse, ProviderRequestError
 from src.providers.continuation import ProviderContinuation
 from src.runtime.plan import PlanModeController, runtime_mode_name, runtime_mode_plan_path
 from src.runtime.transitions import ABORTED, MODEL_ERROR, MODEL_OUTPUT_INCOMPLETE, STEP_LIMIT_REACHED, VALID_FINAL
@@ -21,6 +22,16 @@ from src.state.task import TaskState
 from src.state.model_selection import resolve_model_snapshot
 from src.state.todo import TodoLedger
 from src.tools.base import ToolResult
+
+
+# 临时服务故障可在不改变上下文的前提下重试；参数和鉴权错误必须直接暴露。
+RETRYABLE_HTTP_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
+RETRYABLE_PROVIDER_ERROR_CODES = frozenset({"internal_error", "rate_limit_exceeded", "server_error", "service_unavailable", "temporarily_unavailable", "timeout"})
+MAX_TRANSPORT_RETRIES = 3
+MAX_OUTPUT_CONTINUATIONS = 2
+CONTINUATION_REQUEST = """[Continuation Required]
+Your previous response was truncated before completion. Continue directly from the unfinished point.
+Do not repeat prior content, do not restate the task, and complete the remaining work."""
 
 if TYPE_CHECKING:
     from src.app.config import AppConfig
@@ -181,13 +192,15 @@ class JCodeAgent:
         task_state, run_dir, checkpoint = self._begin_run(user_message)
         final_text = ""
 
-        for step in range(self.config.max_steps):
+        step = 0
+        while step < self.config.max_steps:
             if self.abort_requested:
                 return self._finish_run(task_state, run_dir, "Stopped after abort request.", ABORTED)
             task_state.step_index = step + 1
             task_state.attempts += 1
 
-            context_result = self._build_context(user_message, task_state, run_dir)
+            request_text = CONTINUATION_REQUEST if task_state.partial_response_parts else user_message
+            context_result = self._build_context(request_text, task_state, run_dir)
             try:
                 response = self._call_model(context_result, task_state, run_dir)
 
@@ -206,9 +219,24 @@ class JCodeAgent:
             if not tool_calls:
                 self._create_checkpoint(checkpoint, task_state, run_dir, "model_completed")
                 if not self._is_completed_response(response.finish_reason):
-                    return self._finish_run(task_state, run_dir, response.text, MODEL_OUTPUT_INCOMPLETE)
+                    if self._should_continue_incomplete(response, task_state):
+                        task_state.partial_response_parts.append(response.text)
+                        task_state.output_continuation_count += 1
+                        self._record_recovery_event(
+                            run_dir,
+                            task_state,
+                            "model_output_continuation_scheduled",
+                            reason=response.incomplete_reason or "unknown",
+                            continuation_count=task_state.output_continuation_count,
+                        )
+                        self._create_checkpoint(checkpoint, task_state, run_dir, "model_output_continuation")
+                        self.run_store.write_task_state(run_dir, task_state)
+                        # 续写不是新的任务决策，不消耗 max_steps。
+                        continue
+                    partial_text = self._combined_response_text(task_state, response.text)
+                    return self._finish_run(task_state, run_dir, partial_text, MODEL_OUTPUT_INCOMPLETE)
                 if response.text:
-                    return self._finish_run(task_state, run_dir, response.text, VALID_FINAL)
+                    return self._finish_run(task_state, run_dir, self._combined_response_text(task_state, response.text), VALID_FINAL)
                 return self._finish_run(task_state, run_dir, "", "empty_model_content")
             self._record_trace(
                 run_dir,
@@ -220,6 +248,7 @@ class JCodeAgent:
                 if self.abort_requested:
                     break
                 self._execute_tool_call(call.name, call.arguments, task_state, run_dir, checkpoint, call_id=call.call_id)
+            step += 1
 
         return self._finish_run(task_state, run_dir, final_text or "Stopped after reaching max steps.", STEP_LIMIT_REACHED)
 
@@ -312,7 +341,12 @@ class JCodeAgent:
         context_snapshot["tools"] = list(request_preview.get("tools", []))
         context_snapshot["input"] = list(request_preview.get("input", []))
         audit_data = {"context_result": context_snapshot, "ctx_info": context_result.ctx_info}
-        audit_ref = self.run_store.write_audit(run_dir, f"context-{task_state.step_index:04d}.json", audit_data)
+        # 同一步可因输出截断续写多次，审计文件必须按请求尝试号区分，不能覆盖。
+        audit_ref = self.run_store.write_audit(
+            run_dir,
+            f"context-{task_state.step_index:04d}-{task_state.attempts:04d}.json",
+            audit_data,
+        )
         audit_sha256 = hashlib.sha256(json.dumps(audit_data, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
         event_payload = self._context_event_payload(context_result, audit_ref, audit_sha256)
         self.session_events.emit("context_built", run_id=task_state.run_id, **event_payload)
@@ -373,13 +407,43 @@ class JCodeAgent:
             self._record_trace(run_dir, event_name, task_state, **summary_payload)
 
     def _call_model(self, context_result, task_state, run_dir):
-        response = self.model_router.complete(
-            context_result,
-            max_tokens=self.config.max_new_tokens,
-            temperature=self.config.temperature,
-            profile_id=str(task_state.model_profile.get("id") or ""),
-            model_profile=task_state.model_profile,
-        )
+        """复用同一上下文处理临时 Provider 故障，禁止重复构建审计与历史。"""
+        for retry_index in range(MAX_TRANSPORT_RETRIES + 1):
+            try:
+                response = self.model_router.complete(
+                    context_result,
+                    max_tokens=self.config.max_new_tokens,
+                    temperature=self.config.temperature,
+                    profile_id=str(task_state.model_profile.get("id") or ""),
+                    model_profile=task_state.model_profile,
+                )
+            except Exception as exc:
+                if not self._is_retryable_provider_error(exc) or retry_index >= MAX_TRANSPORT_RETRIES:
+                    if retry_index:
+                        self._record_recovery_event(run_dir, task_state, "model_retry_exhausted", retry_count=retry_index, error_type=type(exc).__name__, message=str(exc)[:500])
+                    raise
+                delay_seconds = self._retry_delay_seconds(exc, retry_index)
+                self._record_recovery_event(run_dir, task_state, "model_retry_scheduled", retry_count=retry_index + 1, delay_seconds=delay_seconds, error_type=type(exc).__name__, message=str(exc)[:500])
+                time.sleep(delay_seconds)
+                self._record_recovery_event(run_dir, task_state, "model_retry_attempted", retry_count=retry_index + 1)
+                continue
+            if response.finish_reason == "failed":
+                error = ProviderRequestError(
+                    response.provider_error_message or "deepseek response failed",
+                    status_code=self._response_status_code(response),
+                    retry_after_seconds=response.retry_after_seconds,
+                )
+                if self._is_retryable_provider_error(error) or self._is_retryable_failed_response(response):
+                    if retry_index >= MAX_TRANSPORT_RETRIES:
+                        self._record_recovery_event(run_dir, task_state, "model_retry_exhausted", retry_count=retry_index, provider_error_code=response.provider_error_code, message=response.provider_error_message[:500])
+                        raise error
+                    delay_seconds = self._retry_delay_seconds(error, retry_index)
+                    self._record_recovery_event(run_dir, task_state, "model_retry_scheduled", retry_count=retry_index + 1, delay_seconds=delay_seconds, provider_error_code=response.provider_error_code, message=response.provider_error_message[:500])
+                    time.sleep(delay_seconds)
+                    self._record_recovery_event(run_dir, task_state, "model_retry_attempted", retry_count=retry_index + 1)
+                    continue
+                raise error
+            break
 
         self._record_trace(
             run_dir,
@@ -391,10 +455,61 @@ class JCodeAgent:
             reasoning_chars=len(response.reasoning),
             reasoning_sha256=hashlib.sha256(response.reasoning.encode("utf-8")).hexdigest() if response.reasoning else "",
             finish_reason=response.finish_reason,
+            incomplete_reason=response.incomplete_reason,
+            provider_error_code=response.provider_error_code,
+            provider_error_message=response.provider_error_message[:500],
             native_tool_calls=[{"call_id": call.call_id, "name": call.name, "arguments": call.arguments} for call in response.tool_calls or []],
             model_profile=task_state.model_profile,
         )
         return response
+
+    @staticmethod
+    def _combined_response_text(task_state, response_text: str) -> str:
+        """将被截断的旧片段和最后完成片段按生成顺序交付。"""
+        return "\n".join(part for part in [*task_state.partial_response_parts, str(response_text).strip()] if part).strip()
+
+    @staticmethod
+    def _response_status_code(response: ModelResponse) -> int:
+        """错误响应优先使用数值 code，无法识别时由 Provider error type 决定不重试。"""
+        try:
+            return int(response.provider_error_code)
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _is_retryable_provider_error(exc: Exception) -> bool:
+        """只重试官方定义的限流、服务端故障和网络传输失败。"""
+        if not isinstance(exc, ProviderRequestError):
+            return False
+        return exc.transport_error or exc.status_code in RETRYABLE_HTTP_STATUS_CODES
+
+    @staticmethod
+    def _is_retryable_failed_response(response: ModelResponse) -> bool:
+        """兼容 failed 终态中服务端使用字符串 error code 的情况。"""
+        return response.provider_error_code.strip().lower() in RETRYABLE_PROVIDER_ERROR_CODES
+
+    @staticmethod
+    def _retry_delay_seconds(exc: Exception, retry_index: int) -> float:
+        """遵从有效 Retry-After，否则采用有上限的指数退避。"""
+        retry_after = getattr(exc, "retry_after_seconds", None)
+        if isinstance(retry_after, (int, float)) and retry_after > 0:
+            return min(float(retry_after), 30.0)
+        return min(0.5 * (2**retry_index), 4.0)
+
+    @staticmethod
+    def _should_continue_incomplete(response: ModelResponse, task_state) -> bool:
+        """仅在输出截断且尚有续写预算时继续；其他不完整状态不可盲目恢复。"""
+        if response.finish_reason != "incomplete" or not response.text.strip():
+            return False
+        if response.incomplete_reason == "max_output_tokens":
+            return task_state.output_continuation_count < MAX_OUTPUT_CONTINUATIONS
+        # 服务端未说明原因时仅试一次，避免因未知状态无限续写。
+        return not response.incomplete_reason and task_state.output_continuation_count == 0
+
+    def _record_recovery_event(self, run_dir, task_state, event: str, **payload) -> None:
+        """让 session event 与 run trace 同步记录模型恢复行为。"""
+        self.session_events.emit(event, run_id=task_state.run_id, **payload)
+        self._record_trace(run_dir, event, task_state, **payload)
 
     def _record_model_history(self, response, task_state) -> None:
         """分别写入通用会话历史与当前 run 的 Provider 原生续接项。"""

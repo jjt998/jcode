@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import socket
 import urllib.error
 import urllib.request
 
 from src.context.budget import estimate_tokens
 from src.context.result import ContextResult, HistoryEvent
-from src.providers.base import ModelResponse, ModelToolCall
+from src.providers.base import ModelResponse, ModelToolCall, ProviderRequestError
 from src.providers.profiles import ModelProfile
 
 
@@ -38,7 +39,13 @@ class DeepSeekClient:
                 data = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"deepseek responses error {exc.code}: {body[:500]}") from exc
+            raise ProviderRequestError(
+                f"deepseek responses error {exc.code}: {body[:500]}",
+                status_code=int(exc.code),
+                retry_after_seconds=self._retry_after_seconds(exc.headers.get("Retry-After") if exc.headers else None),
+            ) from exc
+        except (urllib.error.URLError, TimeoutError, socket.timeout, ConnectionError) as exc:
+            raise ProviderRequestError(f"deepseek transport error: {str(exc)[:500]}", transport_error=True) from exc
         return self._parse_response(data)
 
     def request_preview(self, context: ContextResult, *, model: str, max_tokens: int, temperature: float, model_profile: dict | None = None) -> dict:
@@ -122,6 +129,8 @@ class DeepSeekClient:
             elif item_type == "message":
                 text_parts.extend(self._content_text(item.get("content")))
         usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+        incomplete_details = data.get("incomplete_details") if isinstance(data.get("incomplete_details"), dict) else {}
+        error = data.get("error") if isinstance(data.get("error"), dict) else {}
         return ModelResponse(
             text=str(data.get("output_text") or "\n".join(text_parts)).strip(),
             reasoning="\n".join(reasoning_parts).strip(),
@@ -130,7 +139,19 @@ class DeepSeekClient:
             input_tokens=int(usage.get("input_tokens", 0) or 0),
             output_tokens=int(usage.get("output_tokens", 0) or 0),
             raw=data,
+            incomplete_reason=str(incomplete_details.get("reason") or ""),
+            provider_error_code=str(error.get("code") or error.get("type") or ""),
+            provider_error_message=str(error.get("message") or ""),
         )
+
+    @staticmethod
+    def _retry_after_seconds(value: object) -> float | None:
+        """仅接受正数秒数 Retry-After，日期格式交给默认退避策略处理。"""
+        try:
+            seconds = float(str(value or "").strip())
+        except ValueError:
+            return None
+        return seconds if seconds > 0 else None
 
     @staticmethod
     def _content_text(content: object) -> list[str]:
