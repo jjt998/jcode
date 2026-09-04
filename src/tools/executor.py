@@ -205,10 +205,10 @@ class ToolExecutor:
         except Exception:
             return PolicyDecision.allow("read_file_repeat_check_skipped", layer="call_guard", metadata={"tool_name": invocation.tool.name})
 
-        if working_memory.read_file_count(relpath, invocation.parsed_args, current_freshness) >= 3:
+        if working_memory.read_file_complete_count(relpath, invocation.parsed_args, current_freshness) >= 2:
             return PolicyDecision.deny(
                 "repeated_old_file_read",
-                "error: You've already reread this unchanged file three times. Please avoid repeatedly reading content you already know. If you still need the missing result, you can call ask_user to decide the next step.",
+                "error: This unchanged file range was already returned completely twice. Continue analyzing the existing result or use a different range if you need other content.",
                 layer="call_guard",
                 metadata={"path": relpath, "freshness": current_freshness},
             )

@@ -587,17 +587,12 @@ class JCodeAgent:
                 runtime=self,
             )
 
-        artifact_read = tool_name == "read_file" and bool(result.metadata.get("artifact_read"))
-        if artifact_read:
-            source_files = self._artifact_source_files(str(tool_args.get("path", "")))
-            if source_files:
-                result.metadata["source_files"] = source_files
-            missing_chars = int(result.metadata.get("missing_chars", 0) or 0)
-            if result.ok and missing_chars:
-                result.text += (
-                    f"\n[read_file result is truncated, the missing chars are {missing_chars}; "
-                    "use start/end to continue reading.]"
-                )
+        if tool_name == "read_file":
+            # artifact 文件同样按 read_file 协议直接分段返回，复用原始来源参与 stale 判断。
+            if result.metadata.get("artifact_read"):
+                source_files = self._artifact_source_files(str(tool_args.get("path", "")))
+                if source_files:
+                    result.metadata["source_files"] = source_files
         else:
             result_text, artifact_metadata, result_artifacts = prepare_tool_result_observation(
                 self.run_store,
@@ -654,7 +649,7 @@ class JCodeAgent:
             error_type=result.error_type,
             changed_files=result.changed_files,
             artifact_ref=str(result.metadata.get("full_output_artifact") or ""),
-            result_summary=self.redactor.redact(str(result.metadata.get("observation_summary") or result.text[:1500])),
+            result_summary=self.redactor.redact(result.text),
             **trace_meta,
         )
         self._create_checkpoint(checkpoint, task_state, run_dir, "tool_executed")

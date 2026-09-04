@@ -31,6 +31,19 @@ def test_steps_show_process_content_without_reasoning():
     assert steps[1]["process_content"] == ""
 
 
+def test_steps_keep_full_tool_result_summary():
+    full_result = "x" * 1601
+    events = [
+        {"event": "model_responded", "created_at": "2026-08-30T15:23:41Z", "native_tool_calls": [{"call_id": "call-1", "name": "read_file", "arguments": {}}]},
+        {"event": "tool_requested", "created_at": "2026-08-30T15:23:42Z", "call_id": "call-1", "name": "read_file", "args": {}},
+        {"event": "tool_executed", "created_at": "2026-08-30T15:23:43Z", "call_id": "call-1", "name": "read_file", "status": "success", "result_summary": full_result},
+    ]
+
+    steps, _ = build_reasoning_steps(events, run_id="run-1")
+
+    assert steps[0]["tool_calls"][0]["result_text"] == full_result
+
+
 def test_active_run_snapshot_contains_current_steps_and_cursor():
     run = WebRun("web-run-1", "project-1", Path("."), "session-1", user_message="检查代码")
     run.reasoning_steps = [{"step_id": "run-1:1", "index": 1, "status": "running"}]

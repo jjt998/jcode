@@ -8,15 +8,28 @@ from src.state.task import TaskState
 
 def test_tool_observation_keeps_summary_and_artifact_only(tmp_path):
     memory = WorkingMemory(tmp_path)
-    memory.observe_tool("run_shell", "success", "x" * 500, ".jcode/runs/run-1/artifacts/output.txt")
+    memory.observe_tool("run_shell", "success", "x" * 1200, ".jcode/runs/run-1/artifacts/output.txt")
 
     observation = memory.to_dict()["tools"]["observations"][0]
     assert observation == {
         "tool": "run_shell",
         "status": "success",
-        "summary": "x" * 300,
+        "summary": "x" * 500 + "\n[...middle omitted...]\n" + "x" * 500,
         "artifact": ".jcode/runs/run-1/artifacts/output.txt",
     }
+
+
+def test_file_read_projection_shows_current_range(tmp_path):
+    memory = WorkingMemory(tmp_path)
+    memory.note_file_read("note.txt", {"path": "note.txt", "start": 0, "end": None, "max_chars": 20}, "1:5", {
+        "file_size": 5, "returned_chars": 5, "missing_chars": 0, "complete": True,
+    })
+
+    rendered = memory.render()
+
+    assert "file_reads:" in rendered
+    assert "range: 0..EOF" in rendered
+    assert "complete: true" in rendered
 
 
 def test_todo_projection_renders_items_and_progress(tmp_path):

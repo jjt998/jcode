@@ -13,6 +13,7 @@ class WorkingMemory:
     recent_files: list[str] = field(default_factory=list)
     file_freshness: dict[str, str] = field(default_factory=dict)
     read_file_counts: dict[str, dict[str, int]] = field(default_factory=dict)
+    file_reads: dict[str, dict[str, dict]] = field(default_factory=dict)  # 按文件版本累计的读取范围与状态
     tool_observations: list[dict] = field(default_factory=list)
     resume_context: dict = field(default_factory=dict)
     retrieved_memory: list[str] = field(default_factory=list)
@@ -32,6 +33,7 @@ class WorkingMemory:
         safety = data.get("safety", {}) if isinstance(data.get("safety"), dict) else {}
         compact = data.get("compact", {}) if isinstance(data.get("compact"), dict) else {}
         read_file_counts = _read_file_counts_from_dict(files.get("read_file_counts", data.get("read_file_counts", {})))
+        file_reads = _file_reads_from_dict(files.get("reads", data.get("file_reads", {})))
         return cls(
             workspace_root=workspace_root,
             task_goal=str(task.get("goal", data.get("task_goal", ""))),
@@ -39,6 +41,7 @@ class WorkingMemory:
             recent_files=list(files.get("recent", data.get("recent_files", []))),
             file_freshness=dict(files.get("freshness", data.get("file_freshness", {}))),
             read_file_counts=read_file_counts,
+            file_reads=file_reads,
             tool_observations=[item for item in tools.get("observations", data.get("tool_observations", [])) if isinstance(item, dict)],
             resume_context=dict(task.get("resume_context", data.get("resume_context", {}))),
             retrieved_memory=list(retrieval.get("items", data.get("retrieved_memory", []))),
@@ -62,6 +65,7 @@ class WorkingMemory:
                 "recent": self.recent_files[-20:],
                 "freshness": self.file_freshness,
                 "read_file_counts": self.read_file_counts,
+                "reads": self.file_reads,
             },
             "retrieval": {
                 "last_query": self.last_retrieval_query,
@@ -90,7 +94,7 @@ class WorkingMemory:
         raw_items = payload.get("items", [])
         self.todo_items = [dict(item) for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
 
-    def note_file_read(self, relpath: str, args: dict, freshness: str) -> None:
+    def note_file_read(self, relpath: str, args: dict, freshness: str, metadata: dict) -> None:
         if relpath not in self.recent_files:
             self.recent_files.append(relpath)
         self.file_freshness[relpath] = freshness
@@ -99,13 +103,44 @@ class WorkingMemory:
         key = _read_file_count_key(relpath, args, freshness)
         bucket[key] = int(bucket.get(key, 0)) + 1
 
+        # 工作记忆只保存读取覆盖与完整性，不保存文件正文。
+        versions = self.file_reads.setdefault(relpath, {})
+        version = versions.setdefault(str(freshness), {"file_size": 0, "ranges": {}})
+        version["file_size"] = int(metadata.get("file_size", 0) or 0)
+        range_key = _read_range_key(args)
+        ranges = version.setdefault("ranges", {})
+        record = ranges.setdefault(
+            range_key,
+            {
+                "start": int(args.get("start", 0)),
+                "end": args.get("end", None),
+                "max_chars": int(args.get("max_chars", 20000)),
+                "returned_chars": 0,
+                "missing_chars": 0,
+                "complete": False,
+                "read_count": 0,
+                "complete_read_count": 0,
+            },
+        )
+        record["returned_chars"] = int(metadata.get("returned_chars", 0) or 0)
+        record["missing_chars"] = int(metadata.get("missing_chars", 0) or 0)
+        record["complete"] = bool(metadata.get("complete", False))
+        record["read_count"] = int(record.get("read_count", 0)) + 1
+        if record["complete"]:
+            record["complete_read_count"] = int(record.get("complete_read_count", 0)) + 1
+
     def read_file_count(self, relpath: str, args: dict, freshness: str) -> int:
         bucket = self.read_file_counts.get(relpath, {})
         return int(bucket.get(_read_file_count_key(relpath, args, freshness), 0))
 
+    def read_file_complete_count(self, relpath: str, args: dict, freshness: str) -> int:
+        """返回同一文件版本与范围的完整读取次数。"""
+        record = self.file_reads.get(relpath, {}).get(str(freshness), {}).get("ranges", {}).get(_read_range_key(args), {})
+        return int(record.get("complete_read_count", 0)) if isinstance(record, dict) else 0
+
     def observe_tool(self, tool_name: str, status: str, summary: str, artifact_ref: str = "") -> None:
         """仅保存工具状态、关键摘要和 artifact 引用，避免复制正文。"""
-        self.tool_observations.append({"tool": tool_name, "status": status, "summary": str(summary)[:300], "artifact": artifact_ref})
+        self.tool_observations.append({"tool": tool_name, "status": status, "summary": _head_tail_summary(str(summary)), "artifact": artifact_ref})
 
     def set_retrieval(self, query: str, items: list[str]) -> None:
         self.last_retrieval_query = query
@@ -132,6 +167,9 @@ class WorkingMemory:
         if self.file_freshness:
             freshness = ", ".join(f"{k}={v}" for k, v in list(self.file_freshness.items())[-10:])
             lines.append("- file_freshness: " + freshness)
+        file_read_lines = self._render_current_file_reads()
+        if file_read_lines:
+            lines.append("- file_reads:\n" + "\n".join(file_read_lines))
         if self.last_retrieval_query:
             lines.append("- last_query: " + self.last_retrieval_query[:200])
         if self.retrieved_memory:
@@ -159,6 +197,29 @@ class WorkingMemory:
                 for item in self.todo_items
             ))
         return "\n".join(lines)
+
+    def _render_current_file_reads(self) -> list[str]:
+        """只展示当前 freshness 的读取范围，旧版本仍保存在持久化数据中。"""
+        lines: list[str] = []
+        for relpath in self.recent_files[-10:]:
+            freshness = self.file_freshness.get(relpath, "")
+            version = self.file_reads.get(relpath, {}).get(freshness, {})
+            ranges = version.get("ranges", {}) if isinstance(version, dict) else {}
+            if not isinstance(ranges, dict) or not ranges:
+                continue
+            lines.append(f"  - {relpath} [freshness={freshness}; file_size={int(version.get('file_size', 0))} bytes]")
+            for record in ranges.values():
+                if not isinstance(record, dict):
+                    continue
+                end = record.get("end")
+                end_text = "EOF" if end is None else str(end)
+                lines.append(
+                    "    - "
+                    f"range: {record.get('start', 0)}..{end_text}; max_chars: {record.get('max_chars', 0)}; "
+                    f"returned_chars: {record.get('returned_chars', 0)}; missing_chars: {record.get('missing_chars', 0)}; "
+                    f"complete: {str(bool(record.get('complete', False))).lower()}; reads: {record.get('read_count', 0)}"
+                )
+        return lines
 
 
 def _read_file_counts_from_dict(raw: object) -> dict[str, dict[str, int]]:
@@ -192,3 +253,42 @@ def _read_file_count_key(relpath: str, args: dict, freshness: str) -> str:
         "freshness": str(freshness),
     }
     return json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+
+def _read_range_key(args: dict) -> str:
+    return json.dumps(
+        {
+            "max_chars": int(args.get("max_chars", 20000)),
+            "start": int(args.get("start", 0)),
+            "end": args.get("end", None),
+        },
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def _file_reads_from_dict(raw: object) -> dict[str, dict[str, dict]]:
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, dict[str, dict]] = {}
+    for relpath, versions in raw.items():
+        if not isinstance(versions, dict):
+            continue
+        clean_versions: dict[str, dict] = {}
+        for freshness, version in versions.items():
+            if not isinstance(version, dict) or not isinstance(version.get("ranges"), dict):
+                continue
+            clean_versions[str(freshness)] = {
+                "file_size": int(version.get("file_size", 0) or 0),
+                "ranges": {str(key): dict(record) for key, record in version["ranges"].items() if isinstance(record, dict)},
+            }
+        if clean_versions:
+            result[str(relpath)] = clean_versions
+    return result
+
+
+def _head_tail_summary(text: str) -> str:
+    if len(text) <= 1000:
+        return text
+    return text[:500] + "\n[...middle omitted...]\n" + text[-500:]

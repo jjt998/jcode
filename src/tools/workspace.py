@@ -12,20 +12,38 @@ def freshness(path: Path) -> str:
 
 def read_file(workspace, args, working_memory) -> ToolResult:
     path = workspace.resolve_path(args.path)
-    text = path.read_text(encoding="utf-8", errors="replace")
+    source_text = path.read_text(encoding="utf-8", errors="replace")
     # 先按 start/end 截取，再交给 max_chars 控制返回长度，避免读取范围和结果长度混在一起。
-    selected_text = text[args.start : args.end]
+    selected_text = source_text[args.start : args.end]
     missing_chars = max(0, len(selected_text) - args.max_chars)
-    text = selected_text[: args.max_chars]
+    returned_text = selected_text[: args.max_chars]
     rel = workspace.relpath(path)
     current_freshness = freshness(path)
+    complete = missing_chars == 0
+    file_size = path.stat().st_size
+    read_metadata = {
+        "complete": complete,
+        "returned_chars": len(returned_text),
+        "missing_chars": missing_chars,
+        "file_size": file_size,
+        "freshness": current_freshness,
+    }
     # 这里是把读过文件的新鲜度写到工作记忆的！注释掉会导致agent在恢复时无法判断文件是否被修改过，以及读后写等下游功能的异常！
-    working_memory.note_file_read(rel, args.model_dump(), current_freshness)
+    working_memory.note_file_read(rel, args.model_dump(), current_freshness, read_metadata)
     # 工具历史和 artifact 需要知道这段内容对应的文件版本，文件变更后才能标记为过期。
+    # 协议头直接进入模型上下文，避免模型从正文形状猜测是否已读到范围末尾。
+    header = (
+        "[read_file]\n"
+        f"complete: {str(complete).lower()}\n"
+        f"returned_chars: {len(returned_text)}\n"
+        f"missing_chars: {missing_chars}\n"
+        f"file_size: {file_size} bytes\n"
+        f"freshness: {current_freshness}\n\n"
+    )
     return ToolResult(
         "success",
-        text,
-        metadata={"source_files": [{"path": rel, "freshness": current_freshness}], "missing_chars": missing_chars},
+        header + returned_text,
+        metadata={"source_files": [{"path": rel, "freshness": current_freshness}], **read_metadata},
     )
 
 

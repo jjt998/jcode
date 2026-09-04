@@ -49,7 +49,7 @@ def build_executor(tmp_path: Path) -> tuple[ToolExecutor, WorkingMemory, FakeWor
     return executor, working_memory, workspace
 
 
-def test_read_file_allows_three_reads_then_denies_fourth(tmp_path):
+def test_read_file_allows_two_complete_reads_then_denies_third(tmp_path):
     (tmp_path / "docs").mkdir()
     target = tmp_path / "docs" / "note.txt"
     target.write_text("alpha", encoding="utf-8")
@@ -59,15 +59,13 @@ def test_read_file_allows_three_reads_then_denies_fourth(tmp_path):
     first = executor.execute("read_file", args, working_memory=working_memory)
     second = executor.execute("read_file", args, working_memory=working_memory)
     third = executor.execute("read_file", args, working_memory=working_memory)
-    fourth = executor.execute("read_file", args, working_memory=working_memory)
 
     freshness_key = f"{int(target.stat().st_mtime_ns)}:{target.stat().st_size}"
     assert first.status == "success"
     assert second.status == "success"
-    assert third.status == "success"
-    assert fourth.status == "denied"
-    assert "You've already reread this unchanged file three times." in fourth.text
-    assert working_memory.read_file_count("docs/note.txt", args, freshness_key) == 3
+    assert third.status == "denied"
+    assert "returned completely twice" in third.text
+    assert working_memory.read_file_count("docs/note.txt", args, freshness_key) == 2
 
 
 def test_read_file_different_ranges_count_separately(tmp_path):
@@ -79,7 +77,7 @@ def test_read_file_different_ranges_count_separately(tmp_path):
     first_range = {"path": "docs/note.txt", "max_chars": 10, "start": 0, "end": 5}
     second_range = {"path": "docs/note.txt", "max_chars": 10, "start": 6, "end": 11}
 
-    for _ in range(3):
+    for _ in range(2):
         assert executor.execute("read_file", first_range, working_memory=working_memory).status == "success"
 
     blocked = executor.execute("read_file", first_range, working_memory=working_memory)
@@ -88,7 +86,7 @@ def test_read_file_different_ranges_count_separately(tmp_path):
 
     assert blocked.status == "denied"
     assert allowed.status == "success"
-    assert working_memory.read_file_count("docs/note.txt", first_range, freshness_key) == 3
+    assert working_memory.read_file_count("docs/note.txt", first_range, freshness_key) == 2
     assert working_memory.read_file_count("docs/note.txt", second_range, freshness_key) == 1
 
 
@@ -99,7 +97,7 @@ def test_read_file_count_resets_when_file_changes(tmp_path):
     executor, working_memory, _ = build_executor(tmp_path)
     args = {"path": "docs/note.txt", "max_chars": 10, "start": 0, "end": 4}
 
-    for _ in range(3):
+    for _ in range(2):
         result = executor.execute("read_file", args, working_memory=working_memory)
         assert result.status == "success"
 
@@ -109,7 +107,7 @@ def test_read_file_count_resets_when_file_changes(tmp_path):
 
     second_freshness = f"{int(target.stat().st_mtime_ns)}:{target.stat().st_size}"
     assert second.status == "success"
-    assert working_memory.read_file_count("docs/note.txt", args, first_freshness) == 3
+    assert working_memory.read_file_count("docs/note.txt", args, first_freshness) == 2
     assert working_memory.read_file_count("docs/note.txt", args, second_freshness) == 1
 
 
@@ -125,14 +123,17 @@ def test_working_memory_round_trip_keeps_read_file_counts(tmp_path):
     working_memory = WorkingMemory.from_dict({}, tmp_path)
     first_args = {"path": "docs/note.txt", "max_chars": 10, "start": 0, "end": 5}
     second_args = {"path": "docs/note.txt", "max_chars": 10, "start": 6, "end": 11}
-    working_memory.note_file_read("docs/note.txt", first_args, "1:10")
-    working_memory.note_file_read("docs/note.txt", first_args, "1:10")
-    working_memory.note_file_read("docs/note.txt", second_args, "2:11")
+    complete = {"file_size": 10, "returned_chars": 5, "missing_chars": 0, "complete": True}
+    partial = {"file_size": 11, "returned_chars": 5, "missing_chars": 1, "complete": False}
+    working_memory.note_file_read("docs/note.txt", first_args, "1:10", complete)
+    working_memory.note_file_read("docs/note.txt", first_args, "1:10", complete)
+    working_memory.note_file_read("docs/note.txt", second_args, "2:11", partial)
 
     restored = WorkingMemory.from_dict(working_memory.to_dict(), tmp_path)
 
     assert restored.read_file_count("docs/note.txt", first_args, "1:10") == 2
     assert restored.read_file_count("docs/note.txt", second_args, "2:11") == 1
+    assert restored.read_file_complete_count("docs/note.txt", first_args, "1:10") == 2
 
 
 def test_read_file_result_records_source_freshness(tmp_path):
@@ -149,6 +150,22 @@ def test_read_file_result_records_source_freshness(tmp_path):
     }]
 
 
+def test_read_file_result_exposes_complete_metadata(tmp_path):
+    target = tmp_path / "note.txt"
+    target.write_text("abcdefghij", encoding="utf-8")
+    executor, working_memory, _ = build_executor(tmp_path)
+
+    result = executor.execute("read_file", {"path": "note.txt", "max_chars": 4}, working_memory=working_memory)
+
+    assert result.metadata["complete"] is False
+    assert result.metadata["returned_chars"] == 4
+    assert result.metadata["missing_chars"] == 6
+    assert result.metadata["file_size"] == 10
+    assert "complete: false" in result.text
+    assert "returned_chars: 4" in result.text
+    assert working_memory.file_reads["note.txt"][result.metadata["freshness"]]["ranges"]
+
+
 def test_read_file_does_not_append_truncation_hint_for_regular_file(tmp_path):
     target = tmp_path / "note.txt"
     target.write_text("abcdefghij", encoding="utf-8")
@@ -157,7 +174,7 @@ def test_read_file_does_not_append_truncation_hint_for_regular_file(tmp_path):
     result = executor.execute("read_file", {"path": "note.txt", "max_chars": 4, "start": 2, "end": 9}, working_memory=working_memory)
 
     assert result.status == "success"
-    assert result.text == "cdef"
+    assert result.text.endswith("cdef")
 
 
 def test_search_records_all_scanned_file_sources(tmp_path):

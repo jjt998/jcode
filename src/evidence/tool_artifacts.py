@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 
 
-INLINE_LIMITS = {"read_file": 8000, "run_shell": 6000}
+INLINE_LIMITS = {"run_shell": 6000}
 DEFAULT_INLINE_LIMIT = 4000
 SUMMARY_LIMIT = 1500
 
@@ -18,12 +18,21 @@ def prepare_tool_result_observation(run_store, run_dir, tool_name: str, full_res
     """按工具类别外置超长结果，并生成可继续操作的短观察。"""
     full_result = str(full_result)
     artifact_list = list(artifacts or [])
+    # 文件读取由 start/end/max_chars 主动分段，不能再被外置成另一层 artifact。
+    if tool_name == "read_file":
+        return full_result, {
+            "original_chars": len(full_result),
+            "content_sha256": hashlib.sha256(full_result.encode("utf-8")).hexdigest(),
+            "full_output_artifact": "",
+            "observation_policy": "read_file_direct",
+            "observation_summary": full_result,
+        }, artifact_list
     limit = INLINE_LIMITS.get(tool_name, DEFAULT_INLINE_LIMIT)
     metadata = {
         "original_chars": len(full_result),
         "content_sha256": hashlib.sha256(full_result.encode("utf-8")).hexdigest(),
         "full_output_artifact": "",
-        "observation_policy": {"read_file": "read_file_8000", "run_shell": "run_shell_6000"}.get(tool_name, "generic_4000"),
+        "observation_policy": {"run_shell": "run_shell_6000"}.get(tool_name, "generic_4000"),
         "observation_summary": "",
     }
     if len(full_result) <= limit:
@@ -37,8 +46,6 @@ def prepare_tool_result_observation(run_store, run_dir, tool_name: str, full_res
     if tool_name == "run_shell":
         lines = [line.strip() for line in full_result.splitlines() if line.strip() and line.strip() not in {"stdout:", "stderr:"}]
         summary = "\n".join(lines[:30])[:SUMMARY_LIMIT] or full_result[:SUMMARY_LIMIT]
-    elif tool_name == "read_file":
-        summary = full_result[:SUMMARY_LIMIT]
     else:
         head, tail = full_result[:750], full_result[-750:]
         summary = (head + ("\n...\n" + tail if tail and tail != head else ""))[:SUMMARY_LIMIT]

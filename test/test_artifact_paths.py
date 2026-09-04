@@ -31,11 +31,13 @@ def test_generated_artifact_path_can_be_read_from_workspace(tmp_path: Path):
     full_text = "x" * 8001
 
     observed, metadata, artifacts = prepare_tool_result_observation(run_store, run_dir, "read_file", full_text)
-    artifact_path = metadata["full_output_artifact"]
+    assert not metadata["full_output_artifact"]
+    assert not artifacts
+    assert observed == full_text
 
-    assert artifact_path == ".jcode/runs/run-1/artifacts/read_file-output-" + metadata["content_sha256"][:12] + ".txt"
-    assert artifact_path in artifacts
-    assert artifact_path in observed
+    artifact_path = ".jcode/runs/run-1/artifacts/existing-output.txt"
+    (workspace.root / artifact_path).parent.mkdir(parents=True)
+    (workspace.root / artifact_path).write_text(full_text, encoding="utf-8")
 
     executor = ToolExecutor(
         workspace=workspace,
@@ -49,8 +51,9 @@ def test_generated_artifact_path_can_be_read_from_workspace(tmp_path: Path):
     result = executor.execute("read_file", {"path": artifact_path, "max_chars": 1000}, working_memory=WorkingMemory.from_dict({}, tmp_path))
 
     assert result.status == "success"
-    assert result.text == "x" * 1000
+    assert result.text.endswith("x" * 1000)
     assert result.metadata["missing_chars"] == 7001
+    assert result.metadata["complete"] is False
     assert result.metadata["artifact_read"] is True
 
 
