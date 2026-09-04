@@ -17,6 +17,11 @@ class DummyRedactor:
         return text
 
 
+class TodoRuntime:
+    def todo_list(self, args: dict) -> str:
+        return "(empty)"
+
+
 def build_executor(workspace: Workspace) -> ToolExecutor:
     return ToolExecutor(
         workspace=workspace,
@@ -52,3 +57,14 @@ def test_run_shell_retries_after_workspace_fingerprint_changes(tmp_path: Path):
     (tmp_path / "changed.py").write_text("changed", encoding="utf-8")
 
     assert executor.execute("run_shell", args, working_memory=working_memory).status == "success"
+
+
+def test_todo_tools_skip_repeated_call_guard(tmp_path: Path):
+    workspace = Workspace(root=tmp_path, cwd=tmp_path, repo_root=tmp_path)
+    executor = build_executor(workspace)
+    working_memory = WorkingMemory.from_dict({}, tmp_path)
+    runtime = TodoRuntime()
+
+    for _ in range(4):
+        result = executor.execute("todo_list", {}, working_memory=working_memory, runtime=runtime)
+        assert result.status == "success"

@@ -109,8 +109,8 @@ def create_app(manager: WebRunManager) -> FastAPI:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.get("/api/projects/{project_id}/runs/{run_id}/events")
-    async def project_run_events(project_id: str, run_id: str):
-        return await stream_run_events(project_id, run_id)
+    async def project_run_events(project_id: str, run_id: str, after: int = 0):
+        return await stream_run_events(project_id, run_id, after=after)
 
     @app.get("/api/projects/{project_id}/context-audit")
     def get_context_audit(project_id: str, ref: str):
@@ -196,10 +196,10 @@ def create_app(manager: WebRunManager) -> FastAPI:
             raise HTTPException(status_code=404, detail="run not found") from exc
 
     @app.get("/api/runs/{run_id}/events")
-    async def run_events(run_id: str):
-        return await stream_run_events("default", run_id)
+    async def run_events(run_id: str, after: int = 0):
+        return await stream_run_events("default", run_id, after=after)
 
-    async def stream_run_events(project_id: str, run_id: str):
+    async def stream_run_events(project_id: str, run_id: str, *, after: int = 0):
         try:
             run = manager.get_run(run_id)
         except KeyError as exc:
@@ -221,11 +221,12 @@ def create_app(manager: WebRunManager) -> FastAPI:
             sent: set[str] = set()
             while True:
                 rows: list[dict] = []
-                run_dir = manager.run_dir(run)
-                if run_dir is not None:
-                    rows.extend(trace_events(run_dir))
                 with run.lock:
-                    rows.extend(dict(item, _source="web", _index=index) for index, item in enumerate(run.events))
+                    rows.extend(
+                        dict(item, _source="web", _index=index)
+                        for index, item in enumerate(run.events)
+                        if int(item.get("event_cursor", 0) or 0) > after
+                    )
                     status = run.status
                 for event_id, payload in indexed_events(rows, prefix=run.web_run_id):
                     if event_id in sent:

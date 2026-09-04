@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+from src.app.web_runs import WebRun
 from src.app.web_steps import build_reasoning_steps
 
 
@@ -25,3 +28,15 @@ def test_steps_show_process_content_without_reasoning():
     assert "reasoning_text" not in steps[0]
     assert steps[1]["response_text"] == "done"
     assert steps[1]["process_content"] == ""
+
+
+def test_active_run_snapshot_contains_current_steps_and_cursor():
+    run = WebRun("web-run-1", "project-1", Path("."), "session-1", user_message="检查代码")
+    run.reasoning_steps = [{"step_id": "run-1:1", "index": 1, "status": "running"}]
+    run.emit("step_patch", step=run.reasoning_steps[0])
+
+    snapshot = run.snapshot()
+
+    assert snapshot["user_message"] == "检查代码"
+    assert snapshot["reasoning_steps"] == [{"step_id": "run-1:1", "index": 1, "status": "running"}]
+    assert snapshot["event_cursor"] == 1

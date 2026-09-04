@@ -10,6 +10,7 @@ from src.tools.base import ToolCallRequest, ToolInvocation, ToolResult
 from src.tools.workspace import freshness
 
 RUNTIME_TOOL_NAMES = {"todo_add", "todo_update", "todo_list", "ask_user", "enter_plan_mode", "exit_plan_mode"}
+TODO_TOOL_NAMES = {"todo_add", "todo_update", "todo_list"}
 
 if TYPE_CHECKING:
     from src.memory.working import WorkingMemory
@@ -82,7 +83,7 @@ class ToolExecutor:
             read_guard = self._check_read_file_repeat(invocation, working_memory)
             if not read_guard.allowed:
                 return self._denied(read_guard, invocation=invocation)
-        else:
+        elif request.name not in TODO_TOOL_NAMES:
             call_context = ""
             if request.name == "run_shell":
                 # fingerprint 只覆盖有限工作区元数据，可能漏掉深层或高频变更；这里接受该近似以低成本放开修改后的测试重跑。

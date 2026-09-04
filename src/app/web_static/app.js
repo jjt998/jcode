@@ -8,6 +8,7 @@ const state = {
   turns: [],
   eventIds: new Set(),
   eventSource: null,
+  selectionEpoch: 0,
   openDetails: new Map(),
   modelProfiles: [],
 };
@@ -201,7 +202,11 @@ function renderSessions() {
 }
 
 async function selectSession(sessionId) {
+  const epoch = ++state.selectionEpoch;
+  // 切换窗口时立即关闭旧流，避免旧会话的尾部事件落入新窗口。
+  stopStream();
   const session = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions/${encodeURIComponent(sessionId)}`);
+  if (epoch !== state.selectionEpoch) return;
   state.sessionId = session.id;
   state.activeRunId = session.active_run_id || "";
   state.activeTurnId = "";
@@ -212,7 +217,7 @@ async function selectSession(sessionId) {
   setRunStatus(session.active_status || "idle");
   state.modelProfiles = session.model_profiles || [];
   renderModelProfiles(state.modelProfiles, session.active_model_profile || "");
-  await loadTurns();
+  await loadTurns(epoch);
   if (state.activeRunId) connectEvents(state.activeRunId);
 }
 
@@ -249,10 +254,50 @@ function updateReasoningControls(profiles, selected) {
   setRunStatus(els.runState.dataset.status || "idle");
 }
 
-async function loadTurns() {
+async function loadTurns(epoch = state.selectionEpoch) {
   if (!state.projectId || !state.sessionId) return;
-  const data = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions/${encodeURIComponent(state.sessionId)}/turns`);
+  const projectId = state.projectId;
+  const sessionId = state.sessionId;
+  const data = await api(`/api/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/turns`);
+  if (epoch !== state.selectionEpoch || projectId !== state.projectId || sessionId !== state.sessionId) return;
   state.turns = (data.turns || []).map(normalizeTurn);
+  if (data.active_run && data.active_run.web_run_id) {
+    const active = data.active_run;
+    let turn = state.turns.find((item) => item.web_run_id === active.web_run_id || item.run_id === active.jcode_run_id);
+    if (!turn) {
+      turn = normalizeTurn({
+        local_id: active.web_run_id,
+        web_run_id: active.web_run_id,
+        run_id: active.jcode_run_id || active.run_id || "",
+        user_message: active.user_message || "",
+        reasoning_steps: active.reasoning_steps || [],
+        final_text: "",
+        assistant_message: "",
+        status: active.status || "running",
+        events: [],
+        pending_approval: Boolean(active.pending_question),
+        pending_question: active.pending_question || "",
+        pending_choices: active.pending_choices || [],
+        event_cursor: Number(active.event_cursor || 0),
+        stepMap: new Map((active.reasoning_steps || []).filter((step) => step && step.step_id).map((step) => [step.step_id, step])),
+      });
+      state.turns.push(turn);
+    } else {
+      turn.reasoning_steps = active.reasoning_steps || turn.reasoning_steps || [];
+      turn.stepMap = new Map(turn.reasoning_steps.filter((step) => step && step.step_id).map((step) => [step.step_id, step]));
+      turn.event_cursor = Number(active.event_cursor || turn.event_cursor || 0);
+      turn.status = active.status || turn.status;
+    }
+    // active run 的过程型 assistant 文本不能沿用历史 turn 的最终答案兜底。
+    if (["running", "waiting_approval", "aborting"].includes(active.status)) {
+      turn.final_text = "";
+      turn.assistant_message = "";
+    } else if (active.final_text) {
+      turn.final_text = active.final_text;
+      turn.assistant_message = active.final_text;
+    }
+    state.activeTurnId = turn.local_id;
+  }
   renderTurns();
 }
 
@@ -587,13 +632,20 @@ function compareSteps(a, b) {
 function connectEvents(runId) {
   if (!runId) return;
   stopStream();
+  const streamProjectId = state.projectId;
+  const streamSessionId = state.sessionId;
+  const streamEpoch = state.selectionEpoch;
+  const activeTurn = state.turns.find((turn) => turn.web_run_id === runId || turn.run_id === runId);
+  const after = Number(activeTurn?.event_cursor || 0);
   state.activeRunId = runId;
-  const source = new EventSource(`/api/projects/${encodeURIComponent(state.projectId)}/runs/${encodeURIComponent(runId)}/events`);
+  const source = new EventSource(`/api/projects/${encodeURIComponent(state.projectId)}/runs/${encodeURIComponent(runId)}/events?after=${encodeURIComponent(after)}`);
   state.eventSource = source;
   for (const name of STREAM_EVENTS) {
-    source.addEventListener(name, (event) => handleRunEvent(name, event));
+    source.addEventListener(name, (event) => handleRunEvent(name, event, { streamProjectId, streamSessionId, runId, streamEpoch, source }));
   }
-  source.onerror = () => setRunStatus("disconnected");
+  source.onerror = () => {
+    if (state.selectionEpoch === streamEpoch && state.eventSource === source && state.sessionId === streamSessionId) setRunStatus("disconnected");
+  };
 }
 
 function stopStream() {
@@ -602,8 +654,17 @@ function stopStream() {
   state.eventIds.clear();
 }
 
-function handleRunEvent(name, event) {
+function handleRunEvent(name, event, stream = {}) {
   const payload = JSON.parse(event.data);
+  // EventSource 关闭存在尾部回调窗口，按创建流时的会话和 run 再做一次隔离。
+  if (stream.streamProjectId && state.projectId !== stream.streamProjectId) return;
+  if (stream.streamSessionId && state.sessionId !== stream.streamSessionId) return;
+  if (stream.streamEpoch !== undefined && state.selectionEpoch !== stream.streamEpoch) return;
+  if (stream.source && state.eventSource !== stream.source) return;
+  if (payload.project_id && stream.streamProjectId && payload.project_id !== stream.streamProjectId) return;
+  if (payload.session_id && stream.streamSessionId && payload.session_id !== stream.streamSessionId) return;
+  const payloadRunIds = [payload.web_run_id, payload.jcode_run_id, payload.run_id].filter(Boolean).map(String);
+  if (stream.runId && payloadRunIds.length && !payloadRunIds.includes(String(stream.runId)) && !payloadRunIds.includes(String(state.activeRunId))) return;
   const eventId = payload.event_id || event.lastEventId || `${name}:${Date.now()}`;
   if (state.eventIds.has(eventId)) return;
   state.eventIds.add(eventId);
@@ -621,6 +682,7 @@ function handleRunEvent(name, event) {
   }
   if (name === "step_patch" && payload.step) {
     upsertStep(turn, payload.step);
+    turn.event_cursor = Math.max(Number(turn.event_cursor || 0), Number(payload.event_cursor || 0));
     renderTurns();
     return;
   }
@@ -642,7 +704,7 @@ function handleRunEvent(name, event) {
   } else if (name === "web_run_completed" || name === "run_finished") {
     turn.status = name === "run_finished" && payload.status !== "completed" ? "stopped" : "completed";
     setRunStatus(turn.status);
-    if (payload.final_text) {
+    if (name === "web_run_completed" && payload.final_text) {
       turn.final_text = payload.final_text;
       turn.assistant_message = payload.final_text;
     }
@@ -658,6 +720,7 @@ function handleRunEvent(name, event) {
   }
   if (name !== "stream_closed") {
     turn.events.push(payload);
+    turn.event_cursor = Math.max(Number(turn.event_cursor || 0), Number(payload.event_cursor || 0));
   } else {
     stopStream();
   }

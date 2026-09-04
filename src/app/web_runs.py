@@ -29,6 +29,7 @@ class WebRun:
     project_id: str
     project_root: Path
     session_id: str
+    user_message: str = ""
     status: str = "idle"
     agent: Any | None = None
     thread: threading.Thread | None = None
@@ -42,10 +43,13 @@ class WebRun:
     approval_answer: str | None = None
     approval_event: threading.Event = field(default_factory=threading.Event)
     events: list[dict] = field(default_factory=list)
+    event_seq: int = 0
+    reasoning_steps: list[dict] = field(default_factory=list)
     lock: threading.RLock = field(default_factory=threading.RLock)
 
     def emit(self, event: str, **payload) -> None:
         with self.lock:
+            self.event_seq += 1
             self.events.append(
                 {
                     "event": event,
@@ -54,6 +58,7 @@ class WebRun:
                     "web_run_id": self.web_run_id,
                     "project_id": self.project_id,
                     "session_id": self.session_id,
+                    "event_cursor": self.event_seq,
                     **payload,
                 }
             )
@@ -74,6 +79,9 @@ class WebRun:
                 "error": self.error,
                 "pending_question": self.pending_question,
                 "pending_choices": list(self.pending_choices),
+                "user_message": self.user_message,
+                "reasoning_steps": [dict(step) for step in self.reasoning_steps],
+                "event_cursor": self.event_seq,
             }
 
 
@@ -224,6 +232,7 @@ class WebRunManager:
                 project_id=project.id,
                 project_root=project.root,
                 session_id=session_id,
+                user_message=message,
                 status="running",
             )
             self.runs[web_run.web_run_id] = web_run
@@ -350,6 +359,7 @@ class WebRunManager:
             if not patches:
                 return
             with web_run.lock:
+                web_run.reasoning_steps = step_builder.steps_snapshot()
                 for patch in patches:
                     web_run.emit("step_patch", step=patch)
 
