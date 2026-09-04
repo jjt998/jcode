@@ -33,8 +33,8 @@ SECTION_RATIO_HINTS = {
 PRESSURE_LEVELS = (
     (0.60, 0.70, 1, "60-70"),
     (0.70, 0.80, 2, "70-80"),
-    (0.80, 0.95, 3, "80-95"),
-    (0.95, 10.0, 4, "95+"),
+    (0.80, 0.90, 3, "80-90"),
+    (0.90, 10.0, 4, "90+"),
 )
 
 
@@ -99,12 +99,21 @@ class ContextManager:
             working_memory=working_memory,
             user_message=user_message,
             budgets=self._base_budgets(),
-            recent_turn_window=5,
+            recent_turn_window=7,
             compress_old_tools=True,
             include_older_turns=True,
         )
         initial_section_texts = {section: initial_rendered[section].rendered for section in SECTION_ORDER}
         continuation = dict(provider_continuation or {})
+        initial_memory_snapshot = type(working_memory).from_dict(working_memory.to_dict(), self.workspace.root)
+        initial_memory_snapshot.runtime_context = "\n".join(
+            part for part in (render_runtime_mode_text(session), self.workspace.runtime_text()) if part
+        )
+        # 压力按 Provider 实际消费的结构化历史估算，不使用仅供审计的文本投影。
+        initial_history, _ = self._build_structured_history(session, pressure_level=0, current_request=user_message)
+        initial_section_texts["history"] = self._render_structured_history_for_budget(initial_history)
+        initial_section_texts["working_memory"] = initial_memory_snapshot.render()
+        initial_section_texts[CURRENT_REQUEST_SECTION] = user_message
         initial_prompt = self._build_prompt(initial_section_texts, continuation)
         initial_pressure = self._build_pressure(initial_section_texts, self._budget_tokens(), continuation)
 
@@ -115,15 +124,32 @@ class ContextManager:
             section_texts=initial_section_texts,
             pressure=initial_pressure,
         )
-        final_prompt = self._build_prompt(compressed_section_texts, continuation)
-        final_pressure = self._build_pressure(compressed_section_texts, self._budget_tokens(), continuation)
-        cache_info = self._build_cache_info(session, compressed_section_texts["prefix"])
+        # 预算仍以文本近似估算，但 Provider 永远消费结构化事件而非最终拼接文本。
+        memory_snapshot = type(working_memory).from_dict(working_memory.to_dict(), self.workspace.root)
+        memory_snapshot.runtime_context = "\n".join(
+            part for part in (render_runtime_mode_text(session), self.workspace.runtime_text()) if part
+        )
+        if int(initial_pressure.get("level", 0)) >= 3:
+            self._reduce_working_memory_for_pressure(memory_snapshot)
+        structured_history, history_records = self._build_structured_history(
+            session,
+            pressure_level=int(initial_pressure.get("level", 0)),
+            current_request=user_message,
+        )
+        # 此处的结构化事件和记忆快照会直接进入 Provider 请求。
+        final_section_texts = dict(compressed_section_texts)
+        final_section_texts["history"] = self._render_structured_history_for_budget(structured_history)
+        final_section_texts["working_memory"] = memory_snapshot.render()
+        final_section_texts[CURRENT_REQUEST_SECTION] = user_message
+        final_prompt = self._build_prompt(final_section_texts, continuation)
+        final_pressure = self._build_pressure(final_section_texts, self._budget_tokens(), continuation)
+        cache_info = self._build_cache_info(session, final_section_texts["prefix"])
         ctx_info = self._build_ctx_info(
             session=session,
             working_memory=working_memory,
             user_message=user_message,
             initial_rendered=initial_rendered,
-            compressed_section_texts=compressed_section_texts,
+            compressed_section_texts=final_section_texts,
             initial_prompt=initial_prompt,
             final_prompt=final_prompt,
             initial_pressure=initial_pressure,
@@ -131,19 +157,7 @@ class ContextManager:
             compression_info=compression_info,
             cache_info=cache_info,
         )
-
         session["ctx_info"] = ctx_info
-
-        # 预算仍以文本近似估算，但 Provider 永远消费结构化事件而非最终拼接文本。
-        memory_snapshot = type(working_memory).from_dict(working_memory.to_dict(), self.workspace.root)
-        memory_snapshot.runtime_context = "\n".join(
-            part for part in (render_runtime_mode_text(session), self.workspace.runtime_text()) if part
-        )
-        structured_history, history_records = self._build_structured_history(
-            session,
-            pressure_level=int(final_pressure.get("level", 0)),
-            current_request=user_message,
-        )
         ctx_info["context_result"] = {
             "history_event_count": len(structured_history),
             "tool_count": len(self.registry.definitions(allowed_tools)),
@@ -151,7 +165,7 @@ class ContextManager:
         }
         return ContextResult(
             prefix=render_prefix(self.workspace, self.registry),
-            skill=compressed_section_texts["skill"],
+            skill=final_section_texts["skill"],
             history=structured_history,
             working_memory=memory_snapshot,
             current_request=user_message,
@@ -160,6 +174,42 @@ class ContextManager:
             compact_audit=compact_audit,
             provider_continuation=continuation,
         )
+
+    @staticmethod
+    def _render_structured_history_for_budget(history: list[HistoryEvent]) -> str:
+        """按 Responses 输入形态序列化历史，供预算估算使用。"""
+        items: list[dict] = []
+        for event in history:
+            if event.kind == "compact_summary":
+                items.append({"role": "user", "content": "[JCode Compact Summary]\n" + event.content})
+            elif event.kind == "user":
+                items.append({"role": "user", "content": event.content})
+            elif event.kind == "assistant":
+                items.append({"role": "assistant", "content": event.content})
+            elif event.kind == "tool_call":
+                items.append({"type": "function_call", "call_id": event.call_id, "name": event.tool_name, "arguments": json.dumps(event.arguments or {}, ensure_ascii=False)})
+            elif event.kind == "tool_result":
+                items.append({"type": "function_call_output", "call_id": event.call_id, "output": event.content})
+        return json.dumps(items, ensure_ascii=False, separators=(",", ":"))
+
+    @staticmethod
+    def _reduce_working_memory_for_pressure(working_memory) -> None:
+        """三级压力仅保留当前执行需要的短期状态。"""
+        active_files = working_memory.recent_files[-7:]
+        working_memory.recent_files = active_files
+        working_memory.file_freshness = {
+            path: freshness
+            for path, freshness in working_memory.file_freshness.items()
+            if path in active_files
+        }
+        working_memory.retrieved_memory = []
+        working_memory.last_retrieval_query = ""
+        working_memory.subagent_results = []
+        working_memory.compact_summary = ""
+        working_memory.todo_items = [
+            item for item in working_memory.todo_items
+            if str(item.get("status", "pending")) != "completed"
+        ]
 
     def _build_structured_history(self, session: dict, *, pressure_level: int, current_request: str) -> tuple[list[HistoryEvent], list[dict]]:
         """按回合窗口压缩工具正文，但不对最终 history 文本做尾部截断。"""
@@ -202,9 +252,8 @@ class ContextManager:
             replacement, rule = self._stale_read_file_message(item), "stale_read_file_replaced"
         elif event.metadata.get("full_output_artifact"):
             replacement, rule = (
-                f"Large tool output stored at: {event.metadata['full_output_artifact']}\n"
-                f"Summary: {content[:240]}",
-                "artifact_path_and_summary",
+                f"Large tool output stored at: {event.metadata['full_output_artifact']}",
+                "artifact_path_only",
             )
         elif event.tool_name == "read_file":
             path = str((event.arguments or {}).get("path", ""))
@@ -272,7 +321,7 @@ class ContextManager:
             "mode": "none",
             "summary_mode": "",
             "summary_source": "",
-            "retain_turns": 2,
+            "retain_turns": 4,
             "before": {},
             "after": {},
             "summary_item": {},
@@ -311,9 +360,7 @@ class ContextManager:
                 recent_turn_window = 2
             case 3:
                 selected_budgets["skill"] = max(MIN_SECTION_BUDGETS["skill"], int(budgets["skill"] * 0.5))
-                selected_budgets["working_memory"] = max(MIN_SECTION_BUDGETS["working_memory"], int(budgets["working_memory"] * 0.7))
                 compressed_section_texts["skill"] = tail_clip(section_texts.get("skill", ""), selected_budgets["skill"])
-                compressed_section_texts["working_memory"] = tail_clip(section_texts.get("working_memory", ""), selected_budgets["working_memory"])
                 history_render = self._build_history_section_texts(
                     session,
                     recent_turn_window=2,
@@ -327,7 +374,7 @@ class ContextManager:
             case 4:
                 selected_budgets["skill"] = max(MIN_SECTION_BUDGETS["skill"], int(budgets["skill"] * 0.5))
                 selected_budgets["working_memory"] = max(MIN_SECTION_BUDGETS["working_memory"], int(budgets["working_memory"] * 0.7))
-                compact_info, compact_audit = self.compact_history(session, working_memory, retain_turns=2, summary_mode="deterministic")
+                compact_info, compact_audit = self.compact_history(session, working_memory, retain_turns=4, summary_mode="deterministic")
                 compact_info["trigger"] = "semantic_summary"
                 compact_info["should_compact"] = True
                 compact_info["eligible"] = True
@@ -522,7 +569,7 @@ class ContextManager:
             history_render.pop("rendered", None)
         return ctx_info
 
-    def compact_history(self, session: dict, working_memory, *, retain_turns: int = 2, summary_mode: str = "llm") -> tuple[dict, dict]:
+    def compact_history(self, session: dict, working_memory, *, retain_turns: int = 4, summary_mode: str = "llm") -> tuple[dict, dict]:
         '''
         第四层做语义压缩，这一层会真正压缩历史结构，不是动渲染。否则会导致连续的语义压缩，成本巨高。
         '''
@@ -945,10 +992,12 @@ class ContextManager:
 
     def _history_window_for_level(self, level: int) -> int:
         if level <= 0:
-            return 5
+            return 7
         if level == 1:
-            return 3
-        return 2
+            return 6
+        if level == 2:
+            return 5
+        return 4
 
     def _preview_text(self, value: str, limit: int = 240) -> str:
         text = str(value or "").replace("\r\n", "\n").strip()
@@ -1095,7 +1144,7 @@ class ContextManager:
         for low, high, level, label in PRESSURE_LEVELS:
             if low <= ratio < high:
                 return level, label, f"tier{level}"
-        return 4, "95+", "tier4"
+        return 4, "90+", "tier4"
 
     def _budget_tokens(self) -> int:
         return max(1, (int(self.total_budget) + 3) // 4)

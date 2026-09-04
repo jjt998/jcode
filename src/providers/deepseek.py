@@ -95,7 +95,8 @@ class DeepSeekClient:
 
     def _compile_history_event(self, event: HistoryEvent, *, continuation_run_id: str = "") -> list[dict]:
         if event.kind == "compact_summary":
-            return []
+            # 历史被永久压缩后，摘要必须先于保留回合提供给模型。
+            return [{"role": "user", "content": "[JCode Compact Summary]\n" + event.content}]
         if event.kind == "user":
             return [{"role": "user", "content": event.content}]
         if event.kind == "assistant":
