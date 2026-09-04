@@ -109,8 +109,8 @@ def create_app(manager: WebRunManager) -> FastAPI:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.get("/api/projects/{project_id}/runs/{run_id}/events")
-    async def project_run_events(project_id: str, run_id: str, after: int = 0):
-        return await stream_run_events(project_id, run_id, after=after)
+    async def project_run_events(project_id: str, run_id: str, session_id: str | None = None, after: int = 0):
+        return await stream_run_events(project_id, run_id, session_id=session_id, after=after)
 
     @app.get("/api/projects/{project_id}/context-audit")
     def get_context_audit(project_id: str, ref: str):
@@ -179,34 +179,40 @@ def create_app(manager: WebRunManager) -> FastAPI:
             raise HTTPException(status_code=404, detail="run not found") from exc
 
     @app.post("/api/runs/{run_id}/approval")
-    def approve_run(run_id: str, request: ApprovalRequest):
+    def approve_run(run_id: str, request: ApprovalRequest, project_id: str = "default", session_id: str | None = None):
         try:
-            return manager.approve(run_id, request.answer).snapshot()
+            return manager.approve(run_id, request.answer, project_id=project_id, session_id=session_id).snapshot()
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="run not found") from exc
         except RuntimeError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.post("/api/runs/{run_id}/abort")
-    def abort_run(run_id: str):
+    def abort_run(run_id: str, project_id: str = "default", session_id: str | None = None):
         try:
-            run = manager.abort(run_id, timeout_seconds=10.0)
+            run = manager.abort(run_id, timeout_seconds=10.0, project_id=project_id, session_id=session_id)
             return run.snapshot()
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="run not found") from exc
 
     @app.get("/api/runs/{run_id}/events")
-    async def run_events(run_id: str, after: int = 0):
-        return await stream_run_events("default", run_id, after=after)
+    async def run_events(run_id: str, session_id: str | None = None, after: int = 0):
+        return await stream_run_events("default", run_id, session_id=session_id, after=after)
 
-    async def stream_run_events(project_id: str, run_id: str, *, after: int = 0):
+    async def stream_run_events(project_id: str, run_id: str, *, session_id: str | None = None, after: int = 0):
         try:
             run = manager.get_run(run_id)
+            if run.project_id != project_id:
+                raise KeyError(run_id)
+            if session_id is not None and run.session_id != session_id:
+                raise KeyError(run_id)
         except KeyError as exc:
             try:
                 run_dir = manager.historical_run_dir(project_id, run_id)
             except KeyError:
                 raise HTTPException(status_code=404, detail="project not found") from exc
+            if session_id is not None and not manager.historical_run_belongs_to_session(project_id, session_id, run_id):
+                raise HTTPException(status_code=404, detail="run not found") from exc
             if not run_dir.exists():
                 raise HTTPException(status_code=404, detail="run not found") from exc
 

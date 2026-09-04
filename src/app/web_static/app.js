@@ -8,6 +8,7 @@ const state = {
   turns: [],
   eventIds: new Set(),
   eventSource: null,
+  reconnectTimer: null,
   selectionEpoch: 0,
   openDetails: new Map(),
   modelProfiles: [],
@@ -156,7 +157,10 @@ function renderProjects() {
 }
 
 async function selectProject(projectId) {
+  const epoch = ++state.selectionEpoch;
+  stopStream();
   const project = await api(`/api/projects/${encodeURIComponent(projectId)}`);
+  if (epoch !== state.selectionEpoch) return;
   state.projectId = project.id;
   state.sessionId = "";
   state.activeRunId = "";
@@ -166,7 +170,6 @@ async function selectProject(projectId) {
   els.projectRoot.textContent = project.root;
   els.sessionTitle.textContent = project.name;
   setRunStatus("idle");
-  stopStream();
   renderProjects();
   renderTurns();
   await loadSessions(true);
@@ -553,8 +556,9 @@ function approvalNode(turn) {
   });
   section.querySelector(".approval-actions button").addEventListener("click", async () => {
     const answer = input.value.trim();
-    if (!answer || !state.activeRunId) return;
-    await api(`/api/runs/${encodeURIComponent(state.activeRunId)}/approval`, {
+    const runId = turn.web_run_id;
+    if (!answer || !runId || !state.projectId || !state.sessionId) return;
+    await api(`/api/runs/${encodeURIComponent(runId)}/approval?project_id=${encodeURIComponent(state.projectId)}&session_id=${encodeURIComponent(state.sessionId)}`, {
       method: "POST",
       body: JSON.stringify({ answer }),
     });
@@ -638,17 +642,26 @@ function connectEvents(runId) {
   const activeTurn = state.turns.find((turn) => turn.web_run_id === runId || turn.run_id === runId);
   const after = Number(activeTurn?.event_cursor || 0);
   state.activeRunId = runId;
-  const source = new EventSource(`/api/projects/${encodeURIComponent(state.projectId)}/runs/${encodeURIComponent(runId)}/events?after=${encodeURIComponent(after)}`);
+  const source = new EventSource(`/api/projects/${encodeURIComponent(state.projectId)}/runs/${encodeURIComponent(runId)}/events?session_id=${encodeURIComponent(streamSessionId)}&after=${encodeURIComponent(after)}`);
   state.eventSource = source;
   for (const name of STREAM_EVENTS) {
     source.addEventListener(name, (event) => handleRunEvent(name, event, { streamProjectId, streamSessionId, runId, streamEpoch, source }));
   }
   source.onerror = () => {
-    if (state.selectionEpoch === streamEpoch && state.eventSource === source && state.sessionId === streamSessionId) setRunStatus("disconnected");
+    if (state.selectionEpoch !== streamEpoch || state.eventSource !== source || state.sessionId !== streamSessionId) return;
+    source.close();
+    state.eventSource = null;
+    setRunStatus("disconnected");
+    clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = setTimeout(() => {
+      if (state.selectionEpoch === streamEpoch && state.sessionId === streamSessionId && state.activeRunId === runId) connectEvents(runId);
+    }, 1000);
   };
 }
 
 function stopStream() {
+  clearTimeout(state.reconnectTimer);
+  state.reconnectTimer = null;
   if (state.eventSource) state.eventSource.close();
   state.eventSource = null;
   state.eventIds.clear();
@@ -840,17 +853,22 @@ els.composer.addEventListener("submit", async (event) => {
   els.messageInput.value = "";
   setRunStatus("running");
   renderTurns();
+  const originProjectId = state.projectId;
+  const originSessionId = state.sessionId;
+  const originEpoch = state.selectionEpoch;
   try {
-    const run = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions/${encodeURIComponent(state.sessionId)}/messages`, {
+    const run = await api(`/api/projects/${encodeURIComponent(originProjectId)}/sessions/${encodeURIComponent(originSessionId)}/messages`, {
       method: "POST",
       body: JSON.stringify({ message }),
     });
+    if (originEpoch !== state.selectionEpoch || originProjectId !== state.projectId || originSessionId !== state.sessionId) return;
     const turn = activeTurn({ web_run_id: run.web_run_id });
     turn.web_run_id = run.web_run_id;
     turn.run_id = run.jcode_run_id || run.run_id || "";
     state.activeRunId = run.web_run_id;
     connectEvents(run.web_run_id);
   } catch (error) {
+    if (originEpoch !== state.selectionEpoch || originProjectId !== state.projectId || originSessionId !== state.sessionId) return;
     const turn = activeTurn();
     turn.status = "failed";
     turn.events.push({ event: "client_error", created_at: new Date().toISOString(), error_type: "request_failed", result: error.message });
@@ -860,9 +878,11 @@ els.composer.addEventListener("submit", async (event) => {
 });
 
 els.stopRun.addEventListener("click", async () => {
-  if (!state.activeRunId) return;
+  const turn = state.turns.find((item) => item.pending_approval || ["running", "waiting_approval", "aborting"].includes(item.status));
+  const runId = turn?.web_run_id || state.activeRunId;
+  if (!runId || !state.projectId || !state.sessionId) return;
   try {
-    const run = await api(`/api/runs/${encodeURIComponent(state.activeRunId)}/abort`, { method: "POST" });
+    const run = await api(`/api/runs/${encodeURIComponent(runId)}/abort?project_id=${encodeURIComponent(state.projectId)}&session_id=${encodeURIComponent(state.sessionId)}`, { method: "POST" });
     setRunStatus(run.status);
     const turn = activeTurn({ web_run_id: run.web_run_id, run_id: run.jcode_run_id || run.run_id });
     turn.status = run.status;

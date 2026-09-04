@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
-from src.app.web_runs import WebRun
+from src.app.web_runs import WebRun, WebRunManager
 from src.app.web_steps import build_reasoning_steps
 
 
@@ -40,3 +41,26 @@ def test_active_run_snapshot_contains_current_steps_and_cursor():
     assert snapshot["user_message"] == "检查代码"
     assert snapshot["reasoning_steps"] == [{"step_id": "run-1:1", "index": 1, "status": "running"}]
     assert snapshot["event_cursor"] == 1
+
+
+def test_run_lookup_rejects_mismatched_project_or_session():
+    manager = WebRunManager.__new__(WebRunManager)
+    manager.lock = threading.RLock()
+    run = WebRun("web-run-1", "project-1", Path("."), "session-1")
+    manager.runs = {run.web_run_id: run}
+
+    assert manager.get_run("web-run-1", project_id="project-1", session_id="session-1") is run
+
+    try:
+        manager.get_run("web-run-1", project_id="project-2")
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("run lookup must reject another project")
+
+    try:
+        manager.get_run("web-run-1", session_id="session-2")
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("run lookup must reject another session")

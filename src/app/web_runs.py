@@ -250,17 +250,26 @@ class WebRunManager:
         self.project_store.touch(project.id)
         return web_run
 
-    def get_run(self, run_id: str) -> WebRun:
+    def get_run(self, run_id: str, *, project_id: str | None = None, session_id: str | None = None) -> WebRun:
         with self.lock:
             if run_id in self.runs:
-                return self.runs[run_id]
-            for run in self.runs.values():
-                if run.jcode_run_id == run_id:
-                    return run
-        raise KeyError(run_id)
+                run = self.runs[run_id]
+            else:
+                run = None
+            for candidate in self.runs.values():
+                if candidate.jcode_run_id == run_id:
+                    run = candidate
+                    break
+            if run is None:
+                raise KeyError(run_id)
+            if project_id is not None and run.project_id != project_id:
+                raise KeyError(run_id)
+            if session_id is not None and run.session_id != session_id:
+                raise KeyError(run_id)
+            return run
 
-    def approve(self, run_id: str, answer: str) -> WebRun:
-        run = self.get_run(run_id)
+    def approve(self, run_id: str, answer: str, *, project_id: str | None = None, session_id: str | None = None) -> WebRun:
+        run = self.get_run(run_id, project_id=project_id, session_id=session_id)
         with run.lock:
             if run.status != "waiting_approval":
                 raise RuntimeError("run is not waiting for approval")
@@ -272,8 +281,8 @@ class WebRunManager:
             run.emit("approval_answered")
         return run
 
-    def abort(self, run_id: str, timeout_seconds: float = 10.0) -> WebRun:
-        run = self.get_run(run_id)
+    def abort(self, run_id: str, timeout_seconds: float = 10.0, *, project_id: str | None = None, session_id: str | None = None) -> WebRun:
+        run = self.get_run(run_id, project_id=project_id, session_id=session_id)
         with run.lock:
             if run.agent is not None and run.status in ACTIVE_STATUSES:
                 run.status = "aborting"
@@ -300,6 +309,16 @@ class WebRunManager:
     def historical_run_dir(self, project_id: str, run_id: str) -> Path:
         project = self.project_store.get(project_id)
         return project.root / ".jcode" / "runs" / run_id
+
+    def historical_run_belongs_to_session(self, project_id: str, session_id: str, run_id: str) -> bool:
+        """校验已结束 run 是否属于指定 session。"""
+        project = self.project_store.get(project_id)
+        session = self._session_store(project).load_requested(session_id, None, project.root)
+        if str(session.get("id") or "") != session_id:
+            return False
+        if run_id in {str(value) for value in session.get("run_ids", [])}:
+            return True
+        return any(str(item.get("run_id") or "") == run_id for item in session.get("history", []) if isinstance(item, dict))
 
     def _session_store(self, project: WebProject) -> SessionStore:
         return SessionStore(project.root / ".jcode" / "sessions")
