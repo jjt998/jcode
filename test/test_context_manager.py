@@ -29,3 +29,21 @@ def test_context_result_keeps_sections_and_structured_history(tmp_path):
     assert [tool.name for tool in result.tools] == ["read_file"]
     assert result.working_memory is not memory
     assert result.ctx_info["context_result"]["history_is_text_clipped"] is False
+
+
+def test_context_budget_includes_provider_continuation(tmp_path):
+    workspace = Workspace.build(tmp_path)
+    manager = ContextManager(workspace, object(), build_default_registry(), total_budget=400000)
+    session = {"history": [], "event_seq": 0}
+    memory = WorkingMemory(tmp_path)
+
+    without_continuation = manager.build(session, memory, "continue", allowed_tools=frozenset({"read_file"}))
+    with_continuation = manager.build(
+        session,
+        memory,
+        "continue",
+        allowed_tools=frozenset({"read_file"}),
+        provider_continuation={"run_id": "run-1", "items": [{"type": "reasoning", "summary": [{"text": "x" * 4000}]}]},
+    )
+
+    assert with_continuation.ctx_info["budget"]["total_chars"] > without_continuation.ctx_info["budget"]["total_chars"] + 4000

@@ -31,6 +31,7 @@ class CheckpointManager:
             "status": task_state.status,
             "stop_reason": task_state.stop_reason,
             "changed_files": list(task_state.changed_files),
+            "provider_continuation": dict(task_state.provider_continuation),
             "recent_files": list(working_memory.recent_files),
             "file_freshness": dict(working_memory.file_freshness),
             "working_memory": working_memory.to_dict(),

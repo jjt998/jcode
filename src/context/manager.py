@@ -80,7 +80,15 @@ class ContextManager:
         self.registry = registry
         self.total_budget = int(total_budget)
 
-    def build(self, session: dict, working_memory, user_message: str, *, allowed_tools: frozenset[str] | None = None) -> ContextResult:
+    def build(
+        self,
+        session: dict,
+        working_memory,
+        user_message: str,
+        *,
+        allowed_tools: frozenset[str] | None = None,
+        provider_continuation: dict | None = None,
+    ) -> ContextResult:
         user_message = str(user_message)
         self._sync_compact_summary_from_history(session, working_memory)
 
@@ -94,8 +102,9 @@ class ContextManager:
             include_older_turns=True,
         )
         initial_section_texts = {section: initial_rendered[section].rendered for section in SECTION_ORDER}
-        initial_prompt = self._build_prompt(initial_section_texts)
-        initial_pressure = self._build_pressure(initial_section_texts, self._budget_tokens())
+        continuation = dict(provider_continuation or {})
+        initial_prompt = self._build_prompt(initial_section_texts, continuation)
+        initial_pressure = self._build_pressure(initial_section_texts, self._budget_tokens(), continuation)
 
         compressed_section_texts, compression_info, compact_audit = self._compress_section_texts_by_pressure(
             session=session,
@@ -104,8 +113,8 @@ class ContextManager:
             section_texts=initial_section_texts,
             pressure=initial_pressure,
         )
-        final_prompt = self._build_prompt(compressed_section_texts)
-        final_pressure = self._build_pressure(compressed_section_texts, self._budget_tokens())
+        final_prompt = self._build_prompt(compressed_section_texts, continuation)
+        final_pressure = self._build_pressure(compressed_section_texts, self._budget_tokens(), continuation)
         cache_info = self._build_cache_info(session, compressed_section_texts["prefix"])
         ctx_info = self._build_ctx_info(
             session=session,
@@ -148,6 +157,7 @@ class ContextManager:
             tools=self.registry.definitions(allowed_tools),
             ctx_info=ctx_info,
             compact_audit=compact_audit,
+            provider_continuation=continuation,
         )
 
     def _build_structured_history(self, session: dict, *, pressure_level: int, current_request: str) -> tuple[list[HistoryEvent], list[dict]]:
@@ -218,11 +228,16 @@ class ContextManager:
             "after_chars": len(replacement),
         }
 
-    def _build_prompt(self, section_texts: dict) -> str:
-        return "\n\n".join(str(section_texts.get(section, "")).strip() for section in SECTION_ORDER).strip()
+    def _build_prompt(self, section_texts: dict, provider_continuation: dict | None = None) -> str:
+        prompt = "\n\n".join(str(section_texts.get(section, "")).strip() for section in SECTION_ORDER).strip()
+        items = dict(provider_continuation or {}).get("items", [])
+        if not isinstance(items, list) or not items:
+            return prompt
+        # 原生续接项会进入最终 Provider input，必须参与上下文压力估算。
+        return prompt + "\n\n[Provider Continuation]\n" + json.dumps(items, ensure_ascii=False, separators=(",", ":"))
 
-    def _build_pressure(self, section_texts: dict, budget_tokens: int) -> dict:
-        prompt = self._build_prompt(section_texts)
+    def _build_pressure(self, section_texts: dict, budget_tokens: int, provider_continuation: dict | None = None) -> dict:
+        prompt = self._build_prompt(section_texts, provider_continuation)
         input_tokens = estimate_tokens(prompt)
         ratio = round(max(0, int(input_tokens)) / max(1, int(budget_tokens)), 4)
         level, range_text, tier = self._pressure_level(ratio)

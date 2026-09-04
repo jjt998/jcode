@@ -49,7 +49,6 @@ def _build_turn(run_id: str, runs_root: Path, history: list[dict]) -> dict:
         "assistant_message": assistant_message,
         "final_text": final_text,
         "reasoning_steps": reasoning_steps,
-        "reasoning_text": reasoning_steps[0].get("reasoning_text", "") if reasoning_steps else "",
         "status": _status(events, assistant_message),
         "event_count": len(events),
         "step_count": len(reasoning_steps),
@@ -73,7 +72,6 @@ def _orphan_history_turns(history: list[dict]) -> list[dict]:
                 "assistant_message": content if role == "assistant" else "",
                 "final_text": content if role == "assistant" else "",
                 "reasoning_steps": [],
-                "reasoning_text": "",
                 "status": "history",
                 "event_count": 0,
                 "step_count": 0,
@@ -86,14 +84,11 @@ def _orphan_history_turns(history: list[dict]) -> list[dict]:
 
 
 def _fallback_steps(items: list[dict], run_id: str) -> list[dict]:
-    reasoning = ""
     context = ""
     for item in items:
-        if item.get("kind") == "assistant" and not reasoning:
-            reasoning = str(item.get("metadata", {}).get("reasoning") or "").strip()
         if item.get("kind") == "context_built":
             context = str(item.get("content") or "")
-    if not reasoning and not context:
+    if not context:
         return []
     return [
         {
@@ -102,10 +97,9 @@ def _fallback_steps(items: list[dict], run_id: str) -> list[dict]:
             "timestamp": items[0].get("created_at", "") if items else "",
             "end_timestamp": items[-1].get("created_at", "") if items else "",
             "status": "success",
-            "reasoning_text": reasoning,
-            "reasoning_summary": reasoning[:20] + ("…" if len(reasoning) > 20 else "") if reasoning else "",
             "context_text": context,
             "response_text": "",
+            "process_content": "",
             "error_text": "",
             "parsed_action": {},
             "tool_calls": [],

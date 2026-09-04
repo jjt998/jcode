@@ -67,7 +67,7 @@ def build_agent(config: AppConfig) -> JCodeAgent:
     workers = WorkerManager(workspace, state_dir / "workers", executor, router, config, session_events=session_events)
     manager = ContextManager(workspace=workspace, durable_memory=memory_store, registry=registry, total_budget=400000)
     agent = JCodeAgent(
-        config=config,
+        config=config, 
         workspace=workspace,
         session=session,
         session_store=session_store,

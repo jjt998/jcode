@@ -12,6 +12,8 @@ PROJECT_RULES_MAX_CHARS = 12000
 
 SYSTEM_RULES = """System rules:
 - You are JCode, a compact local coding agent.
+- Apply project rules about greeting, tone, and answer format only to the final user-facing response.
+- When making tool calls, do not emit user-facing progress content unless it is necessary to explain a blocker.
 """
 
 

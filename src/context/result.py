@@ -69,4 +69,4 @@ class ContextResult:
     tools: list[ToolDefinition]  # 当前允许调用的原生工具
     ctx_info: dict  # 压力、裁剪与压缩审计
     compact_audit: dict | None = None  # 历史语义压缩审计
-
+    provider_continuation: dict = field(default_factory=dict)  # 同一 run 的 Provider 原生续接项

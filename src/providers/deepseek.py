@@ -66,29 +66,30 @@ class DeepSeekClient:
         if context.skill.strip():
             items.append({"role": "user", "content": "[JCode Skill Context]\n" + context.skill})
         for event in context.history:
-            items.extend(self._compile_history_event(event))
+            items.extend(self._compile_history_event(event, continuation_run_id=str(context.provider_continuation.get("run_id") or "")))
+        continuation_items = context.provider_continuation.get("items", [])
+        if isinstance(continuation_items, list):
+            items.extend(dict(item) for item in continuation_items if isinstance(item, dict))
         memory_text = context.working_memory.render().strip()
         if memory_text:
             items.append({"role": "user", "content": "[JCode Working Memory]\n" + memory_text})
         items.append({"role": "user", "content": context.current_request})
         return items
 
-    def _compile_history_event(self, event: HistoryEvent) -> list[dict]:
+    def _compile_history_event(self, event: HistoryEvent, *, continuation_run_id: str = "") -> list[dict]:
         if event.kind == "compact_summary":
             return []
         if event.kind == "user":
             return [{"role": "user", "content": event.content}]
         if event.kind == "assistant":
-            native = event.metadata.get("deepseek_response_items")
-            if isinstance(native, list):
-                return [dict(item) for item in native if isinstance(item, dict)]
             return [{"role": "assistant", "content": event.content}]
         if event.kind == "tool_call":
-            native = event.metadata.get("deepseek_response_item")
-            if isinstance(native, dict):
-                return [dict(native)]
+            if continuation_run_id and event.turn_id == continuation_run_id:
+                return []
             return [{"type": "function_call", "call_id": event.call_id, "name": event.tool_name, "arguments": json.dumps(event.arguments or {}, ensure_ascii=False)}]
         if event.kind == "tool_result":
+            if continuation_run_id and event.turn_id == continuation_run_id:
+                return []
             return [{"type": "function_call_output", "call_id": event.call_id, "output": event.content}]
         return []
 

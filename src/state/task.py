@@ -22,6 +22,7 @@ class TaskState:
     pending_next_step: str = ""
     changed_files: list[str] = field(default_factory=list)
     failed_tools: list[dict] = field(default_factory=list)
+    provider_continuation: dict = field(default_factory=dict)  # 当前 run 的 Provider 原生续接项
     final_answer: str = ""
     created_at: str = field(default_factory=now_iso)
     updated_at: str = field(default_factory=now_iso)

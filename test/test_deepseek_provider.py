@@ -89,3 +89,28 @@ def test_deepseek_responses_parses_function_calls(monkeypatch, tmp_path):
     assert response.text == ""
     assert response.reasoning == "inspect"
     assert [(call.call_id, call.name, call.arguments) for call in response.tool_calls or []] == [("call-2", "read_file", {"path": "a.py"})]
+
+
+def test_deepseek_responses_replays_same_run_native_items_once(tmp_path):
+    context = _context(tmp_path)
+    context.history.extend(
+        [
+            HistoryEvent("assistant", "event-4", "run-current", "I will inspect the current file."),
+            HistoryEvent("tool_call", "event-5", "run-current", tool_name="read_file", call_id="call-current", arguments={"path": "current.py"}),
+            HistoryEvent("tool_result", "event-6", "run-current", "current content", tool_name="read_file", call_id="call-current"),
+        ]
+    )
+    context.provider_continuation = {
+        "run_id": "run-current",
+        "items": [
+            {"type": "reasoning", "summary": [{"text": "inspect current.py"}]},
+            {"type": "function_call", "call_id": "call-current", "name": "read_file", "arguments": '{"path":"current.py"}'},
+            {"type": "function_call_output", "call_id": "call-current", "output": "current content"},
+        ],
+    }
+
+    items = DeepSeekClient(_profile())._compile_input(context)
+
+    assert sum(item.get("call_id") == "call-current" for item in items) == 2
+    assert any(item.get("type") == "reasoning" for item in items)
+    assert any(item.get("role") == "assistant" and item.get("content") == "I will inspect the current file." for item in items)

@@ -9,8 +9,9 @@ from src.evidence.tool_artifacts import prepare_tool_result_observation
 from src.evidence.session_log import SessionEventBus
 from src.memory.consolidation import maintain_after_turn
 from src.policy.decisions import PolicyDecision
+from src.providers.continuation import ProviderContinuation
 from src.runtime.plan import PlanModeController, runtime_mode_name, runtime_mode_plan_path
-from src.runtime.transitions import ABORTED, MODEL_ERROR, STEP_LIMIT_REACHED, VALID_FINAL
+from src.runtime.transitions import ABORTED, MODEL_ERROR, MODEL_OUTPUT_INCOMPLETE, STEP_LIMIT_REACHED, VALID_FINAL
 from src.state.checkpoint import CheckpointManager
 from src.state.history import append_history
 from src.state.resume import build_resume_context
@@ -204,6 +205,8 @@ class JCodeAgent:
             self._record_model_history(response, task_state)
             if not tool_calls:
                 self._create_checkpoint(checkpoint, task_state, run_dir, "model_completed")
+                if not self._is_completed_response(response.finish_reason):
+                    return self._finish_run(task_state, run_dir, response.text, MODEL_OUTPUT_INCOMPLETE)
                 if response.text:
                     return self._finish_run(task_state, run_dir, response.text, VALID_FINAL)
                 return self._finish_run(task_state, run_dir, "", "empty_model_content")
@@ -270,6 +273,7 @@ class JCodeAgent:
             self.working_memory,
             user_message,
             allowed_tools=self.active_tool_profile.allowed_tools,
+            provider_continuation=task_state.provider_continuation,
         )
         print("------------------------------------------------------------\n",context_result)
         self.session["ctx_info"] = context_result.ctx_info
@@ -364,16 +368,18 @@ class JCodeAgent:
         return response
 
     def _record_model_history(self, response, task_state) -> None:
-        """将模型原生响应写入结构化历史，供下一个 Responses 请求回放。"""
+        """分别写入通用会话历史与当前 run 的 Provider 原生续接项。"""
         raw = response.raw if isinstance(response.raw, dict) else {}
         output = raw.get("output", []) if isinstance(raw.get("output", []), list) else []
-        reasoning_items = [dict(item) for item in output if isinstance(item, dict) and item.get("type") == "reasoning"]
-        if response.text or reasoning_items:
+        continuation = ProviderContinuation.from_dict(task_state.provider_continuation, run_id=task_state.run_id)
+        continuation.add_response_items(output)
+        task_state.provider_continuation = continuation.to_dict()
+        if response.text:
             self._append_history(
                 "assistant",
                 response.text,
                 task_state,
-                metadata={"deepseek_response_items": reasoning_items, "reasoning": response.reasoning, "model_profile": task_state.model_profile},
+                metadata={"model_profile": task_state.model_profile},
             )
         for call in response.tool_calls or []:
             self._append_history(
@@ -383,8 +389,13 @@ class JCodeAgent:
                 tool_name=call.name,
                 call_id=call.call_id,
                 arguments=call.arguments,
-                metadata={"deepseek_response_item": call.provider_metadata},
+                metadata={},
             )
+
+    @staticmethod
+    def _is_completed_response(finish_reason: str) -> bool:
+        """仅接受 Provider 明确完成的无工具调用响应作为最终答案。"""
+        return str(finish_reason or "").strip() == "completed"
 
 
     def _execute_tool_call(
@@ -462,6 +473,10 @@ class JCodeAgent:
             **history_meta,
         )
         self.working_memory.observe_tool(f"{tool_name}: {result.status}: {result.text}")
+        if call_id:
+            continuation = ProviderContinuation.from_dict(task_state.provider_continuation, run_id=task_state.run_id)
+            continuation.add_tool_output(call_id, result.text)
+            task_state.provider_continuation = continuation.to_dict()
         if tool_name == "wait_subagent" and result.status == "success":
             self.working_memory.subagent_results.append(result.text[:1000])
 

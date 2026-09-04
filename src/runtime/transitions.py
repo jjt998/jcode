@@ -1,6 +1,7 @@
 VALID_FINAL = "valid_final"
 STEP_LIMIT_REACHED = "step_limit_reached"
 MODEL_ERROR = "model_error"
+MODEL_OUTPUT_INCOMPLETE = "model_output_incomplete"
 TOOL_POLICY_DENIED = "tool_policy_denied"
 PERMISSION_DENIED = "permission_denied"
 SANDBOX_FAILED = "sandbox_failed"

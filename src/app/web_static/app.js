@@ -268,7 +268,7 @@ function renderTurn(turn) {
   item.dataset.turnId = turn.local_id || turn.run_id;
   if (turn.user_message) item.append(messageNode("user", turn.user_message));
   const steps = turn.reasoning_steps || [];
-  if (steps.length || turn.reasoning_text || turn.status !== "history") item.append(stepTimeline(turn));
+  if (steps.length || turn.status !== "history") item.append(stepTimeline(turn));
   if (turn.pending_approval) item.append(approvalNode(turn));
   if (turn.final_text || turn.assistant_message) item.append(finalAnswerNode(turn.final_text || turn.assistant_message));
   return item;
@@ -328,7 +328,7 @@ function stepItem(turn, step) {
           <span class="step-status">${escapeHtml(stepStatusLabel(step.status))}</span>
           <span class="step-meta">${escapeHtml(stepMetaLabel(step))}</span>
         </div>
-        <div class="step-summary-text">${escapeHtml(step.reasoning_summary || summarizeText(step.reasoning_text || "没有推理内容"))}</div>
+        <div class="step-summary-text">${escapeHtml(summarizeText(step.process_content || "模型已返回工具调用", 80))}</div>
       </div>
     </summary>
   `;
@@ -338,14 +338,8 @@ function stepItem(turn, step) {
     // 只保留完整上下文，不再展示底层事件细节。
     body.append(detailBlock("完整上下文文本", step.context_text, `step-detail:${turnKey(turn)}:${step.step_id}:context`));
   }
-  if (step.reasoning_text) {
-    const reasoning = document.createElement("section");
-    reasoning.className = "step-reasoning";
-    reasoning.innerHTML = `
-      <span class="eyebrow">推理内容</span>
-      <pre>${escapeHtml(step.reasoning_text)}</pre>
-    `;
-    body.append(reasoning);
+  if (step.process_content) {
+    body.append(detailBlock("模型过程消息", step.process_content, `step-content:${turnKey(turn)}:${step.step_id}`));
   }
   if (step.error_text) {
     const error = document.createElement("section");
@@ -510,31 +504,7 @@ function normalizeTurn(turn) {
       if (step && step.step_id) turn.stepMap.set(step.step_id, step);
     }
   }
-  if (!turn.reasoning_steps.length && turn.reasoning_text) {
-    const synthetic = syntheticStep(turn);
-    turn.reasoning_steps = [synthetic];
-    turn.stepMap.set(synthetic.step_id, synthetic);
-  }
   return turn;
-}
-
-function syntheticStep(turn) {
-  return {
-    step_id: `${turn.run_id || turn.local_id || "turn"}:1`,
-    index: 1,
-    timestamp: "",
-    end_timestamp: "",
-    status: turn.status === "failed" ? "error" : "success",
-    reasoning_text: turn.reasoning_text || "",
-    reasoning_summary: summarizeText(turn.reasoning_text || "", 20),
-    context_text: "",
-    response_text: "",
-    parsed_action: {},
-    tool_calls: [],
-    details: [],
-    duration_ms: null,
-    tool_count: 0,
-  };
 }
 
 function upsertStep(turn, step) {
@@ -643,7 +613,6 @@ function activeTurn(payload = {}) {
     web_run_id: payload.web_run_id || "",
     run_id: payload.jcode_run_id || payload.run_id || "",
     user_message: "",
-    reasoning_text: "",
     reasoning_steps: [],
     final_text: "",
     assistant_message: "",
@@ -736,7 +705,6 @@ els.composer.addEventListener("submit", async (event) => {
       run_id: "",
       web_run_id: "",
       user_message: message,
-      reasoning_text: "",
       reasoning_steps: [],
       final_text: "",
       assistant_message: "",
@@ -813,7 +781,6 @@ loadProjects(true).catch((error) => {
       local_id: "startup-error",
       status: "failed",
       user_message: "",
-      reasoning_text: "",
       reasoning_steps: [],
       final_text: "",
       assistant_message: "",

@@ -8,7 +8,7 @@ from typing import Iterable
 
 
 def build_reasoning_steps(events: Iterable[dict], *, run_id: str = "") -> tuple[list[dict], str]:
-    """把 trace 事件聚合成步骤时间线。"""
+    """把 trace 事件聚合成不含内部推理的步骤时间线。"""
     builder = StepTimelineBuilder(run_id=run_id)
     for event in events:
         builder.consume(event)
@@ -46,11 +46,13 @@ class StepTimelineBuilder:
             step = self._new_step(created_at)
             step["context_text"] = self.pending_context_text
             step["response_text"] = str(event.get("response_text") or "")
-            step["reasoning_text"] = str(event.get("reasoning_text") or "")
             step["parsed_action"] = {"tool_calls": list(event.get("native_tool_calls") or [])}
+            if step["parsed_action"]["tool_calls"]:
+                step["process_content"] = step["response_text"]
             step["status"] = "pending"
             step["error_text"] = ""
-            self._push_detail(step, "model_responded", "模型原始返回", step["response_text"], event)
+            if step["process_content"]:
+                self._push_detail(step, "model_responded", "模型过程消息", step["process_content"], event)
             self._push_detail(step, "native_tool_calls_received", "原生工具调用", json.dumps(step["parsed_action"], ensure_ascii=False, indent=2), event)
             self.current_step = step
             self.pending_context_text = ""
@@ -77,7 +79,7 @@ class StepTimelineBuilder:
 
         if name in {"tool_sequence_requested", "tool_sequence_step_requested", "tool_sequence_completed", "tool_sequence_aborted"}:
             self._push_detail(step, name, _event_title(name, event), _event_content(name, event), event)
-            if name == "tool_sequence_requested" and not step.get("reasoning_text"):
+            if name == "tool_sequence_requested":
                 step["status"] = "running"
             if name == "tool_sequence_completed" and step.get("status") not in {"error", "timeout"}:
                 step["status"] = "success"
@@ -154,10 +156,9 @@ class StepTimelineBuilder:
             "timestamp": created_at,
             "end_timestamp": "",
             "status": "pending",
-            "reasoning_text": "",
-            "reasoning_summary": "",
             "context_text": "",
             "response_text": "",
+            "process_content": "",
             "error_text": "",
             "parsed_action": {},
             "tool_calls": [],
@@ -236,7 +237,6 @@ class StepTimelineBuilder:
         self.current_step["end_timestamp"] = end_at or self.current_step.get("end_timestamp") or self.current_step.get("_last_event_at") or self.current_step.get("_start_at") or ""
         if success_if_open and self.current_step.get("status") == "pending":
             self.current_step["status"] = "success"
-        self.current_step["reasoning_summary"] = _summarize(self.current_step.get("reasoning_text", ""))
         self.current_step = None
 
     def _snapshot_step(self, step: dict) -> dict:
@@ -247,7 +247,6 @@ class StepTimelineBuilder:
             data["end_timestamp"] = last_at or start_at
         data["duration_ms"] = _duration_ms(start_at, data.get("end_timestamp") or last_at)
         data["tool_count"] = len(data.get("tool_calls", []))
-        data["reasoning_summary"] = _summarize(data.get("reasoning_text", ""))
         return data
 
 
@@ -255,7 +254,7 @@ def _event_title(name: str, event: dict) -> str:
     tool = event.get("name") or event.get("tool_name")
     labels = {
         "context_built": "Context 拼凑",
-        "model_responded": "模型原始返回",
+        "model_responded": "模型过程消息",
         "native_tool_calls_received": "原生工具调用",
         "tool_requested": f"工具请求{f': {tool}' if tool else ''}",
         "tool_executed": f"工具结果{f': {tool}' if tool else ''}",
@@ -288,13 +287,6 @@ def _event_content(name: str, event: dict) -> str:
     if name in {"checkpoint_created", "tool_sequence_requested", "tool_sequence_step_requested", "tool_sequence_completed", "tool_sequence_aborted", "memory_maintained", "run_finished", "approval_required", "approval_answered", "web_run_completed", "run_failed", "run_aborted"}:
         return json.dumps({k: v for k, v in event.items() if k not in {"event", "created_at", "run_id"}}, ensure_ascii=False, indent=2)
     return json.dumps({k: v for k, v in event.items() if k not in {"event", "created_at", "run_id"}}, ensure_ascii=False, indent=2)
-
-
-def _summarize(text: str, limit: int = 20) -> str:
-    value = str(text or "").strip().replace("\n", " ")
-    if not value:
-        return ""
-    return value[:limit] + ("…" if len(value) > limit else "")
 
 
 def _stringify_payload(value) -> str:
