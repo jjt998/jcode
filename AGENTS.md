@@ -46,4 +46,4 @@ If you start a local service while testing, stop that service before finishing t
 
 当你定义DataClass时，你需要在成员变量的右边用#来注释写上该变量的含义。
 
-当你完整了某次确切的计划或任务时，同时在最终总结给我用star模式总结的feat给我。
+当你完整了某次确切的计划或任务时，同时在最终总结输出用star法则总结的feat文本。
