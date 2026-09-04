@@ -14,6 +14,7 @@ from src.policy.secrets import SecretRedactor
 from src.policy.tool_rules import ToolPolicyChecker
 from src.policy.tool_profiles import build_tool_profiles
 from src.providers.deepseek import DeepSeekClient
+from src.providers.minimax import MiniMaxClient
 from src.providers.registry import ModelRegistry
 from src.providers.router import ModelRouter
 from src.runtime.agent import JCodeAgent
@@ -59,6 +60,7 @@ def build_agent(config: AppConfig) -> JCodeAgent:
     )
     model_registry = ModelRegistry(config.model_profiles, config.default_model_profile)
     model_registry.register("deepseek", "openai_responses", DeepSeekClient)
+    model_registry.register("minimax", "openai_responses", MiniMaxClient)
     router = ModelRouter(model_registry)
     session_events = SessionEventBus(state_dir / "sessions" / f"{session['id']}.events.jsonl")
     if config.resume:

@@ -20,6 +20,7 @@ class MessageRequest(BaseModel):
 class ModelSwitchRequest(BaseModel):
     model_profile: str
     reasoning_effort: str = ""
+    thinking_enabled: bool | None = None
 
 
 class ApprovalRequest(BaseModel):
@@ -101,7 +102,7 @@ def create_app(manager: WebRunManager) -> FastAPI:
     @app.post("/api/projects/{project_id}/sessions/{session_id}/model")
     def switch_project_session_model(project_id: str, session_id: str, request: ModelSwitchRequest):
         try:
-            return manager.switch_model(session_id, request.model_profile, request.reasoning_effort, project_id)
+            return manager.switch_model(session_id, request.model_profile, request.reasoning_effort, project_id, request.thinking_enabled)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="project or session not found") from exc
         except (ValueError, RuntimeError) as exc:

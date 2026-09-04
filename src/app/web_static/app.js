@@ -28,6 +28,8 @@ const els = {
   messageInput: document.querySelector("#messageInput"),
   stopRun: document.querySelector("#stopRun"),
   modelProfile: document.querySelector("#modelProfile"),
+  reasoningToggleField: document.querySelector("#reasoningToggleField"),
+  thinkingEnabled: document.querySelector("#thinkingEnabled"),
   reasoningEffort: document.querySelector("#reasoningEffort"),
   reasoningSupport: document.querySelector("#reasoningSupport"),
 };
@@ -107,7 +109,9 @@ function setRunStatus(status) {
   els.runState.textContent = status || "idle";
   els.runState.dataset.status = status || "idle";
   els.modelProfile.disabled = ["running", "waiting_approval", "aborting"].includes(status);
-  els.reasoningEffort.disabled = els.modelProfile.disabled || els.reasoningEffort.dataset.supported !== "true";
+  const running = els.modelProfile.disabled;
+  els.thinkingEnabled.disabled = running || els.thinkingEnabled.dataset.locked === "true" || els.thinkingEnabled.dataset.supported !== "true";
+  els.reasoningEffort.disabled = running || els.reasoningEffort.dataset.supported !== "true" || els.thinkingEnabled.checked === false;
 }
 
 function summarizeText(text, limit = 20) {
@@ -227,7 +231,12 @@ function renderModelProfiles(profiles, selected) {
 function updateReasoningControls(profiles, selected) {
   const profile = profiles.find((item) => item.id === selected);
   const supported = Boolean(profile && profile.reasoning_mode !== "none");
+  const alwaysOn = Boolean(profile?.reasoning_always_on);
   els.reasoningEffort.dataset.supported = supported ? "true" : "false";
+  els.thinkingEnabled.dataset.supported = supported ? "true" : "false";
+  els.thinkingEnabled.dataset.locked = alwaysOn ? "true" : "false";
+  els.thinkingEnabled.checked = supported && Boolean(profile?.thinking_enabled);
+  els.reasoningToggleField.hidden = !supported;
   els.reasoningEffort.innerHTML = "";
   for (const effort of (profile?.reasoning_effort_options || [])) {
     const option = document.createElement("option");
@@ -236,7 +245,7 @@ function updateReasoningControls(profiles, selected) {
     option.selected = effort === profile.reasoning_effort;
     els.reasoningEffort.append(option);
   }
-  els.reasoningSupport.textContent = supported ? "下一轮生效" : "该模型不支持思考";
+  els.reasoningSupport.textContent = !supported ? "该模型不支持推理" : alwaysOn ? "该模型始终开启" : "下一轮生效";
   setRunStatus(els.runState.dataset.status || "idle");
 }
 
@@ -807,7 +816,7 @@ els.modelProfile.addEventListener("change", async () => {
   updateReasoningControls(state.modelProfiles, els.modelProfile.value);
   const session = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions/${encodeURIComponent(state.sessionId)}/model`, {
     method: "POST",
-    body: JSON.stringify({ model_profile: els.modelProfile.value, reasoning_effort: els.reasoningEffort.value }),
+    body: JSON.stringify({ model_profile: els.modelProfile.value, thinking_enabled: els.thinkingEnabled.checked, reasoning_effort: els.reasoningEffort.value }),
   });
   state.modelProfiles = session.model_profiles || [];
   renderModelProfiles(state.modelProfiles, session.active_model_profile || "");
@@ -818,13 +827,14 @@ async function saveReasoningOptions() {
   if (!state.projectId || !state.sessionId || els.reasoningEffort.dataset.supported !== "true") return;
   const session = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions/${encodeURIComponent(state.sessionId)}/model`, {
     method: "POST",
-    body: JSON.stringify({ model_profile: els.modelProfile.value, reasoning_effort: els.reasoningEffort.value }),
+    body: JSON.stringify({ model_profile: els.modelProfile.value, thinking_enabled: els.thinkingEnabled.checked, reasoning_effort: els.reasoningEffort.value }),
   });
   state.modelProfiles = session.model_profiles || [];
   renderModelProfiles(state.modelProfiles, session.active_model_profile || "");
 }
 
 els.reasoningEffort.addEventListener("change", saveReasoningOptions);
+els.thinkingEnabled.addEventListener("change", saveReasoningOptions);
 
 loadProjects(true).catch((error) => {
   state.turns = [

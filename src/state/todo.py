@@ -113,7 +113,11 @@ class TodoLedger:
     def render_list(self) -> str:
         if not self.items:
             return "(empty)"
-        lines = []
+        completed = sum(1 for item in self.items if item.status == "completed")
+        in_progress = sum(1 for item in self.items if item.status == "in_progress")
+        pending = len(self.items) - completed - in_progress
+        percent = int(completed * 100 / len(self.items))
+        lines = [f"Todo progress: {completed}/{len(self.items)} completed ({percent}%), {in_progress} in progress, {pending} pending"]
         for item in self.items:
             note = f" | note: {item.note}" if item.note else ""
             lines.append(f"{item.todo_id} [{item.status}] {item.priority} - {item.content}{note}")

@@ -21,6 +21,7 @@ class WorkingMemory:
     safety_notes: list[str] = field(default_factory=list)
     compact_summary: str = ""
     runtime_context: str = ""  # 当前运行模式与工作区上下文
+    todo_items: list[dict] = field(default_factory=list)  # 当前会话 todo 的只读投影
 
     @classmethod
     def from_dict(cls, data: dict, workspace_root: Path) -> "WorkingMemory":
@@ -46,6 +47,7 @@ class WorkingMemory:
             safety_notes=list(safety.get("notes", data.get("safety_notes", []))),
             compact_summary=str(compact.get("summary", data.get("compact_summary", ""))),
             runtime_context=str(data.get("runtime_context", "")),
+            todo_items=[item for item in (data.get("todo", {}).get("items", data.get("todo_items", [])) if isinstance(data.get("todo", {}), dict) else data.get("todo_items", [])) if isinstance(item, dict)],
         )
 
     def to_dict(self) -> dict:
@@ -77,7 +79,16 @@ class WorkingMemory:
             },
             "compact_summary": self.compact_summary,
             "runtime_context": self.runtime_context,
+            "todo": {
+                "items": [dict(item) for item in self.todo_items],
+            },
         }
+
+    def sync_todos(self, ledger: dict | None) -> None:
+        """从 session ledger 刷新当前回合的 todo 投影。"""
+        payload = ledger if isinstance(ledger, dict) else {}
+        raw_items = payload.get("items", [])
+        self.todo_items = [dict(item) for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
 
     def note_file_read(self, relpath: str, args: dict, freshness: str) -> None:
         if relpath not in self.recent_files:
@@ -136,6 +147,17 @@ class WorkingMemory:
             lines.append("- safety_notes:\n" + "\n".join(f"  - {x}" for x in self.safety_notes[-5:]))
         if self.runtime_context:
             lines.append("- runtime_context:\n" + self.runtime_context)
+        if self.todo_items:
+            completed = sum(1 for item in self.todo_items if str(item.get("status", "pending")) == "completed")
+            in_progress = sum(1 for item in self.todo_items if str(item.get("status", "pending")) == "in_progress")
+            pending = len(self.todo_items) - completed - in_progress
+            percent = int(completed * 100 / len(self.todo_items))
+            lines.append(f"- todo_progress: {completed}/{len(self.todo_items)} completed ({percent}%), {in_progress} in progress, {pending} pending")
+            lines.append("- todos:\n" + "\n".join(
+                f"  - {item.get('todo_id', '')} [{item.get('status', 'pending')}] {item.get('priority', 'normal')} - {item.get('content', '')}"
+                + (f" | note: {item['note']}" if item.get("note") else "")
+                for item in self.todo_items
+            ))
         return "\n".join(lines)
 
 

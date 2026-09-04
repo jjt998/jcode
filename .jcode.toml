@@ -1,6 +1,6 @@
-default_model = "deepseek-flash"
+default_model = "minimax-m3"
 
-[provider]
+[providers.deepseek]
 name = "deepseek"
 api_protocol = "openai_responses"
 base_url = "https://api.deepseek.com"
@@ -10,6 +10,7 @@ api_key = "sk-27f8071e2af34f1789969770c98ca673"
 max_new_tokens = 32768
 
 [models.deepseek-flash]
+provider = "deepseek"
 model = "deepseek-v4-flash"
 reasoning_mode = "native"
 thinking_enabled = true
@@ -17,8 +18,41 @@ reasoning_effort = "high"
 reasoning_effort_options = ["low", "high", "max"]
 
 [models.deepseek-pro]
+provider = "deepseek"
 model = "deepseek-v4-pro"
 reasoning_mode = "native"
 thinking_enabled = true
 reasoning_effort = "high"
 reasoning_effort_options = ["low", "high", "max"]
+
+[providers.minimax]
+name = "minimax"
+api_protocol = "openai_responses"
+base_url = "https://minnimax.chat/v1"
+api_key = "gw-f84279c8-f1c8-48cd-9ab0-8135f2df7235"
+
+[models.minimax-m3]
+provider = "minimax"
+model = "MiniMax-M3"
+reasoning_mode = "optional"
+thinking_enabled = true
+reasoning_effort = "minimal"
+reasoning_effort_options = ["minimal", "low", "medium", "high"]
+
+[models."minimax-m2.7"]
+provider = "minimax"
+model = "MiniMax-M2.7"
+reasoning_mode = "native"
+thinking_enabled = true
+reasoning_effort = "minimal"
+reasoning_effort_options = ["minimal", "low", "medium", "high"]
+reasoning_always_on = true
+
+[models."minimax-m2.7-speed"]
+provider = "minimax"
+model = "MiniMax-M2.7-speed"
+reasoning_mode = "native"
+thinking_enabled = true
+reasoning_effort = "minimal"
+reasoning_effort_options = ["minimal", "low", "medium", "high"]
+reasoning_always_on = true

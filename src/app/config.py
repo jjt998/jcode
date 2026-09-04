@@ -47,8 +47,12 @@ def _as_bool(value) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _profile_from_raw(profile_id: str, raw: dict, *, provider: dict, api_key_override: str | None, base_url_override: str | None) -> ModelProfile:
-    """将 TOML 模型档案转换为运行时配置。"""
+def _profile_from_raw(profile_id: str, raw: dict, *, providers: dict[str, dict], api_key_override: str | None, base_url_override: str | None) -> ModelProfile:
+    """将模型档案和其引用的 Provider 配置转换为运行时配置。"""
+    provider_id = str(raw.get("provider") or "").strip()
+    provider = providers.get(provider_id)
+    if provider is None:
+        raise ValueError(f"model profile {profile_id} references unknown provider: {provider_id}")
     provider_name = str(provider.get("name") or "").strip()
     api_protocol = str(provider.get("api_protocol") or "").strip()
     model = str(raw.get("model") or "").strip()
@@ -57,15 +61,18 @@ def _profile_from_raw(profile_id: str, raw: dict, *, provider: dict, api_key_ove
     api_key = str(api_key_override or provider.get("api_key") or (os.environ.get(api_key_env) if api_key_env else "") or "")
     reasoning_mode = str(raw.get("reasoning_mode") or "none").strip()
     thinking_enabled = _as_bool(raw.get("thinking_enabled", False))
+    reasoning_always_on = _as_bool(raw.get("reasoning_always_on", False))
     if not provider_name or not api_protocol or not model or not base_url:
         raise ValueError(f"model profile {profile_id} requires global provider and model")
     if reasoning_mode not in {"none", "native", "optional"}:
         raise ValueError(f"model profile {profile_id} has invalid reasoning_mode: {reasoning_mode}")
-    if reasoning_mode == "none" and thinking_enabled:
+    if reasoning_mode == "none" and (thinking_enabled or reasoning_always_on):
         raise ValueError(f"model profile {profile_id} cannot enable thinking when reasoning_mode is none")
     reasoning_effort = str(raw.get("reasoning_effort") or "")
     effort_options = tuple(str(value) for value in raw.get("reasoning_effort_options", []))
     allowed_efforts = {"low", "medium", "high", "xhigh", "max"}
+    if provider_name == "minimax":
+        allowed_efforts = {"minimal", "low", "medium", "high"}
     if reasoning_effort and reasoning_effort not in allowed_efforts:
         raise ValueError(f"model profile {profile_id} has invalid reasoning_effort: {reasoning_effort}")
     if any(value not in allowed_efforts for value in effort_options):
@@ -74,7 +81,9 @@ def _profile_from_raw(profile_id: str, raw: dict, *, provider: dict, api_key_ove
         raise ValueError(f"model profile {profile_id} cannot declare effort when reasoning_mode is none")
     if reasoning_mode != "none" and (not reasoning_effort or not effort_options or reasoning_effort not in effort_options):
         raise ValueError(f"model profile {profile_id} requires a default effort included in reasoning_effort_options")
-    known = {"model", "reasoning_mode", "thinking_enabled", "reasoning_effort", "reasoning_effort_options"}
+    if reasoning_always_on and not thinking_enabled:
+        thinking_enabled = True
+    known = {"provider", "model", "reasoning_mode", "thinking_enabled", "reasoning_always_on", "reasoning_effort", "reasoning_effort_options"}
     return ModelProfile(
         id=profile_id,
         provider=provider_name,
@@ -86,6 +95,7 @@ def _profile_from_raw(profile_id: str, raw: dict, *, provider: dict, api_key_ove
         thinking_enabled=thinking_enabled,
         reasoning_effort=reasoning_effort,
         reasoning_effort_options=effort_options,
+        reasoning_always_on=reasoning_always_on,
         extra={key: value for key, value in raw.items() if key not in known},
     )
 
@@ -95,9 +105,19 @@ def load_config(args) -> AppConfig:
     # --cwd 仅用于定位当前工作项目，模型配置始终来自 JCode 安装目录。
     config_path = Path(args.config).resolve() if getattr(args, "config", None) else global_config_path()
     raw = _load_toml(config_path)
-    provider_raw = dict(raw.get("provider", {}))
-    if provider_raw.get("name") != "deepseek" or provider_raw.get("api_protocol") != "openai_responses":
-        raise ValueError("JCode currently requires [provider] name = 'deepseek' and api_protocol = 'openai_responses'")
+    providers_raw = raw.get("providers", {})
+    if not isinstance(providers_raw, dict) or not providers_raw:
+        raise ValueError("configuration requires at least one [providers.<provider_id>] section")
+    providers: dict[str, dict] = {}
+    for provider_id, provider_value in providers_raw.items():
+        if not isinstance(provider_value, dict):
+            raise ValueError("every provider must be a TOML table")
+        provider = dict(provider_value)
+        name = str(provider.get("name") or "").strip()
+        protocol = str(provider.get("api_protocol") or "").strip()
+        if name not in {"deepseek", "minimax"} or protocol != "openai_responses":
+            raise ValueError(f"unsupported provider protocol: {name}/{protocol}")
+        providers[str(provider_id)] = provider
     models_raw = raw.get("models", {})
     if not isinstance(models_raw, dict) or not models_raw:
         raise ValueError("configuration requires at least one [models.<profile_id>] section")
@@ -110,7 +130,7 @@ def load_config(args) -> AppConfig:
         profile_id: _profile_from_raw(
             profile_id,
             dict(profile_raw),
-            provider=provider_raw,
+            providers=providers,
             api_key_override=getattr(args, "api_key", None) if profile_id == selected else None,
             base_url_override=getattr(args, "base_url", None) if profile_id == selected else None,
         )
@@ -119,13 +139,14 @@ def load_config(args) -> AppConfig:
     }
     if len(profiles) != len(models_raw):
         raise ValueError("every model profile must be a TOML table")
+    default_profile = profiles[selected]
     security_raw = dict(raw.get("security", {}))
     runtime_raw = dict(raw.get("runtime", {}))
     memory_raw = dict(raw.get("memory", {}))
     return AppConfig(
         cwd=cwd,
-        provider_name="deepseek",
-        api_protocol="openai_responses",
+        provider_name=default_profile.provider,
+        api_protocol=default_profile.api_protocol,
         model_profiles=profiles,
         default_model_profile=selected,
         approval=str(getattr(args, "approval", None) or security_raw.get("approval") or "ask"),

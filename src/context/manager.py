@@ -91,6 +91,8 @@ class ContextManager:
     ) -> ContextResult:
         user_message = str(user_message)
         self._sync_compact_summary_from_history(session, working_memory)
+        # 每次构建上下文前从 session 刷新 todo，确保投影不会过期。
+        working_memory.sync_todos(session.get("todo_ledger", {}))
 
         initial_rendered = self._build_sections_texts(
             session=session,

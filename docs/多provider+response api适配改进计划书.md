@@ -558,3 +558,82 @@ OpenAI Chat Completions Adapter
 - 不启用 DeepSeek strict beta 作为本次前置条件。strict 需要 `/beta` 地址和更严格的 JSON Schema 约束，后续单独评估。
 - 不使用 JSON Output 代替工具调用。官方文档说明 JSON Output 可能返回空 content，不适合作为原生函数调用协议。
 - 新增 Provider 时只新增 Adapter 与配置校验，不在 `JCodeAgent` 中增加 `if provider == ...` 分支。
+
+## 16. MiniMax Provider 与推理开关实施基线
+
+本节是 MiniMax 接入和 Web 推理开关的现行执行方案，优先于本文早期“仅固定 DeepSeek”的示例表述。
+
+### 16.1 产品边界与实例配置
+
+- MiniMax 与 DeepSeek 处于同一 Provider 层，均使用 `openai_responses`。
+- 一个 JCode 实例仍只固定一个 Provider；同一 session 不支持在 DeepSeek 与 MiniMax 之间切换。
+- 中转地址使用 `https://minnimax.chat/v1`，Adapter 固定拼接 `/responses`，最终请求地址为 `https://minnimax.chat/v1/responses`。
+- API Key 来自全局 Provider 配置或 `MINIMAX_API_KEY`；不得进入模型快照、trace、请求预览或 Web 响应。
+
+```toml
+default_model = "minimax-m3"
+
+[providers.deepseek]
+name = "deepseek"
+api_protocol = "openai_responses"
+base_url = "https://api.deepseek.com"
+api_key_env = "DEEPSEEK_API_KEY"
+
+[providers.minimax]
+name = "minimax"
+api_protocol = "openai_responses"
+base_url = "https://minnimax.chat/v1"
+api_key_env = "MINIMAX_API_KEY"
+
+[models.minimax-m3]
+provider = "minimax"
+model = "MiniMax-M3"
+reasoning_mode = "optional"
+thinking_enabled = false
+reasoning_effort = "medium"
+reasoning_effort_options = ["minimal", "low", "medium", "high"]
+```
+
+每个模型档案必须声明 `provider`，引用 `[providers.<provider_id>]`。Provider ID 是配置名称，`name` 是客户端类型；同一类型可配置多个不同中转地址或密钥。包含 `.` 的模型档案 ID 必须加引号，例如 `[models."minimax-m2.7"]`。
+
+### 16.2 推理开关合同
+
+推理开关是 Web 的 run 间设置。TOML 的 `thinking_enabled` 仅定义默认值；真正发送的请求由 run 启动时写入 `TaskState.model_profile` 的快照决定。
+
+| 模型状态 | 控件与请求行为 |
+| --- | --- |
+| M3 关闭 | 开关可操作，隐藏或禁用 effort；不发送 `reasoning`，发送 `temperature`。 |
+| M3 开启 | 显示 `minimal/low/medium/high`；发送 `reasoning: {"effort": <value>}`，不发送 `temperature`。 |
+| M2.x | 开关显示开启且禁用；MiniMax 文档规定无法关闭推理。 |
+| `reasoning_mode=none` | 不显示推理控件，不发送 `reasoning`。 |
+
+模型设置接口保持 `POST /api/projects/{project_id}/sessions/{session_id}/model`，请求体新增 `thinking_enabled: boolean`。后端必须拒绝 active run 内的模型、开关或 effort 变更。关闭后重新开启时恢复该 profile 上次合法 effort。
+
+### 16.3 分层改造
+
+1. `src/app/config.py`：放开硬编码的 DeepSeek 校验，仅允许当前已注册组合 `deepseek/openai_responses`、`minimax/openai_responses`；`AppConfig` 保留 TOML 实际 Provider。effort 按 Provider/模型能力验证，MiniMax M3 允许 `minimal/low/medium/high`。
+2. `src/providers/profiles.py`：补充“推理可关闭/始终开启”能力字段，明确表达 M2.x，不能从默认开关值推断能力。
+3. `src/providers/minimax.py`：新建与 `DeepSeekClient` 同层的 `MiniMaxClient`，不建立通用兼容大类；请求与响应差异在该文件封装。
+4. `src/app/bootstrap.py`：注册 `("minimax", "openai_responses") -> MiniMaxClient`，不在 `JCodeAgent` 主循环增加厂商分支。
+5. `src/state/model_selection.py`：`validate_model_options()` 和 `resolve_model_snapshot()` 同时处理开关、effort 与始终开启能力，生成无密钥快照。
+6. `src/app/web_server.py`、`src/app/web_runs.py`：请求模型增加 `thinking_enabled`；按 profile 保存到 `session.model_options[profile_id]`，在 `model_switched` 事件写入脱敏快照。
+7. `src/app/web_static/index.html`、`app.js`、`style.css`：增加 switch；关闭时不提交 effort 变更；服务端失败时根据返回 session 恢复 UI，避免显示和持久化状态不一致。
+
+### 16.4 MiniMax Responses Adapter
+
+- 请求使用 `model`、`instructions`、结构化 `input`、`tools`、`max_output_tokens`；原生工具仍使用 `function_call` 和 `function_call_output`，以 `call_id` 闭环。
+- 推理开启发送 `reasoning`，省略 `temperature`；关闭省略 `reasoning`，发送 `temperature`。发送前校验 MiniMax 文档的温度范围 `(0, 1]`。
+- 本次固定非流式请求，不把 SSE 生命周期接入混入首次 Provider 适配。
+- `service_tier`、`top_p`、`metadata`、`prompt_cache_key` 仅可通过受测白名单从 `ModelProfile.extra` 透传，不能覆盖核心字段。
+- `output_text` 优先映射为 `ModelResponse.text`；`message`、`reasoning`、`function_call` 分别映射文本、推理和 `ModelToolCall`。
+- `status`、`incomplete_details`、`error`、`usage` 映射为现有 `ModelResponse` 字段；HTTP 错误和网络错误继续走 `ProviderRequestError` 与通用重试。
+- 同 run 回放继续使用原生 continuation，保存 reasoning/function call/function output 原生 item，不把它们拼成普通 transcript。
+
+### 16.5 验收与测试
+
+- 配置：合法 MiniMax、非法 Provider 协议组合、M3 `minimal`、非法 `xhigh/max`、M2.x 始终开启。
+- Adapter：中转 URL、认证头、开关互斥请求体、响应 text/reasoning/function call、工具多轮回放、`incomplete/failed`、429/5xx/Retry-After/超时。
+- Web：开关持久化与刷新回显、按 profile 隔离、active run 返回 409、M2.x 禁用、无推理模型隐藏、当前 run 快照不受后续修改影响。
+- 回归：DeepSeek 全量测试仍通过；请求预览与真实请求一致；session/trace/checkpoint/report 不含 API Key；经中转完成一次无工具、一次工具调用、一次开推理和一次关推理请求。
+
+实施顺序固定为：配置能力模型 -> MiniMax Adapter -> 注册 -> Web API/状态 -> 前端开关 -> 测试 -> 配置示例和文档。出现中转协议故障时回切至 DeepSeek 配置档案，不删除既有 session/run，保留审计。

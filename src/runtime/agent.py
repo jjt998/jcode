@@ -115,6 +115,7 @@ class JCodeAgent:
         self.active_tool_profile_name = active_tool_profile_name
         self.write_scope = list(write_scope or [])
         self.todo_ledger = TodoLedger.from_dict(self.session.get("todo_ledger", {}))
+        self.working_memory.sync_todos(self.todo_ledger.to_dict())
         self.ask_user_callback = ask_user_callback
         self.abort_requested = False
         self._sync_runtime_mode_from_session()
@@ -158,6 +159,7 @@ class JCodeAgent:
             note=args.get("note", ""),
         )
         self.session["todo_ledger"] = self.todo_ledger.to_dict()
+        self.working_memory.sync_todos(self.session["todo_ledger"])
         self.session_store.save(self.session)
         self.session_events.emit("todo_added", todo_id=item.todo_id, status=item.status, priority=item.priority)
         return f"added {item.todo_id} [{item.status}] {item.priority} - {item.content}"
@@ -171,6 +173,7 @@ class JCodeAgent:
             note=args.get("note"),
         )
         self.session["todo_ledger"] = self.todo_ledger.to_dict()
+        self.working_memory.sync_todos(self.session["todo_ledger"])
         self.session_store.save(self.session)
         self.session_events.emit("todo_updated", todo_id=item.todo_id, status=item.status, priority=item.priority)
         return f"updated {item.todo_id} [{item.status}] {item.priority} - {item.content}"
@@ -256,6 +259,7 @@ class JCodeAgent:
         self.session = self.session_store.load_requested(session_id, None, self.workspace.root)
         self.working_memory = type(self.working_memory).from_dict(self.session.get("working_memory", {}), self.workspace.root)
         self.todo_ledger = TodoLedger.from_dict(self.session.get("todo_ledger", {}))
+        self.working_memory.sync_todos(self.todo_ledger.to_dict())
         self.working_memory.resume_context = build_resume_context(
             session=self.session,
             session_store=self.session_store,

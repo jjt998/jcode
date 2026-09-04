@@ -185,3 +185,53 @@ Web 不提供 `thinking_enabled` 开关；它是 TOML 中的 Provider 能力配�
 5. 确认无思考模型不发送 reasoning 参数，且 Web effort 校验正确拒绝不支持的选择。
 
 不要在 `JCodeAgent` 主循环中增加 `if provider == ...` 分支，也不要让项目目录内的 `.jcode.toml` 覆盖全局 Provider 配置。
+
+## 9. 现行校正：MiniMax Responses 与推理开关
+
+本文早期的 Chat Completions、XML 工具协议、`OpenAICompatibleClient` 和“Web 不提供 `thinking_enabled` 开关”描述均已过时。本节以现有 Responses 原生工具调用实现和下一步 MiniMax 方案为准。
+
+JCode 的注册表按 `(provider, api_protocol)` 找到客户端。DeepSeek 和 MiniMax 都注册为 `openai_responses`，但保留独立 Adapter：`DeepSeekClient` 与 `MiniMaxClient`。这样 `ContextResult`、`ModelResponse`、原生工具调用、续接和 Agent 循环保持通用，而厂商的请求字段、推理能力和错误格式封闭在 Provider 层。
+
+MiniMax 使用全局固定 Provider 配置，不可与 DeepSeek 在同一 session 切换：
+
+```toml
+[providers.deepseek]
+name = "deepseek"
+api_protocol = "openai_responses"
+base_url = "https://api.deepseek.com"
+api_key_env = "DEEPSEEK_API_KEY"
+
+[providers.minimax]
+name = "minimax"
+api_protocol = "openai_responses"
+base_url = "https://minnimax.chat/v1"
+api_key_env = "MINIMAX_API_KEY"
+
+[models.minimax-m3]
+provider = "minimax"
+model = "MiniMax-M3"
+reasoning_mode = "optional"
+thinking_enabled = false
+reasoning_effort = "medium"
+reasoning_effort_options = ["minimal", "low", "medium", "high"]
+```
+
+`[providers.<id>]` 可以声明多个连接配置，每个 `[models.<id>]` 通过 `provider = "<id>"` 选择连接。运行时仍由 session 在所有模型档案中选择模型，因此每次 run 固定一个 Provider；不会在单次工具调用链中跨 Provider。模型档案 ID 含 `.` 时必须写为 `[models."id.with.dot"]`。
+
+`MiniMaxClient` 请求 `base_url + "/responses"`。M3 关闭推理时省略 `reasoning` 并发送 `temperature`；开启时发送 `reasoning.effort` 并省略 `temperature`。M2.x 的推理不可关闭，因此模型档案必须显式声明“始终开启”能力，Web 显示开启且禁用的开关。
+
+模型设置接口扩展为：
+
+```json
+{
+  "model_profile": "minimax-m3",
+  "thinking_enabled": true,
+  "reasoning_effort": "medium"
+}
+```
+
+设置只允许在 run 之间保存至 `session.model_options[profile_id]`。启动 run 时，`resolve_model_snapshot()` 将档案默认值与 session 设置合并到 `TaskState.model_profile`；请求、重试、trace 和报告只消费这份快照。这样用户在运行期间的设置请求会被拒绝，也不会影响已开始的请求。
+
+MiniMax 响应解析遵循 Responses 项类型：顶层 `output_text` 或 `message.output_text` 为最终文本，`reasoning` 为推理记录，`function_call` 为 `ModelToolCall`，`function_call_output` 在工具执行后按同一 `call_id` 回传。`status`、`incomplete_details`、`error` 和 `usage` 进入统一 `ModelResponse`，供现有完成判断、错误恢复和审计使用。
+
+新增 Provider 的固定步骤是：声明 Provider/模型能力 -> 实现独立 Adapter -> 注册 `(provider, protocol)` -> 扩展配置和 Web 设置校验 -> 覆盖请求、响应、工具回放、开关和错误测试。不得通过 Agent 主循环的 Provider 条件分支实现差异。

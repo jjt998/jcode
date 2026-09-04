@@ -755,6 +755,13 @@ h3 {
   font: 12px Consolas, "Cascadia Mono", monospace;
 }
 
+.reasoning-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 8px 0 7px;
+  accent-color: var(--signal);
+}
+
 .reasoning-support {
   padding-bottom: 9px;
   color: var(--muted);

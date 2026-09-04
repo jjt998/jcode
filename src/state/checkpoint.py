@@ -37,6 +37,7 @@ class CheckpointManager:
             "recent_files": list(working_memory.recent_files),
             "file_freshness": dict(working_memory.file_freshness),
             "working_memory": working_memory.to_dict(),
+            "todo_ledger": dict(session.get("todo_ledger", {})),
             "workspace_fingerprint": self.workspace.fingerprint(),
             "worker_refs": list(worker_refs or []),
             "resumable": bool(resumable),

@@ -32,13 +32,14 @@ def test_default_config_is_global_and_cwd_remains_project(tmp_path, monkeypatch)
         """
 default_model = "global-model"
 
-[provider]
+[providers.deepseek]
 name = "deepseek"
 api_protocol = "openai_responses"
 base_url = "https://api.deepseek.com"
 api_key = "global-key"
 
 [models.global-model]
+provider = "deepseek"
 model = "deepseek-v4-flash"
 reasoning_mode = "native"
 thinking_enabled = true
@@ -57,3 +58,72 @@ reasoning_effort_options = ["low", "high", "max"]
     assert config.cwd == project_root.resolve()
     assert config.default_model_profile == "global-model"
     assert config.model_profiles["global-model"].api_key == "global-key"
+
+
+def test_minimax_config_accepts_minimal_reasoning_effort(tmp_path, monkeypatch):
+    config_path = tmp_path / ".jcode.toml"
+    config_path.write_text(
+        """
+default_model = "minimax-m3"
+[providers.minimax]
+name = "minimax"
+api_protocol = "openai_responses"
+base_url = "https://minnimax.chat/v1"
+[models.minimax-m3]
+provider = "minimax"
+model = "MiniMax-M3"
+reasoning_mode = "optional"
+thinking_enabled = false
+reasoning_effort = "minimal"
+reasoning_effort_options = ["minimal", "low", "medium", "high"]
+""".strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app_config, "global_config_path", lambda: config_path)
+
+    config = app_config.load_config(_args(str(tmp_path)))
+
+    assert config.provider_name == "minimax"
+    assert config.model_profiles["minimax-m3"].reasoning_effort == "minimal"
+
+
+def test_multiple_providers_are_resolved_per_model_profile(tmp_path, monkeypatch):
+    config_path = tmp_path / ".jcode.toml"
+    config_path.write_text(
+        """
+default_model = "minimax-m3"
+[providers.deepseek]
+name = "deepseek"
+api_protocol = "openai_responses"
+base_url = "https://api.deepseek.com"
+api_key = "deepseek-key"
+[providers.minimax]
+name = "minimax"
+api_protocol = "openai_responses"
+base_url = "https://minnimax.chat/v1"
+api_key = "minimax-key"
+[models.deepseek]
+provider = "deepseek"
+model = "deepseek-v4-pro"
+reasoning_mode = "native"
+thinking_enabled = true
+reasoning_effort = "high"
+reasoning_effort_options = ["low", "high", "max"]
+[models.minimax-m3]
+provider = "minimax"
+model = "MiniMax-M3"
+reasoning_mode = "optional"
+thinking_enabled = false
+reasoning_effort = "minimal"
+reasoning_effort_options = ["minimal", "low", "medium", "high"]
+""".strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app_config, "global_config_path", lambda: config_path)
+
+    config = app_config.load_config(_args(str(tmp_path)))
+
+    assert config.model_profiles["deepseek"].provider == "deepseek"
+    assert config.model_profiles["deepseek"].base_url == "https://api.deepseek.com"
+    assert config.model_profiles["minimax-m3"].provider == "minimax"
+    assert config.model_profiles["minimax-m3"].base_url == "https://minnimax.chat/v1"

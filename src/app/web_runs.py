@@ -159,7 +159,7 @@ class WebRunManager:
     def model_profiles(self, session: dict | None = None) -> list[dict]:
         return [resolve_model_snapshot(session or {}, profile) for profile in self.config.model_profiles.values()]
 
-    def switch_model(self, session_id: str, profile_id: str, reasoning_effort: str = "", project_id: str = "default") -> dict:
+    def switch_model(self, session_id: str, profile_id: str, reasoning_effort: str = "", project_id: str = "default", thinking_enabled: bool | None = None) -> dict:
         project = self.project_store.get(project_id)
         if profile_id not in self.config.model_profiles:
             raise ValueError(f"unknown model profile: {profile_id}")
@@ -171,7 +171,11 @@ class WebRunManager:
             raise KeyError(session_id)
         previous = str(session.get("active_model_profile") or "")
         profile = self.config.model_profiles[profile_id]
-        options = validate_model_options(profile, profile.thinking_enabled, reasoning_effort)
+        current = dict(session.get("model_options", {}).get(profile_id, {}) or {})
+        enabled = profile.thinking_enabled if thinking_enabled is None else bool(thinking_enabled)
+        if thinking_enabled is None and "thinking_enabled" in current:
+            enabled = bool(current["thinking_enabled"])
+        options = validate_model_options(profile, enabled, reasoning_effort)
         session["active_model_profile"] = profile_id
         if options:
             session.setdefault("model_options", {})[profile_id] = options

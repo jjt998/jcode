@@ -21,6 +21,7 @@ class ModelProfile:
     thinking_enabled: bool = False
     reasoning_effort: str = ""
     reasoning_effort_options: tuple[str, ...] = ()
+    reasoning_always_on: bool = False  # 模型是否无法关闭推理
     extra: dict[str, object] = field(default_factory=dict)
 
     def snapshot(self) -> dict:
@@ -34,4 +35,5 @@ class ModelProfile:
             "thinking_enabled": self.thinking_enabled,
             "reasoning_effort": self.reasoning_effort,
             "reasoning_effort_options": list(self.reasoning_effort_options),
+            "reasoning_always_on": self.reasoning_always_on,
         }
