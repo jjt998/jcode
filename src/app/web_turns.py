@@ -84,11 +84,7 @@ def _orphan_history_turns(history: list[dict]) -> list[dict]:
 
 
 def _fallback_steps(items: list[dict], run_id: str) -> list[dict]:
-    context = ""
-    for item in items:
-        if item.get("kind") == "context_built":
-            context = str(item.get("content") or "")
-    if not context:
+    if not items:
         return []
     return [
         {
@@ -97,7 +93,7 @@ def _fallback_steps(items: list[dict], run_id: str) -> list[dict]:
             "timestamp": items[0].get("created_at", "") if items else "",
             "end_timestamp": items[-1].get("created_at", "") if items else "",
             "status": "success",
-            "context_text": context,
+            "context_audit_ref": "",
             "response_text": "",
             "process_content": "",
             "error_text": "",

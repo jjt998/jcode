@@ -34,17 +34,17 @@ class StepTimelineBuilder:
         patches: list[dict] = []
 
         if name == "context_built":
-            self.pending_context_text = json.dumps(event.get("context_result") or {}, ensure_ascii=False, indent=2)
-            if self.current_step is not None and not self.current_step.get("context_text"):
-                self.current_step["context_text"] = self.pending_context_text
-                self._push_detail(self.current_step, "context_built", "Context 拼凑", self.pending_context_text, event)
+            self.pending_context_text = str(event.get("context_audit_ref") or "")
+            if self.current_step is not None and not self.current_step.get("context_audit_ref"):
+                self.current_step["context_audit_ref"] = self.pending_context_text
+                self._push_detail(self.current_step, "context_built", "Context 审计", self.pending_context_text, event)
                 patches.append(self._snapshot_step(self.current_step))
             return patches
 
         if name == "model_responded":
             self._finalize_current_step(success_if_open=True, end_at=created_at or self._last_event_at)
             step = self._new_step(created_at)
-            step["context_text"] = self.pending_context_text
+            step["context_audit_ref"] = self.pending_context_text
             step["response_text"] = str(event.get("response_text") or "")
             step["parsed_action"] = {"tool_calls": list(event.get("native_tool_calls") or [])}
             if step["parsed_action"]["tool_calls"]:
@@ -156,7 +156,7 @@ class StepTimelineBuilder:
             "timestamp": created_at,
             "end_timestamp": "",
             "status": "pending",
-            "context_text": "",
+            "context_audit_ref": "",
             "response_text": "",
             "process_content": "",
             "error_text": "",
@@ -277,7 +277,7 @@ def _event_title(name: str, event: dict) -> str:
 
 def _event_content(name: str, event: dict) -> str:
     if name == "context_built":
-        return json.dumps(event.get("context_result") or {}, ensure_ascii=False, indent=2)
+        return str(event.get("context_audit_ref") or "")
     if name == "model_responded":
         return str(event.get("response_text") or "")
     if name in {"tool_requested", "tool_executed", "subagent_completed"}:

@@ -142,7 +142,6 @@ class ContextManager:
             pressure_level=int(final_pressure.get("level", 0)),
             current_request=user_message,
         )
-        ctx_info["history"]["compression_records"] = history_records
         ctx_info["context_result"] = {
             "history_event_count": len(structured_history),
             "tool_count": len(self.registry.definitions(allowed_tools)),
@@ -508,14 +507,17 @@ class ContextManager:
             },
         }
         ctx_info["workspace"]["workspace_hash"] = cache_info["workspace_hash"]
-        ctx_info["budget"]["section_diffs"] = compression_info.get("compression_records", [])
-        ctx_info["budget"]["reductions"] = compression_info.get("compression_records", [])
         ctx_info["compact"]["eligible"] = bool(final_pressure.get("level", 0) == 4 or compression_info.get("compact", {}).get("status") == "applied")
         ctx_info["compact"]["should_compact"] = bool(compression_info.get("compact", {}).get("should_compact", False))
         ctx_info["compact"]["trigger"] = str(compression_info.get("compact", {}).get("trigger", "") or "")
         ctx_info["compact"]["status"] = str(compression_info.get("compact", {}).get("status", "idle"))
         ctx_info["compact"]["summary_source"] = str(compression_info.get("compact", {}).get("summary_source", ""))
         ctx_info["compact"]["fallback_reason"] = str(compression_info.get("compact", {}).get("fallback_reason", ""))
+        history_render = ctx_info["compact"].get("history_render")
+        if isinstance(history_render, dict):
+            # 原始与渲染后的历史可由 ContextResult 推导，不能每轮写进 session 状态。
+            history_render.pop("raw", None)
+            history_render.pop("rendered", None)
         return ctx_info
 
     def compact_history(self, session: dict, working_memory, *, retain_turns: int = 2, summary_mode: str = "llm") -> tuple[dict, dict]:

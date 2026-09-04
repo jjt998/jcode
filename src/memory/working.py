@@ -13,7 +13,7 @@ class WorkingMemory:
     recent_files: list[str] = field(default_factory=list)
     file_freshness: dict[str, str] = field(default_factory=dict)
     read_file_counts: dict[str, dict[str, int]] = field(default_factory=dict)
-    tool_observations: list[str] = field(default_factory=list)
+    tool_observations: list[dict] = field(default_factory=list)
     resume_context: dict = field(default_factory=dict)
     retrieved_memory: list[str] = field(default_factory=list)
     last_retrieval_query: str = ""
@@ -38,7 +38,7 @@ class WorkingMemory:
             recent_files=list(files.get("recent", data.get("recent_files", []))),
             file_freshness=dict(files.get("freshness", data.get("file_freshness", {}))),
             read_file_counts=read_file_counts,
-            tool_observations=list(tools.get("observations", data.get("tool_observations", []))),
+            tool_observations=[item for item in tools.get("observations", data.get("tool_observations", [])) if isinstance(item, dict)],
             resume_context=dict(task.get("resume_context", data.get("resume_context", {}))),
             retrieved_memory=list(retrieval.get("items", data.get("retrieved_memory", []))),
             last_retrieval_query=str(retrieval.get("last_query", data.get("last_retrieval_query", ""))),
@@ -92,8 +92,9 @@ class WorkingMemory:
         bucket = self.read_file_counts.get(relpath, {})
         return int(bucket.get(_read_file_count_key(relpath, args, freshness), 0))
 
-    def observe_tool(self, text: str) -> None:
-        self.tool_observations.append(text[:1000])
+    def observe_tool(self, tool_name: str, status: str, summary: str, artifact_ref: str = "") -> None:
+        """仅保存工具状态、关键摘要和 artifact 引用，避免复制正文。"""
+        self.tool_observations.append({"tool": tool_name, "status": status, "summary": str(summary)[:300], "artifact": artifact_ref})
 
     def set_retrieval(self, query: str, items: list[str]) -> None:
         self.last_retrieval_query = query
@@ -111,7 +112,8 @@ class WorkingMemory:
             lines.append(str(self.resume_context))
 
         lines = ["Working_Memory:"]
-        lines.append(f"- goal: {self.task_goal}")
+        if self.task_goal:
+            lines.append(f"- goal: {self.task_goal}")
         if self.constraints:
             lines.append("- constraints: " + "; ".join(self.constraints))
         if self.recent_files:
@@ -126,7 +128,7 @@ class WorkingMemory:
         if self.subagent_results:
             lines.append("- subagent_results:\n" + "\n".join(f"  - {x}" for x in self.subagent_results[-5:]))
         if self.tool_observations:
-            lines.append("- recent_tool_observations:\n" + "\n".join(f"  - {x}" for x in self.tool_observations[-5:]))
+            lines.append("- recent_tool_observations:\n" + "\n".join(f"  - {item['tool']} ({item['status']}): {item['summary']} {item['artifact']}" for item in self.tool_observations[-5:]))
         #lines.append("[compact]")
         #if self.compact_summary:这里的压缩摘要是哪里的？历史对话的？先不写这个。 
         #    lines.append("- summary:\n" + "\n".join(f"  - {x}" for x in self.compact_summary.splitlines()[:8]))

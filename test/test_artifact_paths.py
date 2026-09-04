@@ -28,7 +28,7 @@ def test_generated_artifact_path_can_be_read_from_workspace(tmp_path: Path):
     run_store = RunStore(tmp_path / ".jcode" / "runs", workspace_root=workspace.root)
     run_dir = run_store.run_dir("run-1")
     run_dir.mkdir(parents=True)
-    full_text = "x" * 1201
+    full_text = "x" * 8001
 
     observed, metadata, artifacts = prepare_tool_result_observation(run_store, run_dir, "read_file", full_text)
     artifact_path = metadata["full_output_artifact"]
@@ -50,5 +50,20 @@ def test_generated_artifact_path_can_be_read_from_workspace(tmp_path: Path):
 
     assert result.status == "success"
     assert result.text == "x" * 1000
-    assert result.metadata["missing_chars"] == 201
+    assert result.metadata["missing_chars"] == 7001
     assert result.metadata["artifact_read"] is True
+
+
+def test_tool_output_thresholds_follow_tool_category(tmp_path: Path):
+    workspace = Workspace(root=tmp_path, cwd=tmp_path, repo_root=tmp_path)
+    store = RunStore(tmp_path / ".jcode" / "runs", workspace_root=workspace.root)
+    run_dir = store.run_dir("run-1")
+    run_dir.mkdir(parents=True)
+
+    read_inline, read_meta, _ = prepare_tool_result_observation(store, run_dir, "read_file", "x" * 8000)
+    shell_inline, shell_meta, _ = prepare_tool_result_observation(store, run_dir, "run_shell", "x" * 6000)
+    generic_inline, generic_meta, _ = prepare_tool_result_observation(store, run_dir, "search", "x" * 4001)
+
+    assert read_inline == "x" * 8000 and not read_meta["full_output_artifact"]
+    assert shell_inline == "x" * 6000 and not shell_meta["full_output_artifact"]
+    assert generic_meta["full_output_artifact"] and "tool output stored at:" in generic_inline

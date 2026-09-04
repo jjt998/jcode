@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -109,6 +110,22 @@ def create_app(manager: WebRunManager) -> FastAPI:
     @app.get("/api/projects/{project_id}/runs/{run_id}/events")
     async def project_run_events(project_id: str, run_id: str):
         return await stream_run_events(project_id, run_id)
+
+    @app.get("/api/projects/{project_id}/context-audit")
+    def get_context_audit(project_id: str, ref: str):
+        """按 workspace 相对引用读取单次 Context 审计快照。"""
+        try:
+            project = manager.project_store.get(project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="project not found") from exc
+        normalized = Path(ref.replace("\\", "/"))
+        if normalized.is_absolute() or not str(normalized).replace("\\", "/").startswith(".jcode/runs/"):
+            raise HTTPException(status_code=400, detail="invalid context audit reference")
+        path = (project.root / normalized).resolve()
+        runs_root = (project.root / ".jcode" / "runs").resolve()
+        if runs_root not in path.parents or not path.is_file():
+            raise HTTPException(status_code=404, detail="context audit not found")
+        return json.loads(path.read_text(encoding="utf-8"))
 
     @app.get("/api/sessions")
     def list_sessions():

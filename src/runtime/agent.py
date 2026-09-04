@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -188,8 +190,6 @@ class JCodeAgent:
             context_result = self._build_context(user_message, task_state, run_dir)
             try:
                 response = self._call_model(context_result, task_state, run_dir)
-                print("\n================================\n")
-                print(response)
 
             except Exception as exc:
                 self._record_trace(
@@ -253,7 +253,7 @@ class JCodeAgent:
         task_state = TaskState.create(user_message, resolve_model_snapshot(self.session, profile))
         run_dir = self.run_store.start_run(task_state)
         checkpoint = CheckpointManager(run_dir, self.workspace)
-        self.working_memory.task_goal = user_message
+        self.working_memory.task_goal = ""
         self._append_history("user", user_message, task_state)
         self.session_events.emit(
             "run_started",
@@ -275,7 +275,6 @@ class JCodeAgent:
             allowed_tools=self.active_tool_profile.allowed_tools,
             provider_continuation=task_state.provider_continuation,
         )
-        print("------------------------------------------------------------\n",context_result)
         self.session["ctx_info"] = context_result.ctx_info
         self.session_store.save(self.session)
         self.working_memory.set_compact_summary(str(context_result.ctx_info.get("history", {}).get("compact_summary", "")).strip())
@@ -286,7 +285,8 @@ class JCodeAgent:
                 run_dir,
                 "compact_history_audit",
                 task_state,
-                compact=compact_info,
+                compact_status=compact_info.get("status", "idle"),
+                compact_trigger=compact_info.get("trigger", ""),
                 summary_mode=context_result.compact_audit.get("mode", ""),
                 summary_source=context_result.compact_audit.get("source", ""),
                 status=context_result.compact_audit.get("status", ""),
@@ -303,13 +303,32 @@ class JCodeAgent:
             "current_request": context_result.current_request,
             "tools": [tool.name for tool in context_result.tools],
         }
-        self.session_events.emit("context_built", run_id=task_state.run_id, ctx_info=context_result.ctx_info, context_result=context_snapshot)
-        self._record_trace(run_dir, "context_built", task_state, ctx_info=context_result.ctx_info, context_result=context_snapshot)
+        audit_ref = self.run_store.write_audit(run_dir, f"context-{task_state.step_index:04d}.json", {"context_result": context_snapshot, "ctx_info": context_result.ctx_info})
+        audit_sha256 = hashlib.sha256(json.dumps({"context_result": context_snapshot, "ctx_info": context_result.ctx_info}, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+        event_payload = self._context_event_payload(context_result, audit_ref, audit_sha256)
+        self.session_events.emit("context_built", run_id=task_state.run_id, **event_payload)
+        self._record_trace(run_dir, "context_built", task_state, **event_payload)
         return context_result
+
+    @staticmethod
+    def _context_event_payload(context_result, audit_ref: str, audit_sha256: str) -> dict:
+        """事件流只保留 Context 审计引用和可扫描指标。"""
+        info = context_result.ctx_info
+        compact = dict(info.get("compact", {}) or {})
+        return {
+            "context_audit_ref": audit_ref,
+            "context_audit_sha256": audit_sha256,
+            "history_event_count": len(context_result.history),
+            "tool_count": len(context_result.tools),
+            "input_chars": int(info.get("budget", {}).get("total_chars", 0) or 0),
+            "input_tokens": int(info.get("budget", {}).get("total_estimated_tokens", 0) or 0),
+            "pressure_level": int(info.get("pressure", {}).get("level", 0) or 0),
+            "compact_status": str(compact.get("status", "idle")),
+            "compact_trigger": str(compact.get("trigger", "")),
+        }
 
     def _emit_compact_context_events(self, run_dir, task_state, context_result, compact_info: dict) -> None:
         event_payload = {
-            "ctx_info": context_result.ctx_info,
             "pressure_level": context_result.ctx_info.get("pressure", {}).get("level", 0),
             "pressure_range": context_result.ctx_info.get("pressure", {}).get("range", ""),
             "should_compact": bool(compact_info.get("should_compact", False)),
@@ -360,7 +379,8 @@ class JCodeAgent:
             estimated_input_tokens=response.input_tokens,
             estimated_output_tokens=response.output_tokens,
             response_text=self.redactor.redact(response.text),
-            reasoning_text=self.redactor.redact(response.reasoning),
+            reasoning_chars=len(response.reasoning),
+            reasoning_sha256=hashlib.sha256(response.reasoning.encode("utf-8")).hexdigest() if response.reasoning else "",
             finish_reason=response.finish_reason,
             native_tool_calls=[{"call_id": call.call_id, "name": call.name, "arguments": call.arguments} for call in response.tool_calls or []],
             model_profile=task_state.model_profile,
@@ -472,7 +492,12 @@ class JCodeAgent:
             },
             **history_meta,
         )
-        self.working_memory.observe_tool(f"{tool_name}: {result.status}: {result.text}")
+        self.working_memory.observe_tool(
+            tool_name,
+            result.status,
+            str(result.metadata.get("observation_summary") or result.text),
+            str(result.metadata.get("full_output_artifact") or ""),
+        )
         if call_id:
             continuation = ProviderContinuation.from_dict(task_state.provider_continuation, run_id=task_state.run_id)
             continuation.add_tool_output(call_id, result.text)
@@ -490,8 +515,8 @@ class JCodeAgent:
             status=result.status,
             error_type=result.error_type,
             changed_files=result.changed_files,
-            metadata=result.metadata,
-            result=self.redactor.redact(result.text),
+            artifact_ref=str(result.metadata.get("full_output_artifact") or ""),
+            result_summary=self.redactor.redact(str(result.metadata.get("observation_summary") or result.text[:1500])),
             **trace_meta,
         )
         self._create_checkpoint(checkpoint, task_state, run_dir, "tool_executed")

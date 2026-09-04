@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 
 
-INLINE_TOOL_OUTPUT_LIMIT = 1000
+INLINE_LIMITS = {"read_file": 8000, "run_shell": 6000}
+DEFAULT_INLINE_LIMIT = 4000
+SUMMARY_LIMIT = 1500
 
 
 def is_tool_result_artifact(path: str) -> bool:
@@ -13,15 +15,18 @@ def is_tool_result_artifact(path: str) -> bool:
 
 
 def prepare_tool_result_observation(run_store, run_dir, tool_name: str, full_result: str, artifacts: list[str] | None = None) -> tuple[str, dict, list[str]]:
-    """把超长工具结果写入 artifact，并返回给模型可读的短预览。"""
+    """按工具类别外置超长结果，并生成可继续操作的短观察。"""
     full_result = str(full_result)
     artifact_list = list(artifacts or [])
+    limit = INLINE_LIMITS.get(tool_name, DEFAULT_INLINE_LIMIT)
     metadata = {
         "original_chars": len(full_result),
         "content_sha256": hashlib.sha256(full_result.encode("utf-8")).hexdigest(),
         "full_output_artifact": "",
+        "observation_policy": {"read_file": "read_file_8000", "run_shell": "run_shell_6000"}.get(tool_name, "generic_4000"),
+        "observation_summary": "",
     }
-    if len(full_result) <= INLINE_TOOL_OUTPUT_LIMIT:
+    if len(full_result) <= limit:
         return full_result, metadata, artifact_list
 
     artifact_name = f"{tool_name}-output-{metadata['content_sha256'][:12]}.txt"
@@ -29,5 +34,13 @@ def prepare_tool_result_observation(run_store, run_dir, tool_name: str, full_res
     if artifact_path not in artifact_list:
         artifact_list.append(artifact_path)
     metadata["full_output_artifact"] = artifact_path
-    # 首行保留 artifact 路径，方便旧历史压缩逻辑直接识别并替换。
-    return f"whole tool result in path:<{artifact_path}>\nbelow is partial:\n{full_result[:INLINE_TOOL_OUTPUT_LIMIT]}\n...", metadata, artifact_list
+    if tool_name == "run_shell":
+        lines = [line.strip() for line in full_result.splitlines() if line.strip() and line.strip() not in {"stdout:", "stderr:"}]
+        summary = "\n".join(lines[:30])[:SUMMARY_LIMIT] or full_result[:SUMMARY_LIMIT]
+    elif tool_name == "read_file":
+        summary = full_result[:SUMMARY_LIMIT]
+    else:
+        head, tail = full_result[:750], full_result[-750:]
+        summary = (head + ("\n...\n" + tail if tail and tail != head else ""))[:SUMMARY_LIMIT]
+    metadata["observation_summary"] = summary
+    return f"tool output stored at: {artifact_path}\nsummary:\n{summary}", metadata, artifact_list

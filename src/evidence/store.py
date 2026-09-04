@@ -33,6 +33,10 @@ class RunStore:
         # 返回 workspace-relative 路径，模型后续可直接交给 read_file。
         return str(path.resolve().relative_to(self.workspace_root)).replace("\\", "/")
 
+    def write_audit(self, run_dir: Path, name: str, payload: dict) -> str:
+        """写入单份权威审计快照，并返回 workspace 相对引用。"""
+        return self.write_artifact(run_dir, name, json.dumps(payload, ensure_ascii=False, indent=2))
+
     def write_task_state(self, run_dir: Path, task_state) -> None:
         (run_dir / "task_state.json").write_text(json.dumps(task_state.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
 

@@ -334,9 +334,8 @@ function stepItem(turn, step) {
   `;
   const body = document.createElement("div");
   body.className = "step-body";
-  if (step.context_text) {
-    // 只保留完整上下文，不再展示底层事件细节。
-    body.append(detailBlock("完整上下文文本", step.context_text, `step-detail:${turnKey(turn)}:${step.step_id}:context`));
+  if (step.context_audit_ref) {
+    body.append(contextAuditBlock(step.context_audit_ref, `step-context:${turnKey(turn)}:${step.step_id}`));
   }
   if (step.process_content) {
     body.append(detailBlock("模型过程消息", step.process_content, `step-content:${turnKey(turn)}:${step.step_id}`));
@@ -407,6 +406,28 @@ function detailBlock(title, content, key) {
     <summary><span>${escapeHtml(title)}</span></summary>
     <pre>${escapeHtml(content || "这个历史事件没有保存完整内容")}</pre>
   `;
+  return details;
+}
+
+function contextAuditBlock(ref, key) {
+  const details = document.createElement("details");
+  details.className = "mini-detail";
+  rememberOpenState(details, key, false);
+  const summary = document.createElement("summary");
+  summary.textContent = "完整上下文审计";
+  const pre = document.createElement("pre");
+  pre.textContent = ref;
+  details.append(summary, pre);
+  details.addEventListener("toggle", async () => {
+    if (!details.open || details.dataset.loaded === "true") return;
+    try {
+      const data = await api(`/api/projects/${encodeURIComponent(state.projectId)}/context-audit?ref=${encodeURIComponent(ref)}`);
+      pre.textContent = JSON.stringify(data.context_result || data, null, 2);
+      details.dataset.loaded = "true";
+    } catch (error) {
+      pre.textContent = `无法读取审计文件: ${error.message}`;
+    }
+  });
   return details;
 }
 
