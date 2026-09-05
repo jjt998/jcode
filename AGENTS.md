@@ -46,4 +46,6 @@ If you start a local service while testing, stop that service before finishing t
 
 当你定义DataClass时，你需要在成员变量的右边用#来注释写上该变量的含义。
 
-当你完成了某次确切的计划或任务，且做完了一切编码任务时，那么你需要在最终总结输出用star法则总结的feat文本。
+当你完成了某次确切的计划或任务，且做完了一切编码任务时，那么你需要在最终总结输出用star法则总结的feat文本。如果你仅仅是给了答复，但是并没有编码，生成新文件，那么你就不需要生成这个feat文本。
+
+当你定义类、接口、变量等名称时，要具体，不能太抽象了。
