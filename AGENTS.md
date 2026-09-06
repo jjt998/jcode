@@ -49,3 +49,15 @@ If you start a local service while testing, stop that service before finishing t
 当你完成了某次确切的计划或任务，且做完了一切编码任务时，那么你需要在最终总结输出用star法则总结的feat文本。如果你仅仅是给了答复，但是并没有编码，生成新文件，那么你就不需要生成这个feat文本。
 
 当你定义类、接口、变量等名称时，要具体，不能太抽象了。
+
+## Bug 文档记录规范
+
+当发现并确认一个 Bug 时，需要同时创建两份相互对应的 Markdown 文档：
+
+- Bug 记录：`docs/BUGS-after9.6/`
+- 解决方案讨论：`docs/BUGS-solve/`
+
+两份文件必须使用相同的中文主题名，并在文件名中包含发现日期，格式如下：
+
+```text
+YYYY-MM-DD-中文问题简述.md

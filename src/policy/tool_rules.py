@@ -26,6 +26,15 @@ class ToolPolicyChecker:
             target_exists = bool(path) and self.workspace.resolve_path(path).is_file()
             if target_exists and rel not in working_memory.file_freshness and not plan_mode_write:
                 return PolicyDecision.deny("read_before_write", f"error: read {rel} before modifying it", layer="tool_policy")
+            if target_exists and not plan_mode_write:
+                expected = str(working_memory.file_freshness.get(rel, ""))
+                try:
+                    from src.tools.workspace import freshness
+                    current = freshness(self.workspace.resolve_path(rel))
+                except OSError:
+                    current = ""
+                if expected and current and expected != current:
+                    return PolicyDecision.deny("write_conflict", f"error: {rel} changed after it was read; read it again before replacing the file", layer="tool_policy")
         if tool.name == "apply_patch":
             plan_mode_write = runtime_mode == "plan" and rel == normalized_plan_path
             if rel and rel not in working_memory.file_freshness and not plan_mode_write:

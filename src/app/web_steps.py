@@ -90,7 +90,7 @@ class StepTimelineBuilder:
             patches.append(self._snapshot_step(step))
             return patches
 
-        if name in {"checkpoint_created", "final_readiness_decision", "memory_maintained", "run_finished"}:
+        if name in {"checkpoint_created", "final_readiness_decision", "final_readiness_evaluated", "final_gate_blocked", "memory_maintained", "run_finished"}:
             if self.current_step is None:
                 if name == "run_finished":
                     self.final_text = str(event.get("final_text") or self.final_text)
@@ -276,6 +276,8 @@ def _event_title(name: str, event: dict) -> str:
         "tool_sequence_completed": "工具序列完成",
         "tool_sequence_aborted": "工具序列中止",
         "checkpoint_created": "Checkpoint",
+        "final_readiness_evaluated": "Final Gate 评估",
+        "final_gate_blocked": "Final Gate 阻断",
         "memory_maintained": "记忆整理",
         "run_finished": "运行结束",
         "approval_required": "等待确认",

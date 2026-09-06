@@ -56,11 +56,14 @@ def write_file(workspace, args) -> ToolResult:
 
 def apply_text_patch(workspace, args) -> ToolResult:
     path = workspace.resolve_path(args.path)
-    text = path.read_text(encoding="utf-8", errors="replace")
+    raw = path.read_bytes()
+    has_bom = raw.startswith(b"\xef\xbb\xbf")
+    text = raw.decode("utf-8-sig", errors="replace")
     count = text.count(args.old_text)
     if count != 1:
-        return ToolResult("error", f"old_text matched {count} times; expected exactly 1", error_type="patch_nonunique")
-    path.write_text(text.replace(args.old_text, args.new_text, 1), encoding="utf-8")
+        newline = "crlf" if "\r\n" in text else "lf"
+        return ToolResult("error", f"old_text matched {count} times; expected exactly 1", error_type="patch_nonunique", metadata={"path": workspace.relpath(path), "match_count": count, "freshness": freshness(path), "newline": newline, "utf8_bom": has_bom})
+    path.write_bytes((b"\xef\xbb\xbf" if has_bom else b"") + text.replace(args.old_text, args.new_text, 1).encode("utf-8"))
     return ToolResult("success", f"patched {workspace.relpath(path)}", changed_files=[workspace.relpath(path)])
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import hashlib
 from dataclasses import dataclass, field
 
 from src.state.workspace import now_iso
@@ -22,6 +23,11 @@ class TaskState:
     pending_next_step: str = ""
     changed_files: list[str] = field(default_factory=list)
     failed_tools: list[dict] = field(default_factory=list)
+    tool_attempts: list[dict] = field(default_factory=list)  # 本次运行全部工具尝试
+    unresolved_tool_failures: list[dict] = field(default_factory=list)  # 当前仍未解决的工具失败
+    resolved_tool_failures: list[dict] = field(default_factory=list)  # 已由后续证据解决的工具失败
+    verification: dict = field(default_factory=dict)  # 最近验证命令及状态
+    final_readiness_summary: dict = field(default_factory=dict)  # Final Gate 最近决策摘要
     provider_continuation: dict = field(default_factory=dict)  # 当前 run 的 Provider 原生续接项
     output_continuation_count: int = 0  # 模型输出被截断后的续写次数
     partial_response_parts: list[str] = field(default_factory=list)  # 截断响应中已保留的正文片段
@@ -36,7 +42,7 @@ class TaskState:
     def to_dict(self) -> dict:
         return dict(self.__dict__)
 
-    def record_tool(self, name: str, result) -> None:
+    def record_tool(self, name: str, result, *, arguments: dict | None = None, call_id: str = "") -> None:
         self.tool_steps += 1
         if result.changed_files:
             known = set(self.changed_files)
@@ -44,11 +50,52 @@ class TaskState:
                 if path not in known:
                     self.changed_files.append(path)
                     known.add(path)
+        path = str((arguments or {}).get("path") or (arguments or {}).get("file") or "").replace("\\", "/")
+        attempt = {"name": name, "status": result.status, "error_type": result.error_type, "path": path, "call_id": call_id, "step_index": self.step_index}
+        self.tool_attempts.append(attempt)
         if result.status not in {"success", "ok"}:
-            self.failed_tools.append(
-                {"name": name, "status": result.status, "error_type": result.error_type}
-            )
+            failure = {
+                "failure_id": f"failure-{len(self.tool_attempts)}-{hashlib.sha1((name + call_id + path).encode('utf-8')).hexdigest()[:8]}",
+                "call_id": call_id,
+                "tool_name": name,
+                "error_type": result.error_type or "tool_failed",
+                "path": path,
+                "status": "unresolved",
+                "created_step": self.step_index,
+                "resolved_by": "",
+                "resolution_evidence": "",
+            }
+            self.failed_tools.append({"name": name, "status": result.status, "error_type": result.error_type, "path": path, "failure_id": failure["failure_id"]})
+            self.unresolved_tool_failures.append(failure)
+        elif result.status in {"success", "ok"} and name == "write_file" and path:
+            # 同一路径的成功整文件写入可关闭 patch 匹配失败，但不关闭验证或权限失败。
+            remaining = []
+            for failure in self.unresolved_tool_failures:
+                if failure.get("tool_name") == "apply_patch" and failure.get("path") == path and failure.get("error_type") in {"patch_nonunique", "patch_mismatch"}:
+                    resolved = dict(failure, status="resolved", resolved_by="write_file", resolution_evidence=f"write_file:{call_id or 'success'}")
+                    self.resolved_tool_failures.append(resolved)
+                else:
+                    remaining.append(failure)
+            self.unresolved_tool_failures = remaining
+        if name == "run_shell":
+            self.record_verification(arguments or {}, result)
         self.updated_at = now_iso()
+
+    def record_verification(self, arguments: dict, result) -> None:
+        """记录可识别的测试、编译、lint、类型检查或构建命令。"""
+        command = str(arguments.get("command") or "")
+        lowered = command.lower()
+        command_class = "unknown"
+        for key, words in (("test", ("pytest", "unittest", "npm test", "cargo test")), ("compile", ("compileall", " py_compile", " tsc")), ("lint", ("ruff", "flake8", "eslint")), ("typecheck", ("mypy", "pyright", "typecheck")), ("build", (" build", "npm run build", "cargo build"))):
+            if any(word in lowered for word in words):
+                command_class = key
+                break
+        if command_class != "unknown":
+            self.verification = {"state": "passed" if result.status in {"success", "ok"} else "failed", "command_class": command_class, "command": command, "step_index": self.step_index, "changed_paths": list(self.changed_files)}
+
+    def record_gate_decision(self, decision: dict) -> None:
+        """保存最近一次 Final Gate 决策，供 checkpoint 和 report 使用。"""
+        self.final_readiness_summary = dict(decision)
 
     def finish(self, status: str, stop_reason: str, final_answer: str = "") -> None:
         self.status = status

@@ -109,7 +109,7 @@ def test_write_file_allows_absolute_path_after_relative_read(tmp_path):
     assert target.read_text(encoding="utf-8") == "new"
 
 
-def test_write_file_allows_after_external_change_without_freshness_match(tmp_path):
+def test_write_file_denies_after_external_change_with_freshness_conflict(tmp_path):
     target = tmp_path / "existing.txt"
     target.write_text("old", encoding="utf-8")
     executor, working_memory, _ = build_executor(tmp_path)
@@ -118,7 +118,9 @@ def test_write_file_allows_after_external_change_without_freshness_match(tmp_pat
     target.write_text("changed externally", encoding="utf-8")
     result = executor.execute("write_file", {"path": "existing.txt", "content": "new"}, working_memory=working_memory)
 
-    assert result.status == "success"
+    assert result.status == "denied"
+    assert result.error_type == "write_conflict"
+    assert target.read_text(encoding="utf-8") == "changed externally"
 
 
 def test_apply_patch_gate_remains_unchanged_for_unread_file(tmp_path):

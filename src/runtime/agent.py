@@ -278,9 +278,13 @@ class JCodeAgent:
                     return self._finish_run(task_state, run_dir, partial_text, MODEL_OUTPUT_INCOMPLETE)
                 if response.text:
                     final_text = self._combined_response_text(task_state, response.text)
-                    gate = self.final_gate.check(final_text, task_state, self.working_memory, session=self.session, workspace=self.workspace)
+                    gate = self.final_gate.check(final_text, task_state, self.working_memory, session=self.session, workspace=self.workspace, context=self.session.get("ctx_info", {}))
+                    self._record_trace(run_dir, "final_readiness_evaluated", task_state, action=gate.get("action", "allow"), reasons=gate.get("reasons", []), notice_count=gate.get("notice_count", 0))
                     if gate["allowed"]:
                         return self._finish_run(task_state, run_dir, final_text, VALID_FINAL)
+                    if gate.get("action") == "block":
+                        self._record_trace(run_dir, "final_gate_blocked", task_state, reasons=gate.get("reasons", []))
+                        return self._finish_run(task_state, run_dir, gate["message"], "final_gate_blocked")
                     # Gate 拒绝后保留模型回答，并将缺失动作注入下一轮上下文。
                     self.working_memory.note_safety(gate["message"])
                     self._record_trace(run_dir, "final_gate_denied", task_state, reason=gate["reason"], message=gate["message"])
@@ -647,7 +651,18 @@ class JCodeAgent:
         if result.ok and result.changed_files:
             self._mark_stale_file_evidence(result.changed_files)
 
-        task_state.record_tool(tool_name, result)
+        unresolved_before = {item.get("failure_id") for item in task_state.unresolved_tool_failures}
+        task_state.record_tool(tool_name, result, arguments=tool_args, call_id=call_id)
+        unresolved_after = {item.get("failure_id") for item in task_state.unresolved_tool_failures}
+        if result.status not in {"success", "ok"}:
+            failure = next((item for item in task_state.unresolved_tool_failures if item.get("failure_id") not in unresolved_before), None)
+            if failure:
+                self._record_trace(run_dir, "tool_failure_recorded", task_state, **failure)
+        for failure in task_state.resolved_tool_failures:
+            if failure.get("failure_id") not in unresolved_after and failure.get("resolution_evidence") == f"write_file:{call_id or 'success'}":
+                self._record_trace(run_dir, "tool_failure_resolved", task_state, **failure)
+        if tool_name == "run_shell" and task_state.verification:
+            self._record_trace(run_dir, "verification_recorded", task_state, **task_state.verification)
         self._append_history(
             "tool_result",
             result.text,

@@ -71,7 +71,7 @@ def build_default_registry() -> ToolRegistry:
     registry.register(Tool("todo_add", TodoAddArgs, tool_todo_add, read_only=False, description="Add an item to the session todo ledger."))
     registry.register(Tool("todo_update", TodoUpdateArgs, tool_todo_update, read_only=False, description="Update an item in the session todo ledger."))
     registry.register(Tool("todo_list", TodoListArgs, tool_todo_list, read_only=True, description="List the session todo ledger."))
-    registry.register(Tool("ask_user", AskUserArgs, tool_ask_user, read_only=False, description="Ask the interactive user a blocking clarification question."))
+    registry.register(Tool("ask_user", AskUserArgs, tool_ask_user, read_only=False, description="If you are uncertain, consult the user."))
     registry.register(Tool("enter_plan_mode", EnterPlanModeArgs, tool_enter_plan_mode, read_only=False, description="Enter plan mode for a named planning topic."))
     registry.register(Tool("exit_plan_mode", ExitPlanModeArgs, tool_exit_plan_mode, read_only=False, description="Exit plan mode and return to default runtime mode."))
     registry.register(Tool("spawn_subagent", SpawnSubagentArgs, tool_spawn_subagent, read_only=False, description="Spawn a subagent worker for a scoped task."))  # 子 Agent 生命周期治理后置
