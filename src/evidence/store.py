@@ -4,7 +4,7 @@ import json
 import hashlib
 import os
 from pathlib import Path
-
+from src.state.workspace import now_iso
 from src.evidence.events import event_record
 from src.runtime.errors import ArtifactIntegrityError, ArtifactUnavailableError, ArtifactWriteFailureError
 

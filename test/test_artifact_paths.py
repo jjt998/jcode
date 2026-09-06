@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 from src.evidence.store import RunStore
@@ -70,3 +72,23 @@ def test_tool_output_thresholds_follow_tool_category(tmp_path: Path):
     assert read_inline == "x" * 8000 and not read_meta["full_output_artifact"]
     assert shell_inline == "x" * 6000 and not shell_meta["full_output_artifact"]
     assert generic_meta["full_output_artifact"] and "tool output stored at:" in generic_inline
+
+
+def test_history_artifact_returns_auditable_reference(tmp_path: Path):
+    """压缩前 History 副本必须写入成功并返回完整审计元数据。"""
+    workspace = Workspace(root=tmp_path, cwd=tmp_path, repo_root=tmp_path)
+    store = RunStore(tmp_path / ".jcode" / "runs", workspace_root=workspace.root)
+    run_dir = store.run_dir("run-compact")
+    run_dir.mkdir(parents=True)
+    history = [{"kind": "user", "event_id": "event-1", "content": "compact me"}]
+
+    reference = store.write_history_artifact(run_dir, 135, history)
+
+    artifact = workspace.root / reference["path"]
+    content = artifact.read_text(encoding="utf-8")
+    assert artifact.exists()
+    assert json.loads(content) == history
+    assert reference["sha256"] == hashlib.sha256(content.encode("utf-8")).hexdigest()
+    assert reference["bytes"] == len(content.encode("utf-8"))
+    assert reference["sequence"] == 135
+    assert reference["created_at"]
