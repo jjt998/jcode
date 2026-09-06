@@ -753,7 +753,8 @@ function handleRunEvent(name, event, stream = {}) {
     }
     loadSessions(false).catch(console.error);
   } else if (name !== "stream_closed") {
-    if (turn.status !== "waiting_approval") turn.status = "running";
+    // aborting 期间允许继续展示工具收尾事件，但不能恢复为 running。
+    if (turn.status !== "waiting_approval" && turn.status !== "aborting") turn.status = "running";
     if (turn.status === "running") setRunStatus("running");
   }
   if (name === "approval_answered") {
@@ -911,6 +912,10 @@ els.stopRun.addEventListener("click", async () => {
   const turn = state.turns.find((item) => item.pending_approval || ["running", "waiting_approval", "aborting"].includes(item.status));
   const runId = turn?.web_run_id || state.activeRunId;
   if (!runId || !state.projectId || !state.sessionId) return;
+  // 后端会立即进入 aborting；本地先显示，避免等待 HTTP/SSE 延迟时界面无反馈。
+  setRunStatus("aborting");
+  if (turn) turn.status = "aborting";
+  renderTurns();
   try {
     const run = await api(`/api/runs/${encodeURIComponent(runId)}/abort?project_id=${encodeURIComponent(state.projectId)}&session_id=${encodeURIComponent(state.sessionId)}`, { method: "POST" });
     setRunStatus(run.status);

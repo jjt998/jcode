@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from pathlib import Path
 
 from src.app.web_runs import WebRun, WebRunManager
@@ -78,3 +79,32 @@ def test_run_lookup_rejects_mismatched_project_or_session():
         pass
     else:
         raise AssertionError("run lookup must reject another session")
+
+
+def test_abort_returns_aborting_without_waiting_for_run_thread():
+    """abort 接口只登记请求，不能阻塞等待后台工具线程结束。"""
+    manager = WebRunManager.__new__(WebRunManager)
+    manager.lock = threading.RLock()
+    run = WebRun("web-run-1", "project-1", Path("."), "session-1")
+
+    class Agent:
+        def __init__(self):
+            self.aborted = False
+
+        def abort(self):
+            self.aborted = True
+
+    agent = Agent()
+    run.agent = agent
+    run.status = "running"
+    run.thread = threading.Thread(target=lambda: time.sleep(0.5), daemon=True)
+    run.thread.start()
+    manager.runs = {run.web_run_id: run}
+
+    started = time.monotonic()
+    result = manager.abort(run.web_run_id, timeout_seconds=10, project_id="project-1", session_id="session-1")
+
+    assert time.monotonic() - started < 0.5
+    assert result.status == "aborting"
+    assert agent.aborted is True
+    assert run.events[-1]["event"] == "run_abort_requested"

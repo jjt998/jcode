@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import threading
-import time
 import uuid
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -297,6 +296,7 @@ class WebRunManager:
         return run
 
     def abort(self, run_id: str, timeout_seconds: float = 10.0, *, project_id: str | None = None, session_id: str | None = None) -> WebRun:
+        """登记中止请求并立即返回，实际终止由运行线程异步完成。"""
         run = self.get_run(run_id, project_id=project_id, session_id=session_id)
         with run.lock:
             if run.agent is not None and run.status in ACTIVE_STATUSES:
@@ -308,12 +308,6 @@ class WebRunManager:
                     run.pending_choices = []
                     run.approval_event.set()
                 run.emit("run_abort_requested", timeout_seconds=timeout_seconds)
-        deadline = time.time() + timeout_seconds
-        while time.time() < deadline:
-            thread = run.thread
-            if thread is None or not thread.is_alive():
-                return run
-            time.sleep(0.1)
         return run
 
     def run_dir(self, run: WebRun) -> Path | None:
