@@ -52,6 +52,8 @@ soft reason 第一次返回 `runtime_notice`，相同 reason 未产生新证据�
 ### 4. 文件写入与 Patch 诊断
 
 - `write_file` 对已存在文件检查 read freshness；外部变更后返回 `write_conflict`，不覆盖文件。
+- Working Memory 记录 `jcode_modified_files`，JCode 自己成功写入后刷新当前 freshness，允许同一 run 连续修改；外部 freshness 变化记录为 `external_stale_paths`。
+- 外部冲突返回“该文件被外部势力改动了，请你重读后做下一步打算”提示，并在 policy metadata 中标记 `stale=true`。
 - `apply_patch` 保留精确匹配，不做模糊替换。
 - patch 匹配失败返回 path、match_count、freshness、newline 和 UTF-8 BOM 元数据，便于模型重新读取并生成正确操作。
 
@@ -91,4 +93,3 @@ git diff --check
 ## 关联 Bug
 
 [2026-09-06-FinalGate已修复Patch失败误阻断.md](../BUGS-after9.6/2026-09-06-FinalGate已修复Patch失败误阻断.md)
-

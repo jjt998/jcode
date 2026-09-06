@@ -22,7 +22,7 @@ class ToolPolicyChecker:
         normalized_plan_path = self.workspace.relpath(self.workspace.resolve_path(plan_path)) if plan_path else ""
         if tool.name == "write_file":
             plan_mode_write = runtime_mode == "plan" and rel == normalized_plan_path
-            # 新文件允许直接创建；已有文件只要求路径曾经被成功读取，不校验 freshness。
+            # 新文件允许直接创建；已有文件要求读取版本仍然有效，或由当前 JCode run 刚刚写入。
             target_exists = bool(path) and self.workspace.resolve_path(path).is_file()
             if target_exists and rel not in working_memory.file_freshness and not plan_mode_write:
                 return PolicyDecision.deny("read_before_write", f"error: read {rel} before modifying it", layer="tool_policy")
@@ -34,7 +34,9 @@ class ToolPolicyChecker:
                 except OSError:
                     current = ""
                 if expected and current and expected != current:
-                    return PolicyDecision.deny("write_conflict", f"error: {rel} changed after it was read; read it again before replacing the file", layer="tool_policy")
+                    working_memory.runtime_state.setdefault("external_stale_paths", {})[rel] = {"read_freshness": expected, "current_freshness": current}
+                    working_memory.note_safety(f"该文件被外部势力改动了，请你重读后做下一步打算：{rel}")
+                    return PolicyDecision.deny("write_conflict", f"该文件被外部势力改动了，请你重读后做下一步打算：{rel}", layer="tool_policy", metadata={"stale": True, "stale_reason": "external_file_changed", "path": rel, "read_freshness": expected, "current_freshness": current})
         if tool.name == "apply_patch":
             plan_mode_write = runtime_mode == "plan" and rel == normalized_plan_path
             if rel and rel not in working_memory.file_freshness and not plan_mode_write:

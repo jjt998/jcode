@@ -140,6 +140,17 @@ class ToolExecutor:
         changed = sorted(set(after) ^ set(before))
         if changed and not result.changed_files:
             result.changed_files = changed
+        if result.ok and result.changed_files:
+            # JCode 自己的成功写入刷新基准，后续连续写入无需断开重读。
+            for changed_path in result.changed_files:
+                try:
+                    relpath = self.workspace.relpath(self.workspace.resolve_path(changed_path))
+                    current = freshness(self.workspace.resolve_path(relpath))
+                except (OSError, ValueError):
+                    continue
+                working_memory.file_freshness[relpath] = current
+                working_memory.runtime_state.setdefault("jcode_modified_files", {})[relpath] = {"freshness": current, "run_id": run_id, "tool": request.name}
+                working_memory.runtime_state.setdefault("external_stale_paths", {}).pop(relpath, None)
         result.text = self.redactor.redact(result.text)
         result.decision = "executed"
         result.metadata.update(

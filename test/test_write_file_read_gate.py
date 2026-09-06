@@ -123,6 +123,19 @@ def test_write_file_denies_after_external_change_with_freshness_conflict(tmp_pat
     assert target.read_text(encoding="utf-8") == "changed externally"
 
 
+def test_jcode_own_patch_refreshes_freshness_for_followup_write(tmp_path):
+    target = tmp_path / "existing.txt"
+    target.write_text("old", encoding="utf-8")
+    executor, working_memory, _ = build_executor(tmp_path)
+
+    assert executor.execute("read_file", {"path": "existing.txt"}, working_memory=working_memory).status == "success"
+    assert executor.execute("apply_patch", {"path": "existing.txt", "old_text": "old", "new_text": "patched"}, working_memory=working_memory).status == "success"
+    result = executor.execute("write_file", {"path": "existing.txt", "content": "rewritten"}, working_memory=working_memory)
+
+    assert result.status == "success"
+    assert target.read_text(encoding="utf-8") == "rewritten"
+
+
 def test_apply_patch_gate_remains_unchanged_for_unread_file(tmp_path):
     (tmp_path / "existing.txt").write_text("old", encoding="utf-8")
     executor, working_memory, _ = build_executor(tmp_path)
