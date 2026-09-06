@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
+
+from src.context.budget import BudgetOccupancy
 from typing import Literal
 
 
@@ -65,8 +68,35 @@ class ContextResult:
     skill: str  # 本轮技能上下文
     history: list[HistoryEvent]  # 经治理后的会话历史
     working_memory: object  # 构建时冻结的短期记忆快照
-    current_request: str  # 当前真实用户请求
     tools: list[ToolDefinition]  # 当前允许调用的原生工具
     ctx_info: dict  # 压力、裁剪与压缩审计
     compact_audit: dict | None = None  # 历史语义压缩审计
     provider_continuation: dict = field(default_factory=dict)  # 同一 run 的 Provider 原生续接项
+    internal_continuation_instruction: str = ""  # 输出截断后的内部续写指令
+    provider_input: "ProviderInputSnapshot | None" = None  # 唯一 Provider 输入快照
+
+
+@dataclass(frozen=True)
+class ProviderInputSnapshot:
+    """Provider 请求、预览和审计共同使用的输入快照。"""
+    instructions: str  # Provider instructions
+    input: list[dict]  # Responses 原生 input items
+    tools: list[dict]  # Responses 工具 schema
+    serialized_input_json: str  # 规范序列化文本
+    serialized_input_tokens: int  # 规范输入 token 数
+    tokenizer_source: str  # tokenizer 来源
+    occupancies: tuple[BudgetOccupancy, ...] = ()  # 输入占用明细
+
+
+@dataclass(frozen=True)
+class ContextBuildOutcome:
+    """上下文结果与待提交 session/Working Memory 候选。"""
+    context_result: ContextResult  # 构建结果
+    session_candidate: dict | None = None  # 待提交 session
+    working_memory_candidate: Any | None = None  # 待提交 Working Memory
+    session_commit_required: bool = False  # 是否需要原子提交
+    history_artifact_ref: dict | None = None  # 已验签历史 artifact
+
+    def __getattr__(self, name: str):
+        """兼容调用方读取上下文字段，真实数据仍归属于 context_result。"""
+        return getattr(self.context_result, name)

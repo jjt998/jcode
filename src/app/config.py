@@ -6,6 +6,37 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.providers.profiles import ModelProfile
+from src.context.budget import DEFAULT_MAX_NEW_TOKENS, SAFETY_MARGIN, TokenizerAdapter, effective_window, validate_static_model_capacity, serialize_counted_input
+
+
+def validate_profile_capacity_fields(profile: ModelProfile) -> None:
+    """验证模型档案声明的窗口和输出上限。"""
+    for name in ("context_window_tokens", "max_output_tokens"):
+        value = getattr(profile, name)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+
+
+def resolve_actual_max_new_tokens(cli_value, toml_value, default: int = DEFAULT_MAX_NEW_TOKENS) -> int:
+    """按 CLI > TOML > 默认值解析输出预留。"""
+    value = cli_value if cli_value is not None else (toml_value if toml_value is not None else default)
+    value = int(value)
+    if value <= 0:
+        raise ValueError("max_new_tokens must be positive")
+    return value
+
+
+def compile_static_capacity_input(prefix: str = "", tools: list[dict] | None = None, tokenizer: TokenizerAdapter | None = None) -> dict:
+    """编译启动时已知的 instructions/tools，并加入三项最低保障。"""
+    adapter = tokenizer or TokenizerAdapter()
+    if prefix or tools:
+        _, occupancy = serialize_counted_input(prefix, [], list(tools or []), adapter)
+        details = {item.name: item.tokens for item in occupancy}
+    else:
+        details = {"instructions": 0, "tools_schema": 0, "provider_protocol_envelope": 0}
+    details.update({"history": 8192, "working_memory": 4096, "skills": 512})
+    details["total"] = sum(details.values())
+    return details
 
 
 @dataclass
@@ -20,6 +51,7 @@ class AppConfig:
     max_steps: int
     max_new_tokens: int
     temperature: float
+    explicit_model_profile: str | None = None  # CLI 显式指定的模型档案
     plan_topic: str | None = None
     plan_path: str | None = None
     auto_dream: bool = False
@@ -27,6 +59,11 @@ class AppConfig:
     dream_min_sessions: int = 5
     session_id: str | None = None
     resume: str | None = None
+    compact_summary_timeout_seconds: int = 120  # 摘要模型超时秒数
+    compact_summary_retry_count: int = 2  # 摘要失败后的额外重试次数
+    compact_summary_initial_retry_delay_seconds: int = 2  # 首次重试等待秒数
+    compact_summary_retry_multiplier: int = 2  # 摘要重试等待倍数
+    compact_summary_rebuild_on: bool = True  # 是否允许从历史 artifact 重建摘要
 
 
 def _load_toml(path: Path | None) -> dict:
@@ -62,6 +99,11 @@ def _profile_from_raw(profile_id: str, raw: dict, *, providers: dict[str, dict],
     reasoning_mode = str(raw.get("reasoning_mode") or "none").strip()
     thinking_enabled = _as_bool(raw.get("thinking_enabled", False))
     reasoning_always_on = _as_bool(raw.get("reasoning_always_on", False))
+    context_window_tokens = raw.get("context_window_tokens")
+    max_output_tokens = raw.get("max_output_tokens")
+    for field_name, value in (("context_window_tokens", context_window_tokens), ("max_output_tokens", max_output_tokens)):
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"model profile {profile_id} requires positive integer {field_name}")
     if not provider_name or not api_protocol or not model or not base_url:
         raise ValueError(f"model profile {profile_id} requires global provider and model")
     if reasoning_mode not in {"none", "native", "optional"}:
@@ -83,7 +125,7 @@ def _profile_from_raw(profile_id: str, raw: dict, *, providers: dict[str, dict],
         raise ValueError(f"model profile {profile_id} requires a default effort included in reasoning_effort_options")
     if reasoning_always_on and not thinking_enabled:
         thinking_enabled = True
-    known = {"provider", "model", "reasoning_mode", "thinking_enabled", "reasoning_always_on", "reasoning_effort", "reasoning_effort_options"}
+    known = {"provider", "model", "reasoning_mode", "thinking_enabled", "reasoning_always_on", "reasoning_effort", "reasoning_effort_options", "context_window_tokens", "max_output_tokens"}
     return ModelProfile(
         id=profile_id,
         provider=provider_name,
@@ -91,6 +133,8 @@ def _profile_from_raw(profile_id: str, raw: dict, *, providers: dict[str, dict],
         model=model,
         api_key=api_key,
         base_url=base_url,
+        context_window_tokens=context_window_tokens,
+        max_output_tokens=max_output_tokens,
         reasoning_mode=reasoning_mode,
         thinking_enabled=thinking_enabled,
         reasoning_effort=reasoning_effort,
@@ -121,7 +165,9 @@ def load_config(args) -> AppConfig:
     models_raw = raw.get("models", {})
     if not isinstance(models_raw, dict) or not models_raw:
         raise ValueError("configuration requires at least one [models.<profile_id>] section")
-    selected = str(getattr(args, "model", None) or raw.get("default_model") or "").strip()
+    cli_model = getattr(args, "model", None)
+    configured_default = str(raw.get("default_model") or "").strip()
+    selected = str(cli_model if cli_model is not None else configured_default).strip()
     if not selected:
         raise ValueError("configuration requires default_model")
     if selected not in models_raw:
@@ -139,20 +185,27 @@ def load_config(args) -> AppConfig:
     }
     if len(profiles) != len(models_raw):
         raise ValueError("every model profile must be a TOML table")
+    for profile in profiles.values():
+        validate_profile_capacity_fields(profile)
     default_profile = profiles[selected]
     security_raw = dict(raw.get("security", {}))
     runtime_raw = dict(raw.get("runtime", {}))
+    resolved_max_new_tokens = resolve_actual_max_new_tokens(getattr(args, "max_new_tokens", None), runtime_raw.get("max_new_tokens"), DEFAULT_MAX_NEW_TOKENS)
+    if resolved_max_new_tokens > default_profile.max_output_tokens:
+        raise ValueError(f"max_new_tokens exceeds model profile output limit: {resolved_max_new_tokens} > {default_profile.max_output_tokens}")
+    static_minimum = compile_static_capacity_input()["total"]
+    validate_static_model_capacity(default_profile, resolved_max_new_tokens, static_minimum)
     memory_raw = dict(raw.get("memory", {}))
     return AppConfig(
         cwd=cwd,
         provider_name=default_profile.provider,
         api_protocol=default_profile.api_protocol,
         model_profiles=profiles,
-        default_model_profile=selected,
+        default_model_profile=configured_default or selected,
         approval=str(getattr(args, "approval", None) or security_raw.get("approval") or "ask"),
         sandbox=str(getattr(args, "sandbox", None) or security_raw.get("sandbox") or "best_effort"),
-        max_steps=int(getattr(args, "max_steps", None) or runtime_raw.get("max_steps") or 50),
-        max_new_tokens=int(getattr(args, "max_new_tokens", None) or runtime_raw.get("max_new_tokens") or 8192),
+        max_steps=int(getattr(args, "max_steps", None) if getattr(args, "max_steps", None) is not None else runtime_raw.get("max_steps", 50)),
+        max_new_tokens=resolved_max_new_tokens,
         temperature=float(getattr(args, "temperature", None) or 0.2),
         plan_topic=str(getattr(args, "plan_topic", None) or runtime_raw.get("plan_topic") or "") or None,
         plan_path=str(getattr(args, "plan_path", None) or runtime_raw.get("plan_path") or "") or None,
@@ -161,4 +214,10 @@ def load_config(args) -> AppConfig:
         dream_min_sessions=int(memory_raw.get("dream_min_sessions", 5)),
         session_id=getattr(args, "session_id", None),
         resume=getattr(args, "resume", None),
+        explicit_model_profile=str(cli_model).strip() if cli_model is not None else None,
+        compact_summary_timeout_seconds=int(runtime_raw.get("compact_summary_timeout_seconds", 120)),
+        compact_summary_retry_count=int(runtime_raw.get("compact_summary_retry_count", 2)),
+        compact_summary_initial_retry_delay_seconds=int(runtime_raw.get("compact_summary_initial_retry_delay_seconds", 2)),
+        compact_summary_retry_multiplier=int(runtime_raw.get("compact_summary_retry_multiplier", 2)),
+        compact_summary_rebuild_on=_as_bool(runtime_raw.get("compact_summary_rebuild_on", True)),
     )

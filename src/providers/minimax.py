@@ -5,11 +5,11 @@ import socket
 import urllib.error
 import urllib.request
 
-from src.context.budget import estimate_tokens
 from src.context.result import ContextResult
 from src.providers.base import ModelResponse, ProviderRequestError
 from src.providers.deepseek import DeepSeekClient
 from src.providers.profiles import ModelProfile
+from src.providers.request import compile_provider_input_snapshot
 
 
 class MiniMaxClient(DeepSeekClient):
@@ -25,7 +25,7 @@ class MiniMaxClient(DeepSeekClient):
             return ModelResponse(
                 text="JCode is configured without an API key. The context was built but no provider request was sent.",
                 finish_reason="missing_api_key",
-                input_tokens=self._estimate_context_tokens(context),
+                input_tokens=int(context.provider_input.serialized_input_tokens if context.provider_input else 0),
             )
         payload = self._compile_request(context, model=model, max_tokens=max_tokens, temperature=temperature, model_profile=model_profile)
         request = urllib.request.Request(
@@ -51,14 +51,12 @@ class MiniMaxClient(DeepSeekClient):
     def _compile_request(self, context: ContextResult, *, model: str, max_tokens: int, temperature: float, model_profile: dict | None) -> dict:
         """按 MiniMax 的推理与温度互斥规则编译请求。"""
         options = dict(model_profile or self.profile.snapshot())
+        provider_input = context.provider_input or compile_provider_input_snapshot(context)
         payload: dict[str, object] = {
             "model": model,
-            "instructions": context.prefix,
-            "input": self._compile_input(context),
-            "tools": [
-                {"type": "function", "name": tool.name, "description": tool.description, "parameters": tool.parameters}
-                for tool in context.tools
-            ],
+            "instructions": provider_input.instructions,
+            "input": provider_input.input,
+            "tools": provider_input.tools,
             "max_output_tokens": max_tokens,
         }
         if bool(options.get("thinking_enabled", False)):
@@ -69,8 +67,3 @@ class MiniMaxClient(DeepSeekClient):
             payload["temperature"] = temperature
         payload.update({key: value for key, value in self.profile.extra.items() if key in self._EXTRA_FIELDS})
         return payload
-
-    @staticmethod
-    def _estimate_context_tokens(context: ContextResult) -> int:
-        text = context.prefix + context.skill + context.current_request + context.working_memory.render()
-        return estimate_tokens(text + "\n".join(event.content for event in context.history))

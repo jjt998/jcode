@@ -32,8 +32,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     config = load_config(args)
     agent = build_agent(config)
-    if args.model:
-        agent.switch_model_profile(args.model, source="cli")
     prompt = " ".join(args.prompt).strip()
     if not prompt:
         parser.print_help()

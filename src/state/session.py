@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import uuid
+import os
 from pathlib import Path
 
 from src.state.workspace import now_iso
+from src.runtime.errors import ArtifactWriteFailureError
 
 
 class SessionStore:
@@ -33,11 +35,11 @@ class SessionStore:
             path = self.root / f"{selected}.json"
             if path.exists():
                 session = json.loads(path.read_text(encoding="utf-8"))
-                if int(session.get("schema_version", 0) or 0) != 4:
+                if int(session.get("schema_version", 0) or 0) != 5:
                     raise ValueError("session schema is incompatible with native tool calling; start a new session")
                 return session
         return {
-            "schema_version": 4,
+            "schema_version": 5,
             "id": session_id or f"{now_iso().replace(':', '').replace('-', '')}-{uuid.uuid4().hex[:6]}",
             "created_at": now_iso(),
             "updated_at": now_iso(),
@@ -52,8 +54,24 @@ class SessionStore:
         }
 
     def save(self, session: dict) -> Path:
-        session.setdefault("schema_version", 4)
-        session["updated_at"] = now_iso()
-        path = self.root / f"{session['id']}.json"
-        path.write_text(json.dumps(session, ensure_ascii=False, indent=2), encoding="utf-8")
+        if int(session.get("schema_version", 0) or 0) != 5:
+            raise ValueError("session schema must be 5")
+        candidate = dict(session)
+        candidate["updated_at"] = now_iso()
+        path = self.root / f"{candidate['id']}.json"
+        temp = path.with_suffix(path.suffix + f".{uuid.uuid4().hex}.tmp")
+        try:
+            with temp.open("w", encoding="utf-8") as fh:
+                json.dump(candidate, fh, ensure_ascii=False, indent=2)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(temp, path)
+        except OSError as exc:
+            try:
+                temp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise ArtifactWriteFailureError(str(exc)) from exc
+        session.clear()
+        session.update(candidate)
         return path

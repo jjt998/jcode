@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from src.runtime.errors import UnsupportedProviderContinuationItemError
+
 
 @dataclass
 class ProviderContinuation:
@@ -15,9 +17,18 @@ class ProviderContinuation:
         if not isinstance(data, dict):
             return cls(run_id=run_id)
         items = data.get("items", [])
+        clean_items = []
+        for item in items:
+            if not isinstance(item, dict):
+                raise UnsupportedProviderContinuationItemError("continuation item must be an object")
+            if item.get("type") not in {"reasoning", "function_call", "function_call_output"}:
+                raise UnsupportedProviderContinuationItemError(f"unsupported continuation item: {item.get('type')}")
+            if item.get("type") in {"function_call", "function_call_output"} and not str(item.get("call_id") or ""):
+                raise UnsupportedProviderContinuationItemError("tool continuation item requires call_id")
+            clean_items.append(dict(item))
         return cls(
             run_id=str(data.get("run_id") or run_id),
-            items=[dict(item) for item in items if isinstance(item, dict)],
+            items=clean_items,
         )
 
     def add_response_items(self, output: object) -> None:
@@ -25,8 +36,13 @@ class ProviderContinuation:
         if not isinstance(output, list):
             return
         for item in output:
-            if not isinstance(item, dict) or item.get("type") not in {"reasoning", "function_call"}:
+            if not isinstance(item, dict):
                 continue
+            item_type = item.get("type")
+            if item_type in {"message", "output_text", None, ""}:
+                continue
+            if item_type not in {"reasoning", "function_call"}:
+                raise UnsupportedProviderContinuationItemError(f"unsupported continuation item: {item_type}")
             self.items.append(dict(item))
 
     def add_tool_output(self, call_id: str, output: str) -> None:

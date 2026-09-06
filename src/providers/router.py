@@ -36,3 +36,11 @@ class ModelRouter:
 
     def has_api_key(self, profile_id: str | None = None) -> bool:
         return bool(getattr(self.registry.client(profile_id), "api_key", ""))
+
+    def complete_summary(self, summary_provider_input: dict, *, profile_id: str, max_output_tokens: int, timeout_seconds: int = 120) -> str:
+        profile = self.registry.profile(profile_id)
+        client = self.registry.client(profile.id)
+        method = getattr(client, "complete_summary", None)
+        if method is None:
+            raise RuntimeError("provider does not support summary completion")
+        return method(summary_provider_input, profile_id=profile.id, max_output_tokens=max_output_tokens, timeout_seconds=timeout_seconds)

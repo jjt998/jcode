@@ -18,13 +18,13 @@ def prepare_tool_result_observation(run_store, run_dir, tool_name: str, full_res
     """按工具类别外置超长结果，并生成可继续操作的短观察。"""
     full_result = str(full_result)
     artifact_list = list(artifacts or [])
-    # 文件读取由 start/end/max_chars 主动分段，不能再被外置成另一层 artifact。
-    if tool_name == "read_file":
+    # 文件读取和目录快照始终直接保留，避免重复 artifact 层。
+    if tool_name in {"read_file", "list_files"}:
         return full_result, {
             "original_chars": len(full_result),
             "content_sha256": hashlib.sha256(full_result.encode("utf-8")).hexdigest(),
             "full_output_artifact": "",
-            "observation_policy": "read_file_direct",
+            "observation_policy": "read_file_direct" if tool_name == "read_file" else "list_files_direct",
             "observation_summary": full_result,
         }, artifact_list
     limit = INLINE_LIMITS.get(tool_name, DEFAULT_INLINE_LIMIT)

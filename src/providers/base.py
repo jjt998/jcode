@@ -44,3 +44,6 @@ class ModelClient(Protocol):
 
     def complete(self, context: ContextResult, *, model: str, max_tokens: int, temperature: float, model_profile: dict | None = None) -> ModelResponse:
         ...
+
+    def complete_summary(self, summary_provider_input: dict, *, profile_id: str, max_output_tokens: int, timeout_seconds: int = 120) -> str:
+        ...

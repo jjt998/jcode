@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from src.app.config import AppConfig
+from src.app.config import compile_static_capacity_input
+from src.context.budget import TokenizerAdapter, validate_static_model_capacity
 from src.context.manager import ContextManager
+from src.context.prefix import render_prefix
 from src.evidence.store import RunStore
 from src.evidence.session_log import SessionEventBus
 from src.memory.durable import DurableMemoryStore
@@ -62,12 +65,30 @@ def build_agent(config: AppConfig) -> JCodeAgent:
     model_registry.register("deepseek", "openai_responses", DeepSeekClient)
     model_registry.register("minimax", "openai_responses", MiniMaxClient)
     router = ModelRouter(model_registry)
+    selected_profile_id = config.explicit_model_profile or str(session.get("active_model_profile") or config.default_model_profile)
+    selected_profile = model_registry.profile(selected_profile_id)
+    runtime_mode = session.get("runtime_mode", {}) if isinstance(session.get("runtime_mode", {}), dict) else {}
+    active_tool_profile_name = "plan" if str(runtime_mode.get("mode", "default")) == "plan" else "default"
+    static_tools = [
+        {"type": "function", "name": item.name, "description": item.description, "parameters": item.parameters}
+        for item in registry.definitions(tool_profiles[active_tool_profile_name].allowed_tools)
+    ]
+    static_minimum = compile_static_capacity_input(render_prefix(workspace, registry), static_tools, TokenizerAdapter())["total"]
+    validate_static_model_capacity(selected_profile, config.max_new_tokens, static_minimum)
     session_events = SessionEventBus(state_dir / "sessions" / f"{session['id']}.events.jsonl")
     if config.resume:
         session_events.emit("session_resumed", **working_memory.resume_context)
         session_events.emit("resume_checkpoint_evaluated", **working_memory.resume_context)
     workers = WorkerManager(workspace, state_dir / "workers", executor, router, config, session_events=session_events)
-    manager = ContextManager(workspace=workspace, durable_memory=memory_store, registry=registry, total_budget=400000)
+    manager = ContextManager(
+        workspace=workspace,
+        durable_memory=memory_store,
+        registry=registry,
+        model_profile=selected_profile,
+        actual_max_new_tokens=config.max_new_tokens,
+        summary_router=router,
+        summary_config=config,
+    )
     agent = JCodeAgent(
         config=config, 
         workspace=workspace,
@@ -84,11 +105,11 @@ def build_agent(config: AppConfig) -> JCodeAgent:
         final_gate=FinalGate(),
         redactor=redactor,
         tool_profiles=tool_profiles,
-        active_tool_profile_name="default",
+        active_tool_profile_name=active_tool_profile_name,
         write_scope=[],
     )
-    if not session.get("active_model_profile"):
-        agent.switch_model_profile(config.default_model_profile, source="bootstrap")
+    if session.get("active_model_profile") != selected_profile_id:
+        agent.switch_model_profile(selected_profile_id, source="cli" if config.explicit_model_profile else "bootstrap")
     if config.plan_topic or config.plan_path:
         agent.enter_plan_mode(config.plan_topic or "plan", config.plan_path)
     return agent

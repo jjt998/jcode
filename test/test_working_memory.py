@@ -4,6 +4,7 @@ from src.memory.working import WorkingMemory
 from src.policy.final_gate import FinalGate
 from src.state.todo import TodoLedger
 from src.state.task import TaskState
+from src.runtime.plan import PlanModeController
 
 
 def test_tool_observation_keeps_summary_and_artifact_only(tmp_path):
@@ -17,6 +18,43 @@ def test_tool_observation_keeps_summary_and_artifact_only(tmp_path):
         "summary": "x" * 500 + "\n[...middle omitted...]\n" + "x" * 500,
         "artifact": ".jcode/runs/run-1/artifacts/output.txt",
     }
+
+
+def test_plan_mode_tools_do_not_enter_generic_observations(tmp_path):
+    memory = WorkingMemory(tmp_path)
+    memory.observe_tool("enter_plan_mode", "success", "plan")
+    memory.observe_tool("exit_plan_mode", "success", "default")
+    assert memory.tool_observations == []
+
+
+def test_plan_mode_updates_working_memory_runtime_state(tmp_path):
+    class Store:
+        root = tmp_path
+        def save(self, session):
+            return tmp_path / "session.json"
+
+    class Events:
+        def emit(self, *args, **kwargs):
+            return None
+
+    class Runtime:
+        session = {"runtime_mode": {"mode": "default"}}
+        working_memory = WorkingMemory(tmp_path)
+        session_store = Store()
+        session_events = Events()
+        session_path = None
+        write_scope = []
+        def set_tool_profile(self, name):
+            self.profile = name
+        def refresh_prefix(self, force=False):
+            return None
+
+    runtime = Runtime()
+    controller = PlanModeController(runtime)
+    controller.enter("audit")
+    assert runtime.working_memory.runtime_state["mode"] == "plan"
+    controller.exit()
+    assert runtime.working_memory.runtime_state["mode"] == "default"
 
 
 def test_file_read_projection_shows_current_range(tmp_path):

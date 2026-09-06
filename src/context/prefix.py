@@ -7,7 +7,6 @@ if TYPE_CHECKING:
     from src.tools.registry import ToolRegistry
 
 PROJECT_RULES_FILE = "JCODE.md"
-PROJECT_RULES_MAX_CHARS = 12000
 
 
 SYSTEM_RULES = """System rules:
@@ -48,6 +47,4 @@ def render_project_rules(workspace: "Workspace") -> str:
     if not path.is_file():
         return "Project rules from JCODE.md:\n(none)"
     text = path.read_text(encoding="utf-8", errors="replace").strip()
-    if len(text) > PROJECT_RULES_MAX_CHARS:
-        text = text[:PROJECT_RULES_MAX_CHARS].rstrip() + "\n\n[truncated]"
     return "Project rules from JCODE.md:\n" + (text or "(empty)")

@@ -5,7 +5,7 @@ from src.state.model_selection import resolve_model_snapshot, validate_model_opt
 
 
 def test_session_reasoning_effort_overrides_profile_default():
-    profile = ModelProfile("deepseek", "deepseek", "openai_responses", "deepseek-v4-pro", "", "https://api.deepseek.com", reasoning_mode="optional", thinking_enabled=True, reasoning_effort="high", reasoning_effort_options=("low", "high", "max"))
+    profile = ModelProfile("deepseek", "deepseek", "openai_responses", "deepseek-v4-pro", "", "https://api.deepseek.com", 1048576, 393216, reasoning_mode="optional", thinking_enabled=True, reasoning_effort="high", reasoning_effort_options=("low", "high", "max"))
 
     snapshot = resolve_model_snapshot({"model_options": {"deepseek": {"thinking_enabled": True, "reasoning_effort": "max"}}}, profile)
 
@@ -14,7 +14,7 @@ def test_session_reasoning_effort_overrides_profile_default():
 
 
 def test_reasoning_options_reject_effort_not_declared_by_profile():
-    profile = ModelProfile("deepseek", "deepseek", "openai_responses", "deepseek-v4-pro", "", "https://api.deepseek.com", reasoning_mode="optional", reasoning_effort="high", reasoning_effort_options=("low", "high"))
+    profile = ModelProfile("deepseek", "deepseek", "openai_responses", "deepseek-v4-pro", "", "https://api.deepseek.com", 1048576, 393216, reasoning_mode="optional", reasoning_effort="high", reasoning_effort_options=("low", "high"))
 
     try:
         validate_model_options(profile, True, "max")
@@ -25,7 +25,7 @@ def test_reasoning_options_reject_effort_not_declared_by_profile():
 
 
 def test_reasoning_toggle_is_persisted_in_model_snapshot():
-    profile = ModelProfile("minimax", "minimax", "openai_responses", "MiniMax-M3", "", "https://minnimax.chat/v1", reasoning_mode="optional", thinking_enabled=False, reasoning_effort="medium", reasoning_effort_options=("minimal", "low", "medium", "high"))
+    profile = ModelProfile("minimax", "minimax", "openai_responses", "MiniMax-M3", "", "https://minnimax.chat/v1", 1000000, 524288, reasoning_mode="optional", thinking_enabled=False, reasoning_effort="medium", reasoning_effort_options=("minimal", "low", "medium", "high"))
 
     snapshot = resolve_model_snapshot({"model_options": {"minimax": {"thinking_enabled": True, "reasoning_effort": "minimal"}}}, profile)
 
@@ -34,7 +34,7 @@ def test_reasoning_toggle_is_persisted_in_model_snapshot():
 
 
 def test_always_on_reasoning_cannot_be_disabled():
-    profile = ModelProfile("minimax-m2", "minimax", "openai_responses", "MiniMax-M2", "", "https://minnimax.chat/v1", reasoning_mode="native", thinking_enabled=True, reasoning_effort="medium", reasoning_effort_options=("minimal", "low", "medium", "high"), reasoning_always_on=True)
+    profile = ModelProfile("minimax-m2", "minimax", "openai_responses", "MiniMax-M2", "", "https://minnimax.chat/v1", 204800, 32768, reasoning_mode="native", thinking_enabled=True, reasoning_effort="medium", reasoning_effort_options=("minimal", "low", "medium", "high"), reasoning_always_on=True)
 
     options = validate_model_options(profile, False, "low")
     snapshot = resolve_model_snapshot({"model_options": {"minimax-m2": {"thinking_enabled": False, "reasoning_effort": "low"}}}, profile)

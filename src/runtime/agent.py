@@ -13,8 +13,10 @@ from src.memory.consolidation import maintain_after_turn
 from src.policy.decisions import PolicyDecision
 from src.providers.base import ModelResponse, ProviderRequestError
 from src.providers.continuation import ProviderContinuation
+from src.context.budget import validate_static_model_capacity
 from src.runtime.plan import PlanModeController, runtime_mode_name, runtime_mode_plan_path
-from src.runtime.transitions import ABORTED, MODEL_ERROR, MODEL_OUTPUT_INCOMPLETE, STEP_LIMIT_REACHED, VALID_FINAL
+from src.runtime.transitions import ABORTED, MODEL_ERROR, MODEL_OUTPUT_INCOMPLETE, STEP_LIMIT_REACHED, VALID_FINAL, UNEXPECTED_RUNTIME_ERROR
+from src.runtime.errors import JCodeRuntimeStopError
 from src.state.checkpoint import CheckpointManager
 from src.state.history import append_history
 from src.state.resume import build_resume_context
@@ -132,10 +134,20 @@ class JCodeAgent:
     def switch_model_profile(self, profile_id: str, *, source: str = "runtime") -> None:
         """在 run 之间切换 session 的默认模型档案。"""
         profile = self.model_router.registry.profile(profile_id)
+        from src.app.config import compile_static_capacity_input
+        from src.context.budget import TokenizerAdapter
+        from src.context.prefix import render_prefix
+        static_tools = [
+            {"type": "function", "name": item.name, "description": item.description, "parameters": item.parameters}
+            for item in self.context_manager.registry.definitions(self.active_tool_profile.allowed_tools)
+        ]
+        static_tokens = compile_static_capacity_input(render_prefix(self.workspace, self.context_manager.registry), static_tools, TokenizerAdapter())["total"]
+        validate_static_model_capacity(profile, self.config.max_new_tokens, static_tokens)
         previous = str(self.session.get("active_model_profile") or "")
         self.session["active_model_profile"] = profile.id
         self.session.setdefault("model_switches", []).append({"from": previous, "to": profile.id, "source": source})
         self.session_store.save(self.session)
+        self.context_manager.model_profile = profile
         self.session_events.emit("model_switched", previous_model_profile=previous, model_profile=profile.snapshot(), source=source)
 
     def run_dream(self, quiet: bool = False, session_ids: list[str] | None = None) -> str:
@@ -191,8 +203,31 @@ class JCodeAgent:
         return answer
 
     def ask(self, user_message: str) -> str:
+        """统一收口整个运行链，确保构建、工具和持久化异常都有终态。"""
+        self._active_run_context = None
+        try:
+            return self._ask_loop(user_message)
+        except JCodeRuntimeStopError as exc:
+            context = self._active_run_context
+            if context is not None:
+                try:
+                    return self._finish_run(*context, exc.user_message, exc.code)
+                except Exception:
+                    return exc.user_message
+            return exc.user_message
+        except Exception as exc:
+            context = self._active_run_context
+            if context is not None:
+                try:
+                    return self._finish_run(*context, f"运行时错误: {exc}", UNEXPECTED_RUNTIME_ERROR)
+                except Exception:
+                    pass
+            return f"运行时错误: {exc}"
+
+    def _ask_loop(self, user_message: str) -> str:
         self.abort_requested = False
         task_state, run_dir, checkpoint = self._begin_run(user_message)
+        self._active_run_context = (task_state, run_dir)
         final_text = ""
 
         step = 0
@@ -202,11 +237,14 @@ class JCodeAgent:
             task_state.step_index = step + 1
             task_state.attempts += 1
 
-            request_text = CONTINUATION_REQUEST if task_state.partial_response_parts else user_message
-            context_result = self._build_context(request_text, task_state, run_dir)
             try:
+                request_text = CONTINUATION_REQUEST if task_state.partial_response_parts else user_message
+                context_result = self._build_context(request_text, task_state, run_dir)
                 response = self._call_model(context_result, task_state, run_dir)
 
+            except JCodeRuntimeStopError as exc:
+                self._record_trace(run_dir, "runtime_stopped", task_state, stop_reason=exc.code, audit=exc.audit)
+                return self._finish_run(task_state, run_dir, exc.user_message, exc.code)
             except Exception as exc:
                 self._record_trace(
                     run_dir,
@@ -215,7 +253,7 @@ class JCodeAgent:
                     error_type=type(exc).__name__,
                     message=str(exc)[:500],
                 )
-                return self._finish_run(task_state, run_dir, f"Model error: {exc}", MODEL_ERROR)
+                return self._finish_run(task_state, run_dir, f"运行时错误: {exc}", UNEXPECTED_RUNTIME_ERROR)
 
             tool_calls = list(response.tool_calls or [])
             self._record_model_history(response, task_state)
@@ -296,7 +334,7 @@ class JCodeAgent:
         task_state = TaskState.create(user_message, resolve_model_snapshot(self.session, profile))
         run_dir = self.run_store.start_run(task_state)
         checkpoint = CheckpointManager(run_dir, self.workspace)
-        self.working_memory.task_goal = ""
+        self.working_memory.task_goal = str(user_message)
         self._append_history("user", user_message, task_state)
         self.session_events.emit(
             "run_started",
@@ -317,7 +355,13 @@ class JCodeAgent:
             user_message,
             allowed_tools=self.active_tool_profile.allowed_tools,
             provider_continuation=task_state.provider_continuation,
+            run_store=self.run_store,
+            run_dir=run_dir,
         )
+        if getattr(context_result, "session_commit_required", False):
+            self.session_store.save(context_result.session_candidate)
+            self.session = context_result.session_candidate
+            self.working_memory = context_result.working_memory_candidate
         self.session["ctx_info"] = context_result.ctx_info
         self.session_store.save(self.session)
         self.working_memory.set_compact_summary(str(context_result.ctx_info.get("history", {}).get("compact_summary", "")).strip())
@@ -343,17 +387,13 @@ class JCodeAgent:
             "skill": context_result.skill,
             "history": [event.to_dict() for event in context_result.history],
             "working_memory": context_result.working_memory.to_dict(),
-            "current_request": context_result.current_request,
+            "provider_input": {
+                "instructions": context_result.provider_input.instructions if context_result.provider_input else "",
+                "input": context_result.provider_input.input if context_result.provider_input else [],
+                "tools": context_result.provider_input.tools if context_result.provider_input else [],
+                "serialized_input_tokens": context_result.provider_input.serialized_input_tokens if context_result.provider_input else 0,
+            },
         }
-        request_preview = self.model_router.request_preview(
-            context_result,
-            max_tokens=self.config.max_new_tokens,
-            temperature=self.config.temperature,
-            profile_id=str(task_state.model_profile.get("id") or ""),
-            model_profile=task_state.model_profile,
-        )
-        context_snapshot["tools"] = list(request_preview.get("tools", []))
-        context_snapshot["input"] = list(request_preview.get("input", []))
         audit_data = {"context_result": context_snapshot, "ctx_info": context_result.ctx_info}
         # 同一步可因输出截断续写多次，审计文件必须按请求尝试号区分，不能覆盖。
         audit_ref = self.run_store.write_audit(
@@ -377,8 +417,7 @@ class JCodeAgent:
             "context_audit_sha256": audit_sha256,
             "history_event_count": len(context_result.history),
             "tool_count": len(context_result.tools),
-            "input_chars": int(info.get("budget", {}).get("total_chars", 0) or 0),
-            "input_tokens": int(info.get("budget", {}).get("total_estimated_tokens", 0) or 0),
+            "input_tokens": int(info.get("serialized_input_tokens", 0) or 0),
             "pressure_level": int(info.get("pressure", {}).get("level", 0) or 0),
             "compact_status": str(compact.get("status", "idle")),
             "compact_trigger": str(compact.get("trigger", "")),

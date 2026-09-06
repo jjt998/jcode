@@ -98,6 +98,12 @@ class PlanModeController:
             "topic": str(topic or ""),
             "plan_path": plan_path,
         }
+        self.runtime.working_memory.runtime_state = {
+            "mode": "plan",
+            "topic": str(topic or ""),
+            "plan_path": plan_path,
+        }
+        self.runtime.session["working_memory"] = self.runtime.working_memory.to_dict()
         self.runtime.set_tool_profile("plan")
         self.runtime.write_scope = [plan_path]
         self.runtime.session_path = self.runtime.session_store.save(self.runtime.session)
@@ -113,6 +119,12 @@ class PlanModeController:
     def exit(self) -> None:
         previous = dict(self.state)
         self.runtime.session["runtime_mode"] = {"mode": "default"}
+        self.runtime.working_memory.runtime_state = {
+            "mode": "default",
+            "previous_mode": previous.get("mode", "default"),
+            "previous_plan_path": previous.get("plan_path", ""),
+        }
+        self.runtime.session["working_memory"] = self.runtime.working_memory.to_dict()
         self.runtime.set_tool_profile("default")
         self.runtime.write_scope = []
         self.runtime.session_path = self.runtime.session_store.save(self.runtime.session)

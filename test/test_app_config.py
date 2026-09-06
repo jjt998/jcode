@@ -24,12 +24,16 @@ def _args(cwd: str) -> Namespace:
     )
 
 
+def _add_capacity(text: str) -> str:
+    return text.replace('model = "deepseek-v4-flash"', 'model = "deepseek-v4-flash"\ncontext_window_tokens = 1048576\nmax_output_tokens = 393216').replace('model = "MiniMax-M3"', 'model = "MiniMax-M3"\ncontext_window_tokens = 1000000\nmax_output_tokens = 524288').replace('model = "deepseek-v4-pro"', 'model = "deepseek-v4-pro"\ncontext_window_tokens = 1048576\nmax_output_tokens = 393216')
+
+
 def test_default_config_is_global_and_cwd_remains_project(tmp_path, monkeypatch):
     global_root = tmp_path / "jcode"
     global_root.mkdir()
     global_config = global_root / ".jcode.toml"
     global_config.write_text(
-        """
+        _add_capacity("""
 default_model = "global-model"
 
 [providers.deepseek]
@@ -45,7 +49,7 @@ reasoning_mode = "native"
 thinking_enabled = true
 reasoning_effort = "high"
 reasoning_effort_options = ["low", "high", "max"]
-""".strip(),
+    """.strip()),
         encoding="utf-8",
     )
     project_root = tmp_path / "demo1"
@@ -63,7 +67,7 @@ reasoning_effort_options = ["low", "high", "max"]
 def test_minimax_config_accepts_minimal_reasoning_effort(tmp_path, monkeypatch):
     config_path = tmp_path / ".jcode.toml"
     config_path.write_text(
-        """
+        _add_capacity("""
 default_model = "minimax-m3"
 [providers.minimax]
 name = "minimax"
@@ -76,7 +80,7 @@ reasoning_mode = "optional"
 thinking_enabled = false
 reasoning_effort = "minimal"
 reasoning_effort_options = ["minimal", "low", "medium", "high"]
-""".strip(),
+    """.strip()),
         encoding="utf-8",
     )
     monkeypatch.setattr(app_config, "global_config_path", lambda: config_path)
@@ -90,7 +94,7 @@ reasoning_effort_options = ["minimal", "low", "medium", "high"]
 def test_multiple_providers_are_resolved_per_model_profile(tmp_path, monkeypatch):
     config_path = tmp_path / ".jcode.toml"
     config_path.write_text(
-        """
+        _add_capacity("""
 default_model = "minimax-m3"
 [providers.deepseek]
 name = "deepseek"
@@ -116,7 +120,7 @@ reasoning_mode = "optional"
 thinking_enabled = false
 reasoning_effort = "minimal"
 reasoning_effort_options = ["minimal", "low", "medium", "high"]
-""".strip(),
+    """.strip()),
         encoding="utf-8",
     )
     monkeypatch.setattr(app_config, "global_config_path", lambda: config_path)

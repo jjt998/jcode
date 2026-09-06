@@ -66,6 +66,7 @@ const STREAM_EVENTS = [
   "run_abort_requested",
   "run_aborted",
   "run_failed",
+  "runtime_stopped",
   "stream_closed",
 ];
 
@@ -714,6 +715,9 @@ function handleRunEvent(name, event, stream = {}) {
   } else if (name === "run_failed") {
     turn.status = "failed";
     setRunStatus("failed");
+  } else if (name === "runtime_stopped") {
+    turn.status = "stopped";
+    setRunStatus("stopped");
   } else if (name === "web_run_completed" || name === "run_finished") {
     turn.status = name === "run_finished" && payload.status !== "completed" ? "stopped" : "completed";
     setRunStatus(turn.status);

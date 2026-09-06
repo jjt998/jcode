@@ -29,16 +29,19 @@ $env:DEEPSEEK_API_KEY="sk-..."
 `.jcode.toml` 示例：
 
 ```toml
-default_model = "deepseek-reasoner"
+default_model = "minimax-m3"
 
-[provider]
+[providers.deepseek]
 name = "deepseek"
 api_protocol = "openai_responses"
 base_url = "https://api.deepseek.com"
 api_key_env = "DEEPSEEK_API_KEY"
 
-[models.deepseek-reasoner]
+[models.deepseek-pro]
+provider = "deepseek"
 model = "deepseek-v4-pro"
+context_window_tokens = 1048576
+max_output_tokens = 393216
 reasoning_mode = "native"
 thinking_enabled = true
 reasoning_effort = "high"
@@ -50,10 +53,10 @@ sandbox = "best_effort"
 
 [runtime]
 max_steps = 50
-max_new_tokens = 8192
+max_new_tokens = 32768
 ```
 
-Provider 和 API 协议由 `[provider]` 固定，当前仅支持 `deepseek + openai_responses`。Web 与 session 只允许在 run 之间切换该 Provider 下已配置的模型档案和 reasoning effort，不能切换 Provider。
+模型档案必须声明 `context_window_tokens` 和 `max_output_tokens`。JCode 的有效上下文窗口为 `min(150000, profile.context_window_tokens)`；`max_new_tokens` 超出模型输出上限或最终容量公式时直接报错，不会静默截断。当前配置同时支持 DeepSeek 和 MiniMax 的 `openai_responses` 协议。
 
 如果没有设置 `DEEPSEEK_API_KEY`，JCode 仍会构建上下文并写入运行证据，但不会发送真实模型请求。DeepSeek 原生思考和工具调用以 API 结构保存，不进入文本协议解析。
 
@@ -183,11 +186,9 @@ jcode.app.cli
 JCode 始终构建结构化 `ContextResult`，即使用户只输入一个很短的问题：
 
 ```text
-prefix
-skill
-history
-working_memory
-current_request
+prefix / instructions
+skill + history + working_memory / input
+tools / tools
 ```
 
 其中：
@@ -196,11 +197,11 @@ current_request
 - `skill` 放技能相关提示。
 - `history` 放当前 session 的结构化历史事件，包括用户、助手、原生工具调用和工具结果。
 - `working_memory` 放 `Working_Memory` 渲染结果，包括当前任务目标、最近文件、文件 freshness、恢复上下文、检索到的长期记忆、子 Agent 结果和工具观察。
-- `current_request` 放本轮用户请求。
+- 当前用户请求同时写入当前 turn History 和 `working_memory.core.task_goal`，不再单独发送 `current_request` section。
 
-DeepSeek Responses 请求按以下顺序编译：`prefix -> instructions`；`skill -> history 前的内部 user message`；`history -> 原生 input items`；`working_memory -> history 后的内部 user message`；`current_request -> 最后一个真实 user message`。工具 schema 独立以 API 原生 `tools` 字段发送，不混入 prefix。
+Responses 请求由统一 `ProviderInputSnapshot` 编译：`prefix -> instructions`，结构化 skill/history/working memory -> `input`，工具 schema -> `tools`。Provider、preview 和 audit 使用同一快照，并统一记录 `serialized_input_tokens`。
 
-变化较快的事实不会塞进稳定前缀，而是进入 `working_memory` 或 `history`。上下文压力达到阈值时，JCode 会压缩窗口外工具结果；等级 4 会把旧 completed turn 压缩为 `compact_summary`，不会对最终 history 文本整体截断。
+变化较快的事实不会塞进稳定前缀，而是进入 `working_memory` 或 `history`。压力达到 95% 时触发 Level 4：先写入并验签 History artifact，再生成摘要、校验最终容量，最后原子提交 candidate。
 
 ## 工具安全链
 
@@ -242,7 +243,7 @@ JCode 对外统一使用三层记忆认知：
 
 Dream 子 Agent 可以通过内部入口 `agent.run_dream()` 手动触发。Dream 使用受限工具 Profile，只能在 `.jcode/memory/` 内整理 Daily Log、topic 和 `MEMORY.md`，不会修改普通源码文件。
 
-Checkpoint 保存在每次运行的 `checkpoint.json` 中，记录 session、run、step、last action、changed files、working memory、workspace fingerprint 和 worker refs，用于后续恢复判断。
+Session 使用 schema v5，Working Memory 使用 `jcode.layered_memory.v2`，Checkpoint 使用 schema v2。旧协议不做迁移兼容。Checkpoint 保存在每次运行的 `checkpoint.json` 中，记录 session、run、step、last action、changed files、working memory、workspace fingerprint 和 worker refs，用于后续恢复判断。
 
 ## 子 Agent
 
@@ -272,5 +273,13 @@ JCode 的每次运行都可以审计：
 - `checkpoint.json`：恢复所需的运行状态和工作区指纹。
 - `report.json`：运行汇总、事件计数、worker refs、memory audit 和最终回答长度。
 - `<session_id>.events.jsonl`：跨 run 的 session 事件流。
+
+## 上下文治理 9.5
+
+完整链路说明见：
+
+- [上下文治理完整链路](docs/上下文治理完整链路.md)
+- [工具治理完整链路](docs/工具治理完整链路.md)
+- [上下文治理改进策略 9.5](docs/上下文治理改进策略9.5/总策略.md)
 
 

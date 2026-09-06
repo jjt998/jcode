@@ -74,7 +74,7 @@ def build_default_registry() -> ToolRegistry:
     registry.register(Tool("ask_user", AskUserArgs, tool_ask_user, read_only=False, description="Ask the interactive user a blocking clarification question."))
     registry.register(Tool("enter_plan_mode", EnterPlanModeArgs, tool_enter_plan_mode, read_only=False, description="Enter plan mode for a named planning topic."))
     registry.register(Tool("exit_plan_mode", ExitPlanModeArgs, tool_exit_plan_mode, read_only=False, description="Exit plan mode and return to default runtime mode."))
-    registry.register(Tool("spawn_subagent", SpawnSubagentArgs, tool_spawn_subagent, read_only=False, description="Spawn a subagent worker for a scoped task."))
-    registry.register(Tool("send_subagent_message", SendSubagentMessageArgs, tool_send_subagent_message, read_only=False, description="Send a message to an existing subagent worker."))
-    registry.register(Tool("wait_subagent", WaitSubagentArgs, tool_wait_subagent, read_only=False, description="Wait for a subagent worker to finish and collect its result."))
+    registry.register(Tool("spawn_subagent", SpawnSubagentArgs, tool_spawn_subagent, read_only=False, description="Spawn a subagent worker for a scoped task."))  # 子 Agent 生命周期治理后置
+    registry.register(Tool("send_subagent_message", SendSubagentMessageArgs, tool_send_subagent_message, read_only=False, description="Send a message to an existing subagent worker."))  # 子 Agent 消息治理后置
+    registry.register(Tool("wait_subagent", WaitSubagentArgs, tool_wait_subagent, read_only=False, description="Wait for a subagent worker to finish and collect its result."))  # 子 Agent 等待治理后置
     return registry

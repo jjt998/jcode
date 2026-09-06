@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import pytest
 
 from src.providers.continuation import ProviderContinuation
+from src.runtime.errors import UnsupportedProviderContinuationItemError
 from src.runtime.agent import JCodeAgent
 from src.providers.base import ModelResponse, ProviderRequestError
 from src.state.checkpoint import CheckpointManager
@@ -23,6 +25,11 @@ def test_provider_continuation_keeps_native_call_chain():
 
     assert [item["type"] for item in continuation.items] == ["reasoning", "function_call", "function_call_output"]
     assert continuation.items[-1]["call_id"] == "call-1"
+
+
+def test_unknown_provider_output_item_stops_run():
+    with pytest.raises(UnsupportedProviderContinuationItemError):
+        ProviderContinuation().add_response_items([{"type": "unsupported_native_item"}])
 
 
 def test_checkpoint_persists_provider_continuation(tmp_path):

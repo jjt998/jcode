@@ -5,8 +5,8 @@ import socket
 import urllib.error
 import urllib.request
 
-from src.context.budget import estimate_tokens
-from src.context.result import ContextResult, HistoryEvent
+from src.context.result import ContextResult
+from src.providers.request import compile_provider_input_snapshot
 from src.providers.base import ModelResponse, ModelToolCall, ProviderRequestError
 from src.providers.profiles import ModelProfile
 
@@ -25,7 +25,7 @@ class DeepSeekClient:
             return ModelResponse(
                 text="JCode is configured without an API key. The context was built but no provider request was sent.",
                 finish_reason="missing_api_key",
-                input_tokens=self._estimate_context_tokens(context),
+                input_tokens=int(context.provider_input.serialized_input_tokens if context.provider_input else 0),
             )
         payload = self._compile_request(context, model=model, max_tokens=max_tokens, temperature=temperature, model_profile=model_profile)
         request = urllib.request.Request(
@@ -48,6 +48,19 @@ class DeepSeekClient:
             raise ProviderRequestError(f"deepseek transport error: {str(exc)[:500]}", transport_error=True) from exc
         return self._parse_response(data)
 
+    def complete_summary(self, summary_provider_input: dict, *, profile_id: str, max_output_tokens: int, timeout_seconds: int = 120) -> str:
+        """调用最小摘要请求，不携带普通工具和 Working Memory。"""
+        if not self.api_key:
+            raise ProviderRequestError("missing API key")
+        payload = {"model": self.model, "instructions": summary_provider_input.get("instructions", ""), "input": summary_provider_input.get("input", []), "tools": [], "max_output_tokens": int(max_output_tokens)}
+        request = urllib.request.Request(self.base_url + "/responses", data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            raise ProviderRequestError(f"summary request failed: {exc}", transport_error=True) from exc
+        return str(data.get("output_text") or "")
+
     def request_preview(self, context: ContextResult, *, model: str, max_tokens: int, temperature: float, model_profile: dict | None = None) -> dict:
         """返回不含认证信息的实际请求编译结果，供 Context 审计展示。"""
         return self._compile_request(
@@ -60,14 +73,12 @@ class DeepSeekClient:
 
     def _compile_request(self, context: ContextResult, *, model: str, max_tokens: int, temperature: float, model_profile: dict | None) -> dict:
         options = dict(model_profile or self.profile.snapshot())
+        provider_input = context.provider_input or compile_provider_input_snapshot(context)
         payload: dict[str, object] = {
             "model": model,
-            "instructions": context.prefix,
-            "input": self._compile_input(context),
-            "tools": [
-                {"type": "function", "name": tool.name, "description": tool.description, "parameters": tool.parameters}
-                for tool in context.tools
-            ],
+            "instructions": provider_input.instructions,
+            "input": provider_input.input,
+            "tools": provider_input.tools,
             "max_output_tokens": max_tokens,
         }
         if bool(options.get("thinking_enabled", False)):
@@ -79,19 +90,7 @@ class DeepSeekClient:
 
     def _compile_input(self, context: ContextResult) -> list[dict]:
         """按缓存友好顺序编译内部上下文、历史事件与当前请求。"""
-        items: list[dict] = []
-        if context.skill.strip():
-            items.append({"role": "user", "content": context.skill})
-        for event in context.history:
-            items.extend(self._compile_history_event(event, continuation_run_id=str(context.provider_continuation.get("run_id") or "")))
-        continuation_items = context.provider_continuation.get("items", [])
-        if isinstance(continuation_items, list):
-            items.extend(dict(item) for item in continuation_items if isinstance(item, dict))
-        memory_text = context.working_memory.render().strip()
-        if memory_text:
-            items.append({"role": "user", "content": memory_text})
-        items.append({"role": "user", "content": context.current_request})
-        return items
+        return (context.provider_input or compile_provider_input_snapshot(context)).input
 
     def _compile_history_event(self, event: HistoryEvent, *, continuation_run_id: str = "") -> list[dict]:
         if event.kind == "compact_summary":
@@ -161,8 +160,3 @@ class DeepSeekClient:
         if not isinstance(content, list):
             return []
         return [str(item.get("text") or "") for item in content if isinstance(item, dict) and str(item.get("text") or "")]
-
-    @staticmethod
-    def _estimate_context_tokens(context: ContextResult) -> int:
-        text = context.prefix + context.skill + context.current_request + context.working_memory.render()
-        return estimate_tokens(text + "\n".join(event.content for event in context.history))

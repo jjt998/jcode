@@ -23,46 +23,55 @@ class WorkingMemory:
     compact_summary: str = ""
     runtime_context: str = ""  # 当前运行模式与工作区上下文
     todo_items: list[dict] = field(default_factory=list)  # 当前会话 todo 的只读投影
+    cold_files: dict[str, dict] = field(default_factory=dict)  # Level 4 归档的冷文件索引
+    runtime_state: dict = field(default_factory=dict)  # 运行时状态快照
 
     @classmethod
     def from_dict(cls, data: dict, workspace_root: Path) -> "WorkingMemory":
-        task = data.get("task", {}) if isinstance(data.get("task"), dict) else {}
+        if not isinstance(data, dict):
+            data = {}
+        if data and data.get("schema") not in {None, "jcode.layered_memory.v2"}:
+            raise ValueError("working memory schema mismatch")
+        task = data.get("core", {}) if isinstance(data.get("core"), dict) else {}
         files = data.get("files", {}) if isinstance(data.get("files"), dict) else {}
         retrieval = data.get("retrieval", {}) if isinstance(data.get("retrieval"), dict) else {}
         tools = data.get("tools", {}) if isinstance(data.get("tools"), dict) else {}
         safety = data.get("safety", {}) if isinstance(data.get("safety"), dict) else {}
         compact = data.get("compact", {}) if isinstance(data.get("compact"), dict) else {}
-        read_file_counts = _read_file_counts_from_dict(files.get("read_file_counts", data.get("read_file_counts", {})))
-        file_reads = _file_reads_from_dict(files.get("reads", data.get("file_reads", {})))
+        read_file_counts = _read_file_counts_from_dict(files.get("read_file_counts", {}))
+        file_reads = _file_reads_from_dict(files.get("reads", {}))
         return cls(
             workspace_root=workspace_root,
-            task_goal=str(task.get("goal", data.get("task_goal", ""))),
-            constraints=list(task.get("constraints", data.get("constraints", []))),
-            recent_files=list(files.get("recent", data.get("recent_files", []))),
-            file_freshness=dict(files.get("freshness", data.get("file_freshness", {}))),
+            task_goal=str(task.get("task_goal", "")),
+            constraints=list(task.get("constraints", [])),
+            recent_files=list(files.get("hot", [])),
+            file_freshness=dict(files.get("freshness", {})),
             read_file_counts=read_file_counts,
             file_reads=file_reads,
-            tool_observations=[item for item in tools.get("observations", data.get("tool_observations", [])) if isinstance(item, dict)],
-            resume_context=dict(task.get("resume_context", data.get("resume_context", {}))),
-            retrieved_memory=list(retrieval.get("items", data.get("retrieved_memory", []))),
-            last_retrieval_query=str(retrieval.get("last_query", data.get("last_retrieval_query", ""))),
-            subagent_results=list(tools.get("subagent_results", data.get("subagent_results", []))),
-            safety_notes=list(safety.get("notes", data.get("safety_notes", []))),
-            compact_summary=str(compact.get("summary", data.get("compact_summary", ""))),
+            tool_observations=[item for item in tools.get("observations", []) if isinstance(item, dict)],
+            resume_context=dict(task.get("resume_context", {})),
+            retrieved_memory=list(retrieval.get("items", [])),
+            last_retrieval_query=str(retrieval.get("last_query", "")),
+            subagent_results=list(tools.get("subagent_results", [])),
+            safety_notes=list(safety.get("notes", [])),
+            compact_summary=str(compact.get("summary", "")),
             runtime_context=str(data.get("runtime_context", "")),
-            todo_items=[item for item in (data.get("todo", {}).get("items", data.get("todo_items", [])) if isinstance(data.get("todo", {}), dict) else data.get("todo_items", [])) if isinstance(item, dict)],
+            todo_items=[item for item in (data.get("todo", {}).get("items", []) if isinstance(data.get("todo", {}), dict) else []) if isinstance(item, dict)],
+            cold_files={str(k): dict(v) for k, v in dict(files.get("cold", {})).items() if isinstance(v, dict)},
+            runtime_state=dict(data.get("runtime_state", {})),
         )
 
     def to_dict(self) -> dict:
         return {
-            "schema": "jcode.layered_memory.v1",
-            "task": {
-                "goal": self.task_goal,
+            "schema": "jcode.layered_memory.v2",
+            "core": {
+                "task_goal": self.task_goal,
                 "constraints": self.constraints,
                 "resume_context": self.resume_context,
             },
             "files": {
-                "recent": self.recent_files[-20:],
+                "hot": self.recent_files[-20:],
+                "cold": self.cold_files,
                 "freshness": self.file_freshness,
                 "read_file_counts": self.read_file_counts,
                 "reads": self.file_reads,
@@ -86,6 +95,7 @@ class WorkingMemory:
             "todo": {
                 "items": [dict(item) for item in self.todo_items],
             },
+            "runtime_state": dict(self.runtime_state),
         }
 
     def sync_todos(self, ledger: dict | None) -> None:
@@ -140,6 +150,8 @@ class WorkingMemory:
 
     def observe_tool(self, tool_name: str, status: str, summary: str, artifact_ref: str = "") -> None:
         """仅保存工具状态、关键摘要和 artifact 引用，避免复制正文。"""
+        if tool_name in {"enter_plan_mode", "exit_plan_mode"}:
+            return
         self.tool_observations.append({"tool": tool_name, "status": status, "summary": _head_tail_summary(str(summary)), "artifact": artifact_ref})
 
     def set_retrieval(self, query: str, items: list[str]) -> None:

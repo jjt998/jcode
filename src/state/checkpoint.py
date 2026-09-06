@@ -6,7 +6,7 @@ from pathlib import Path
 from src.state.workspace import Workspace, now_iso
 from src.tools.workspace import freshness
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class CheckpointManager:
@@ -34,8 +34,6 @@ class CheckpointManager:
             "provider_continuation": dict(task_state.provider_continuation),
             "output_continuation_count": task_state.output_continuation_count,
             "partial_response_parts": list(task_state.partial_response_parts),
-            "recent_files": list(working_memory.recent_files),
-            "file_freshness": dict(working_memory.file_freshness),
             "working_memory": working_memory.to_dict(),
             "todo_ledger": dict(session.get("todo_ledger", {})),
             "workspace_fingerprint": self.workspace.fingerprint(),
@@ -83,8 +81,10 @@ def evaluate_checkpoint_data(data: dict, workspace: Workspace) -> tuple[str, dic
 def _stale_paths(data: dict, workspace: Workspace) -> list[str]:
     """从checkpoint的最近读过但 freshness 已变化的文件。"""
     stale = []
-    saved_freshness = dict(data.get("file_freshness", {}) or {})
-    for relpath in data.get("recent_files", []) or []:
+    memory = dict(data.get("working_memory", {}) or {})
+    files = dict(memory.get("files", {}) or {})
+    saved_freshness = dict(files.get("freshness", {}) or {})
+    for relpath in files.get("hot", []) or []:
         relpath = str(relpath).strip()
         if not relpath:
             continue

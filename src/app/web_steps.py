@@ -118,6 +118,14 @@ class StepTimelineBuilder:
             patches.append(self._snapshot_step(step))
             return patches
 
+        if name == "runtime_stopped":
+            step["status"] = "error"
+            step["error_text"] = str(event.get("stop_reason") or "runtime_stopped")
+            self._push_detail(step, name, "系统停止", _event_content(name, event), event)
+            patches.append(self._snapshot_step(step))
+            self._finalize_current_step(success_if_open=False, end_at=created_at or self._last_event_at)
+            return patches
+
         if name == "run_failed":
             step["status"] = "error"
             step["error_text"] = _step_error_text(event)
@@ -275,6 +283,7 @@ def _event_title(name: str, event: dict) -> str:
         "web_run_completed": "最终答案",
         "run_failed": "失败",
         "run_aborted": "已停止",
+        "runtime_stopped": "系统停止",
     }
     return labels.get(name, name)
 

@@ -10,7 +10,7 @@ from types import MethodType
 from typing import Any
 
 from src.app.bootstrap import build_agent
-from src.app.config import AppConfig
+from src.app.config import AppConfig, compile_static_capacity_input
 from src.app.web_projects import WebProject, WebProjectStore
 from src.app.web_steps import StepTimelineBuilder
 from src.app.web_turns import build_session_turns
@@ -18,6 +18,10 @@ from src.evidence.session_log import SessionEventBus
 from src.state.session import SessionStore
 from src.state.model_selection import resolve_model_snapshot, validate_model_options
 from src.state.workspace import Workspace, now_iso
+from src.context.budget import validate_static_model_capacity
+from src.context.budget import TokenizerAdapter
+from src.context.prefix import render_prefix
+from src.tools.registry import build_default_registry
 
 
 ACTIVE_STATUSES = {"running", "waiting_approval", "aborting"}
@@ -179,6 +183,17 @@ class WebRunManager:
             raise KeyError(session_id)
         previous = str(session.get("active_model_profile") or "")
         profile = self.config.model_profiles[profile_id]
+        registry = build_default_registry()
+        mode = session.get("runtime_mode", {}) if isinstance(session.get("runtime_mode", {}), dict) else {}
+        profile_name = "plan" if mode.get("mode") == "plan" else "default"
+        from src.policy.tool_profiles import build_tool_profiles
+        tool_profiles = build_tool_profiles(registry)
+        static_tools = [
+            {"type": "function", "name": item.name, "description": item.description, "parameters": item.parameters}
+            for item in registry.definitions(tool_profiles[profile_name].allowed_tools)
+        ]
+        static_tokens = compile_static_capacity_input(render_prefix(Workspace.build(project.root), registry), static_tools, TokenizerAdapter())["total"]
+        validate_static_model_capacity(profile, self.config.max_new_tokens, static_tokens)
         current = dict(session.get("model_options", {}).get(profile_id, {}) or {})
         enabled = profile.thinking_enabled if thinking_enabled is None else bool(thinking_enabled)
         if thinking_enabled is None and "thinking_enabled" in current:

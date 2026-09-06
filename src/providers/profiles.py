@@ -17,6 +17,8 @@ class ModelProfile:
     model: str
     api_key: str
     base_url: str
+    context_window_tokens: int  # 模型上下文窗口上限
+    max_output_tokens: int  # 模型单次最大输出上限
     reasoning_mode: ReasoningMode = "none"
     thinking_enabled: bool = False
     reasoning_effort: str = ""
@@ -36,4 +38,6 @@ class ModelProfile:
             "reasoning_effort": self.reasoning_effort,
             "reasoning_effort_options": list(self.reasoning_effort_options),
             "reasoning_always_on": self.reasoning_always_on,
+            "context_window_tokens": self.context_window_tokens,
+            "max_output_tokens": self.max_output_tokens,
         }

@@ -1,1184 +1,313 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-import hashlib
+import copy
 import json
-import re
-from collections import OrderedDict
+from types import SimpleNamespace
 
-from src.context.budget import estimate_tokens, tail_clip
-from src.context.prefix import render_prefix
-from src.context.skills import render_skill_section
-from src.runtime.plan import render_runtime_mode_text
-from src.state.workspace import now_iso
-from src.context.result import ContextResult, HistoryEvent
-
-
-# 将动态请求放在最后，保留前部稳定内容的连续前缀，便于模型前缀缓存。
-SECTION_ORDER = ("prefix", "skill", "history", "working_memory", "current_request")
-CURRENT_REQUEST_SECTION = "current_request"
-MIN_SECTION_BUDGETS = {
-    "prefix": 40000,
-    "skill": 6000,
-    "working_memory": 35000,
-    "history": 60000,
-}
-SECTION_RATIO_HINTS = {
-    "prefix": 0.20,
-    "skill": 0.07,
-    "working_memory": 0.23,
-    "history": 0.50,
-}
-
-PRESSURE_LEVELS = (
-    (0.60, 0.70, 1, "60-70"),
-    (0.70, 0.80, 2, "70-80"),
-    (0.80, 0.90, 3, "80-90"),
-    (0.90, 10.0, 4, "90+"),
+from src.context.budget import (
+    MAX_CONTEXT_TOKENS,
+    SAFETY_MARGIN,
+    TokenizerAdapter,
+    calculate_pressure,
+    ContextBudgetCandidate,
+    effective_window,
+    validate_final_capacity,
+    BudgetOccupancy,
 )
-
-
-def compute_section_budgets(total_budget_chars: int, ratios: dict | None = None) -> dict:
-    ratios = ratios or SECTION_RATIO_HINTS
-    floor_sum = sum(MIN_SECTION_BUDGETS.get(section, 0) for section in ratios)
-    budgets = {}
-    if total_budget_chars < floor_sum:
-        for section, ratio in ratios.items():
-            budgets[section] = int(total_budget_chars * ratio)
-        return budgets
-    for section, ratio in ratios.items():
-        floor = int(MIN_SECTION_BUDGETS.get(section, 0))
-        budgets[section] = max(floor, int(total_budget_chars * ratio))
-    return budgets
-
-
-@dataclass
-class _SectionRender:
-    raw: str
-    rendered: str
-    budget_chars: int | None
-    details: dict | None = None
-
-    @property
-    def raw_chars(self) -> int:
-        return len(self.raw)
-
-    @property
-    def rendered_chars(self) -> int:
-        return len(self.rendered)
+from src.context.prefix import render_prefix
+from src.context.result import ContextBuildOutcome, ContextResult, HistoryEvent
+from src.context.skills import render_skill_section, select_skill_entries
+from src.providers.request import compile_provider_input_snapshot
+from src.runtime.errors import FinalContextExceedsWindowError, MandatoryContextExceedsWindowError, SystemMinimumBudgetOverflowError
+from src.runtime.plan import render_runtime_mode_text
+from src.context.summary import build_deterministic_summary, build_summary_request, call_summary_model
 
 
 class ContextManager:
-    workspace: object
-    durable_memory: object
-    registry: object
-    total_budget: int
+    """按 9.5 规则构建唯一、可审计的 Provider 输入。"""
 
-    def __init__(self, workspace, durable_memory, registry, total_budget: int = 60000):
+    def __init__(self, workspace, durable_memory, registry, model_profile=None, actual_max_new_tokens: int = 16384, tokenizer: TokenizerAdapter | None = None, profile=None, summary_router=None, summary_config=None, **_legacy):
         self.workspace = workspace
         self.durable_memory = durable_memory
         self.registry = registry
-        self.total_budget = int(total_budget)
+        self.model_profile = model_profile or profile or SimpleNamespace(context_window_tokens=MAX_CONTEXT_TOKENS, max_output_tokens=actual_max_new_tokens)
+        self.actual_max_new_tokens = int(actual_max_new_tokens)
+        self.tokenizer = tokenizer or TokenizerAdapter()
+        self.summary_router = summary_router
+        self.summary_config = summary_config or SimpleNamespace(compact_summary_timeout_seconds=120, compact_summary_retry_count=2, compact_summary_initial_retry_delay_seconds=2, compact_summary_retry_multiplier=2, compact_summary_rebuild_on=True)
 
-    def build(
-        self,
-        session: dict,
-        working_memory,
-        user_message: str,
-        *,
-        allowed_tools: frozenset[str] | None = None,
-        provider_continuation: dict | None = None,
-    ) -> ContextResult:
-        user_message = str(user_message)
-        self._sync_compact_summary_from_history(session, working_memory)
-        # 每次构建上下文前从 session 刷新 todo，确保投影不会过期。
-        working_memory.sync_todos(session.get("todo_ledger", {}))
-
-        initial_rendered = self._build_sections_texts(
-            session=session,
-            working_memory=working_memory,
-            user_message=user_message,
-            budgets=self._base_budgets(),
-            recent_turn_window=7,
-            compress_old_tools=True,
-            include_older_turns=True,
-        )
-        initial_section_texts = {section: initial_rendered[section].rendered for section in SECTION_ORDER}
+    def build(self, session: dict, working_memory, user_message: str, *, allowed_tools=None, provider_continuation: dict | None = None, run_store=None, run_dir=None) -> ContextBuildOutcome:
+        """纯构建候选，不修改传入的活动 session 和 Working Memory。"""
+        session_candidate = copy.deepcopy(session)
+        memory_candidate = type(working_memory).from_dict(working_memory.to_dict(), self.workspace.root)
+        original_goal = str(getattr(working_memory, "task_goal", "") or "")
+        internal_instruction = str(user_message) if str(user_message).startswith("[Continuation Required]") else ""
+        memory_candidate.task_goal = original_goal if internal_instruction else str(user_message)
+        memory_candidate.sync_todos(session_candidate.get("todo_ledger", {}))
+        # 直接调用 ContextManager 时也保证当前请求在 History 与 core.task_goal 同时存在。
+        if not str(user_message).startswith("[Continuation Required]"):
+            history_items = session_candidate.setdefault("history", [])
+            sequence = int(session_candidate.get("event_seq", 0) or 0) + 1
+            turn_id = str(session_candidate.get("active_run_id") or "current")
+            history_items.append({"kind": "user", "event_id": f"event-{sequence}", "turn_id": turn_id, "content": str(user_message)})
+            session_candidate["event_seq"] = sequence
+        runtime_text = getattr(self.workspace, "runtime_text", lambda: "")()
+        memory_candidate.runtime_context = "\n".join(part for part in (render_runtime_mode_text(session_candidate), runtime_text) if part)
+        history = [HistoryEvent.from_dict(item) for item in session_candidate.get("history", [])]
+        tools = self.registry.definitions(allowed_tools)
+        prefix = render_prefix(self.workspace, self.registry)
         continuation = dict(provider_continuation or {})
-        initial_memory_snapshot = type(working_memory).from_dict(working_memory.to_dict(), self.workspace.root)
-        initial_memory_snapshot.runtime_context = "\n".join(
-            part for part in (render_runtime_mode_text(session), self.workspace.runtime_text()) if part
-        )
-        # 压力按 Provider 实际消费的结构化历史估算，不使用仅供审计的文本投影。
-        initial_history, _ = self._build_structured_history(session, pressure_level=0, current_request=user_message)
-        initial_section_texts["history"] = self._render_structured_history_for_budget(initial_history)
-        initial_section_texts["working_memory"] = initial_memory_snapshot.render()
-        initial_section_texts[CURRENT_REQUEST_SECTION] = user_message
-        initial_prompt = self._build_prompt(initial_section_texts, continuation)
-        initial_pressure = self._build_pressure(initial_section_texts, self._budget_tokens(), continuation)
-
-        compressed_section_texts, compression_info, compact_audit = self._compress_section_texts_by_pressure(
-            session=session,
-            working_memory=working_memory,
-            user_message=user_message,
-            section_texts=initial_section_texts,
-            pressure=initial_pressure,
-        )
-        # 预算仍以文本近似估算，但 Provider 永远消费结构化事件而非最终拼接文本。
-        memory_snapshot = type(working_memory).from_dict(working_memory.to_dict(), self.workspace.root)
-        memory_snapshot.runtime_context = "\n".join(
-            part for part in (render_runtime_mode_text(session), self.workspace.runtime_text()) if part
-        )
-        if int(initial_pressure.get("level", 0)) >= 3:
-            self._reduce_working_memory_for_pressure(memory_snapshot)
-        structured_history, history_records = self._build_structured_history(
-            session,
-            pressure_level=int(initial_pressure.get("level", 0)),
-            current_request=user_message,
-        )
-        # 此处的结构化事件和记忆快照会直接进入 Provider 请求。
-        final_section_texts = dict(compressed_section_texts)
-        final_section_texts["history"] = self._render_structured_history_for_budget(structured_history)
-        final_section_texts["working_memory"] = memory_snapshot.render()
-        final_section_texts[CURRENT_REQUEST_SECTION] = user_message
-        final_prompt = self._build_prompt(final_section_texts, continuation)
-        final_pressure = self._build_pressure(final_section_texts, self._budget_tokens(), continuation)
-        cache_info = self._build_cache_info(session, final_section_texts["prefix"])
-        ctx_info = self._build_ctx_info(
-            session=session,
-            working_memory=working_memory,
-            user_message=user_message,
-            initial_rendered=initial_rendered,
-            compressed_section_texts=final_section_texts,
-            initial_prompt=initial_prompt,
-            final_prompt=final_prompt,
-            initial_pressure=initial_pressure,
-            final_pressure=final_pressure,
-            compression_info=compression_info,
-            cache_info=cache_info,
-        )
-        session["ctx_info"] = ctx_info
-        ctx_info["context_result"] = {
-            "history_event_count": len(structured_history),
-            "tool_count": len(self.registry.definitions(allowed_tools)),
-            "history_is_text_clipped": False,
+        # 先构造完整输入测量固定占用和可变需求。
+        full = ContextResult(prefix, render_skill_section(), history, memory_candidate, tools, {}, provider_continuation=continuation, internal_continuation_instruction=internal_instruction)
+        full_snapshot = compile_provider_input_snapshot(full, self.tokenizer)
+        turn_ids = [event.turn_id for event in history if event.turn_id]
+        current_turn = turn_ids[-1] if turn_ids else ""
+        fixed_history = [event for event in history if event.turn_id == current_turn] if current_turn else []
+        fixed_memory = type(memory_candidate).from_dict({}, self.workspace.root)
+        fixed_memory.task_goal = memory_candidate.task_goal
+        fixed_context = ContextResult(prefix, "", fixed_history, fixed_memory, tools, {}, provider_continuation=continuation, internal_continuation_instruction=internal_instruction)
+        fixed_snapshot = compile_provider_input_snapshot(fixed_context, self.tokenizer)
+        fixed_tokens = fixed_snapshot.serialized_input_tokens
+        window = effective_window(self.model_profile.context_window_tokens)
+        fixed_demand = fixed_tokens + self.actual_max_new_tokens + SAFETY_MARGIN
+        if fixed_demand > window:
+            raise MandatoryContextExceedsWindowError(audit={"effective_context_window_tokens": window, "fixed_demand": fixed_demand})
+        flexible = max(0, window - fixed_demand)
+        raw_flexible = self.tokenizer.count(render_skill_section()) + self.tokenizer.count(json.dumps([event.to_dict() for event in history], ensure_ascii=False)) + self.tokenizer.count(memory_candidate.render())
+        pressure = calculate_pressure(raw_flexible, flexible)
+        level = int(pressure["level"])
+        minimum_targets = {
+            "skills": min(self.tokenizer.count(render_skill_section()), 512),
+            "history": min(self.tokenizer.count(json.dumps([event.to_dict() for event in history], ensure_ascii=False)), 8192),
+            "working_memory": min(self.tokenizer.count(memory_candidate.render()), 4096),
         }
-        return ContextResult(
-            prefix=render_prefix(self.workspace, self.registry),
-            skill=final_section_texts["skill"],
-            history=structured_history,
-            working_memory=memory_snapshot,
-            current_request=user_message,
-            tools=self.registry.definitions(allowed_tools),
-            ctx_info=ctx_info,
-            compact_audit=compact_audit,
-            provider_continuation=continuation,
-        )
+        minimum_demand = fixed_demand + sum(minimum_targets.values())
+        if minimum_demand > window and fixed_demand <= window and level < 4:
+            raise SystemMinimumBudgetOverflowError(
+                audit={"effective_context_window_tokens": window, "fixed_demand": fixed_demand, "minimum_targets": minimum_targets, "minimum_demand": minimum_demand}
+            )
+        history_artifact_ref = None
+        session_commit_required = False
+        compact_audit = None
+        if level == 4 and run_store is not None and run_dir is not None and history:
+            history_artifact_ref = run_store.write_history_artifact(run_dir, int(session_candidate.get("event_seq", 0)) + 1, [event.to_dict() for event in history])
+            # 写入后立即重新读取并验签，后续摘要只允许使用这份只读证据。
+            verified_history = [HistoryEvent.from_dict(item) for item in run_store.read_verified_artifact(history_artifact_ref)]
+            ids = []
+            for event in verified_history:
+                if event.turn_id not in ids:
+                    ids.append(event.turn_id)
+            keep_ids = set(ids[-3:])
+            evicted = [event.to_dict() for event in verified_history if event.turn_id not in keep_ids and event.kind != "compact_summary"]
+            old_summary = None
+            old_summary_event = None
+            for event in reversed(verified_history):
+                if event.kind == "compact_summary":
+                    old_summary_event = event
+                    try:
+                        old_summary = json.loads(event.content)
+                    except (TypeError, json.JSONDecodeError):
+                        old_summary = None
+                    break
+            # 可选地从历史 artifact 链重建摘要输入，避免依赖已压缩正文。
+            if bool(getattr(self.summary_config, "compact_summary_rebuild_on", True)) and old_summary_event:
+                chain = old_summary_event.metadata.get("artifact_chain", []) if isinstance(old_summary_event.metadata, dict) else []
+                rebuilt: dict[str, dict] = {}
+                for ref in chain:
+                    if not isinstance(ref, dict):
+                        continue
+                    for item in run_store.read_verified_artifact(ref):
+                        event_id = str(item.get("event_id", ""))
+                        if not event_id or item.get("kind") == "compact_summary":
+                            continue
+                        previous = rebuilt.get(event_id)
+                        if previous is not None and previous != item:
+                            from src.runtime.errors import ArtifactIntegrityError
+                            raise ArtifactIntegrityError(f"history event conflict: {event_id}")
+                        rebuilt.setdefault(event_id, item)
+                if rebuilt:
+                    evicted = list(rebuilt.values())
+            summary = None
+            summary_model_audit = None
+            if self.summary_router is not None and evicted:
+                summary_request = build_summary_request("Generate the fixed 9.5 compact summary JSON.", old_summary, evicted)
+                summary, summary_model_audit = call_summary_model(
+                    self.summary_router,
+                    summary_request,
+                    profile_id=str(getattr(self.model_profile, "id", "")),
+                    profile=self.model_profile,
+                    actual_max_new_tokens=self.actual_max_new_tokens,
+                    tokenizer=self.tokenizer,
+                    timeout_seconds=int(self.summary_config.compact_summary_timeout_seconds),
+                    retry_count=int(self.summary_config.compact_summary_retry_count),
+                    initial_retry_delay_seconds=int(self.summary_config.compact_summary_initial_retry_delay_seconds),
+                    retry_multiplier=int(self.summary_config.compact_summary_retry_multiplier),
+                )
+            if summary is None:
+                summary = build_deterministic_summary(old_summary, evicted, task_goal=memory_candidate.task_goal)
+            artifact_chain = []
+            if old_summary_event and isinstance(old_summary_event.metadata, dict):
+                artifact_chain = [dict(ref) for ref in old_summary_event.metadata.get("artifact_chain", []) if isinstance(ref, dict)]
+            if not any(ref.get("path") == history_artifact_ref["path"] for ref in artifact_chain):
+                artifact_chain.append(history_artifact_ref)
+            summary.artifact_paths = [str(ref.get("path")) for ref in artifact_chain if ref.get("path")]
+            summary_event = HistoryEvent("compact_summary", f"compact-{session_candidate.get('event_seq', 0) + 1}", ids[-3] if ids else "", summary.model_dump_json(exclude_none=True), metadata={"summary_version": summary.summary_version, "history_artifact": history_artifact_ref, "artifact_chain": artifact_chain})
+            history = [summary_event] + [event for event in verified_history if event.turn_id in keep_ids]
+            session_candidate["history"] = [event.to_dict() for event in history]
+            session_candidate["event_seq"] = int(session_candidate.get("event_seq", 0)) + 1
+            session_commit_required = True
+            compact_audit = {"mode": "model" if summary_model_audit and summary_model_audit.get("status") == "success" else "deterministic", "source": "summary_model" if summary_model_audit and summary_model_audit.get("status") == "success" else "structured_metadata", "status": "applied", "fallback_reason": (summary_model_audit or {}).get("fallback_reason", ""), "summary_text": summary.model_dump_json(exclude_none=True), "artifact_ref": history_artifact_ref, "summary_model": summary_model_audit or {}}
+        history = self._build_structured_history(session_candidate, pressure_level=level)[0]
+        skill = render_skill_section(select_skill_entries(level))
+        if level >= 3:
+            self._reduce_memory(memory_candidate)
+        candidate_decisions: list[dict] = []
+        history = self._fit_optional_history(history, prefix, skill, memory_candidate, tools, continuation, window, candidate_decisions)
+        result = ContextResult(prefix, skill, history, memory_candidate, tools, {}, provider_continuation=continuation, internal_continuation_instruction=internal_instruction)
+        snapshot = compile_provider_input_snapshot(result, self.tokenizer)
+        result.provider_input = snapshot
+        capacity = validate_final_capacity(self.model_profile, self.actual_max_new_tokens, snapshot.serialized_input_tokens)
+        if not capacity.can_send:
+            raise FinalContextExceedsWindowError(audit={"effective_context_window_tokens": capacity.effective_context_window_tokens, "serialized_input_tokens": capacity.serialized_input_tokens, "actual_max_new_tokens": capacity.actual_max_new_tokens})
+        section_demands = {
+            "skills": self.tokenizer.count(skill),
+            "history": self.tokenizer.count(json.dumps([event.to_dict() for event in history], ensure_ascii=False)),
+            "working_memory": self.tokenizer.count(memory_candidate.render()),
+        }
+        pressure_level, pressure_range, _ = self._pressure_level(pressure.get("ratio", 0))
+        compact_status = "applied" if compact_audit else "idle"
+        result.ctx_info = {
+            "model_profile": getattr(self.model_profile, "snapshot", lambda: {})(),
+            "effective_context_window_tokens": capacity.effective_context_window_tokens,
+            "actual_max_new_tokens": capacity.actual_max_new_tokens,
+            "safety_margin_tokens": SAFETY_MARGIN,
+            "serialized_input_tokens": snapshot.serialized_input_tokens,
+            "fixed_occupancies": [{"name": item.name, "tokens": item.tokens, "source": item.source} for item in snapshot.occupancies] + [{"name": "output_reservation", "tokens": self.actual_max_new_tokens, "source": "output_reservation"}, {"name": "safety_margin", "tokens": SAFETY_MARGIN, "source": "safety_margin"}],
+            "raw_section_demands": section_demands,
+            "actual_section_minimums": {name: min(value, minimum) for name, value, minimum in (("history", section_demands["history"], 8192), ("working_memory", section_demands["working_memory"], 4096), ("skills", section_demands["skills"], 512))},
+            "level_required_tokens": dict(section_demands),
+            "selected_section_tokens": dict(section_demands),
+            "raw_pressure": dict(pressure),
+            "final_pressure": calculate_pressure(0, max(1, capacity.remaining_tokens)),
+            "candidate_decisions": candidate_decisions,
+            "compression_records": [],
+            "pressure": {**pressure, "level": pressure_level, "range": pressure_range, "final_ratio": calculate_pressure(0, max(1, capacity.remaining_tokens)).get("ratio", 0)},
+            "final_capacity_status": {"can_send": capacity.can_send, "remaining_tokens": capacity.remaining_tokens},
+            "tokenizer_source": snapshot.tokenizer_source,
+            "compact": {"status": compact_status, "should_compact": level == 4, "trigger": "semantic_summary" if level == 4 else ""},
+        }
+        result.compact_audit = compact_audit
+        return ContextBuildOutcome(result, session_candidate, memory_candidate, session_commit_required, history_artifact_ref)
 
     @staticmethod
-    def _render_structured_history_for_budget(history: list[HistoryEvent]) -> str:
-        """按 Responses 输入形态序列化历史，供预算估算使用。"""
-        items: list[dict] = []
+    def _select_history(history: list[HistoryEvent], level: int) -> list[HistoryEvent]:
+        if level == 0:
+            return history
+        windows = {1: 5, 2: 4, 3: 3, 4: 3}
+        ids = []
         for event in history:
-            if event.kind == "compact_summary":
-                items.append({"role": "user", "content": "[JCode Compact Summary]\n" + event.content})
-            elif event.kind == "user":
-                items.append({"role": "user", "content": event.content})
-            elif event.kind == "assistant":
-                items.append({"role": "assistant", "content": event.content})
-            elif event.kind == "tool_call":
-                items.append({"type": "function_call", "call_id": event.call_id, "name": event.tool_name, "arguments": json.dumps(event.arguments or {}, ensure_ascii=False)})
-            elif event.kind == "tool_result":
-                items.append({"type": "function_call_output", "call_id": event.call_id, "output": event.content})
-        return json.dumps(items, ensure_ascii=False, separators=(",", ":"))
+            if event.turn_id not in ids:
+                ids.append(event.turn_id)
+        keep = set(ids[-windows.get(level, 3):])
+        selected = [event for event in history if event.turn_id in keep or event.kind == "compact_summary"]
+        current_turn = ids[-1] if ids else ""
+        selected = ContextManager._remove_orphan_tool_events(selected, {current_turn})
+        return selected
 
     @staticmethod
-    def _reduce_working_memory_for_pressure(working_memory) -> None:
-        """三级压力仅保留当前执行需要的短期状态。"""
-        active_files = working_memory.recent_files[-7:]
-        working_memory.recent_files = active_files
-        working_memory.file_freshness = {
-            path: freshness
-            for path, freshness in working_memory.file_freshness.items()
-            if path in active_files
-        }
-        working_memory.retrieved_memory = []
-        working_memory.last_retrieval_query = ""
-        working_memory.subagent_results = []
-        working_memory.compact_summary = ""
-        working_memory.todo_items = [
-            item for item in working_memory.todo_items
-            if str(item.get("status", "pending")) != "completed"
+    def _remove_orphan_tool_events(history: list[HistoryEvent], current_turns: set[str]) -> list[HistoryEvent]:
+        """闭合旧回合只保留成对的 tool call/result，当前回合允许暂存未闭环调用。"""
+        calls = {str(event.call_id) for event in history if event.kind == "tool_call" and event.call_id}
+        results = {str(event.call_id) for event in history if event.kind == "tool_result" and event.call_id}
+        closed = calls & results
+        return [
+            event
+            for event in history
+            if event.kind not in {"tool_call", "tool_result"}
+            or event.turn_id in current_turns
+            or (event.call_id and str(event.call_id) in closed)
         ]
 
-    def _build_structured_history(self, session: dict, *, pressure_level: int, current_request: str) -> tuple[list[HistoryEvent], list[dict]]:
-        """按回合窗口压缩工具正文，但不对最终 history 文本做尾部截断。"""
+    @staticmethod
+    def _history_window_for_level(level: int) -> int:
+        """返回包含当前回合的原始 History 窗口大小。"""
+        return {0: 7, 1: 5, 2: 4, 3: 3, 4: 3}.get(int(level), 3)
+
+    def _build_structured_history(self, session: dict, *, pressure_level: int, requested_message: str = "") -> tuple[list[HistoryEvent], list[dict]]:
         history = [HistoryEvent.from_dict(item) for item in session.get("history", [])]
-        normal = [event for event in history if event.kind != "compact_summary"]
-        turn_ids: list[str] = []
-        for event in normal:
-            if event.turn_id and event.turn_id not in turn_ids:
-                turn_ids.append(event.turn_id)
-        recent_turns = set(turn_ids[-self._history_window_for_level(pressure_level):])
-        records: list[dict] = []
-        seen_read_paths: set[str] = set()
-        result: list[HistoryEvent] = []
-        for event in history:
-            # 当前请求由 ContextResult.current_request 在末尾单独发送，避免重复 user message。
-            if event.kind == "user" and event.turn_id == (turn_ids[-1] if turn_ids else "") and event.content == current_request:
+        selected = self._select_history(history, pressure_level)
+        if pressure_level == 0:
+            return selected, []
+        # 窗口外 list_files 按规范化 path 仅保留最后一组完整调用和结果。
+        recent_ids = {item.event_id for item in selected}
+        latest_by_path: dict[str, tuple[HistoryEvent, HistoryEvent | None]] = {}
+        for index, event in enumerate(history):
+            if event.kind != "tool_call" or event.tool_name != "list_files":
                 continue
-            if event.kind == "compact_summary":
-                result.append(event)
-                continue
-            if event.kind != "tool_result" or event.turn_id in recent_turns or pressure_level == 0:
-                result.append(event)
-                continue
-            compressed, record = self._compress_structured_tool_event(event, seen_read_paths)
-            result.append(compressed)
-            if record:
-                records.append(record)
-        return result, records
+            path = self._normalize_list_files_path(str((event.arguments or {}).get("path", ".")))
+            result = next((candidate for candidate in history[index + 1:] if candidate.kind == "tool_result" and candidate.call_id == event.call_id), None)
+            latest_by_path[path] = (event, result)
+        for call, result in latest_by_path.values():
+            if call.event_id not in recent_ids and result is not None:
+                selected.extend([call, result])
+        order = {event.event_id: index for index, event in enumerate(history)}
+        selected.sort(key=lambda event: order.get(event.event_id, len(order)))
+        return selected, []
 
-    def _compress_structured_tool_event(self, event: HistoryEvent, seen_read_paths: set[str]) -> tuple[HistoryEvent, dict | None]:
-        """只替换窗外工具结果正文，调用参数与 call_id 始终保持完整。"""
-        item = event.to_dict()
-        item.update({"role": "tool", "name": event.tool_name or "", "args": event.arguments or {}, "tool_status": event.metadata.get("tool_status", "success")})
-        if not self._can_compress_tool_history_item(item):
-            return event, None
-        content = event.content
-        replacement = content
-        rule = ""
-        if event.tool_name == "read_file" and self._is_stale_read_file(item):
-            replacement, rule = self._stale_read_file_message(item), "stale_read_file_replaced"
-        elif event.metadata.get("full_output_artifact"):
-            replacement, rule = (
-                f"Large tool output stored at: {event.metadata['full_output_artifact']}",
-                "artifact_path_only",
-            )
-        elif event.tool_name == "read_file":
-            path = str((event.arguments or {}).get("path", ""))
-            if path and path in seen_read_paths:
-                replacement, rule = f"[read_file:{path}] duplicate old read omitted", "read_file_duplicate_omitted"
-            if path:
-                seen_read_paths.add(path)
-        elif event.tool_name == "run_shell":
-            replacement, rule = "\n".join(self._run_shell_preview_lines(content)) or "(empty)", "run_shell_first_three_non_empty_lines"
-        else:
-            replacement, rule = content[:80], "tool_first_80_chars"
-        if not rule or replacement == content:
-            return event, None
-        metadata = dict(event.metadata)
-        metadata["compressed"] = True
-        return HistoryEvent(event.kind, event.event_id, event.turn_id, replacement, event.tool_name, event.call_id, event.arguments, metadata), {
-            "turn_id": event.turn_id,
-            "tool_name": event.tool_name,
-            "call_id": event.call_id,
-            "rule": rule,
-            "before_chars": len(content),
-            "after_chars": len(replacement),
-        }
+    def _normalize_list_files_path(self, value: str) -> str:
+        """将 list_files 的路径归一为工作区相对 POSIX 路径。"""
+        raw = str(value or ".").strip() or "."
+        try:
+            return self.workspace.relpath(self.workspace.resolve_path(raw)).replace("\\", "/") or "."
+        except Exception:
+            return raw.replace("\\", "/") or "."
 
-    def _build_prompt(self, section_texts: dict, provider_continuation: dict | None = None) -> str:
-        prompt = "\n\n".join(str(section_texts.get(section, "")).strip() for section in SECTION_ORDER).strip()
-        items = dict(provider_continuation or {}).get("items", [])
-        if not isinstance(items, list) or not items:
-            return prompt
-        # 原生续接项会进入最终 Provider input，必须参与上下文压力估算。
-        return prompt + "\n\n[Provider Continuation]\n" + json.dumps(items, ensure_ascii=False, separators=(",", ":"))
-
-    def _build_pressure(self, section_texts: dict, budget_tokens: int, provider_continuation: dict | None = None) -> dict:
-        prompt = self._build_prompt(section_texts, provider_continuation)
-        input_tokens = estimate_tokens(prompt)
-        ratio = round(max(0, int(input_tokens)) / max(1, int(budget_tokens)), 4)
-        level, range_text, tier = self._pressure_level(ratio)
-        return {
-            "ratio": ratio,
-            "level": level,
-            "tier": tier,
-            "range": range_text,
-            "source": "estimated",
-            "input_tokens": int(input_tokens),
-            "budget_tokens": int(budget_tokens),
-        }
-
-    def _compress_section_texts_by_pressure(
-        self,
-        *,
-        session: dict,
-        working_memory,
-        user_message: str,
-        section_texts: dict,
-        pressure: dict,
-    ) -> tuple[dict, dict, dict | None]:
-        level = int(pressure.get("level", 0))
-        budgets = self._base_budgets()
-        selected_budgets = dict(budgets)
-        compressed_section_texts = dict(section_texts)
-        history_details: dict = {}
-        compact_audit = None
-        compact_info = {
-            "status": "idle",
-            "mode": "none",
-            "summary_mode": "",
-            "summary_source": "",
-            "retain_turns": 4,
-            "before": {},
-            "after": {},
-            "summary_item": {},
-            "summary_text": "",
-            "trigger": "",
-            "fallback_reason": "",
-        }
-        recent_turn_window = self._history_window_for_level(level)
-        include_older_turns = level < 4
-
-        match level:
-            case 0:
-                pass
-            case 1:
-                history_render = self._build_history_section_texts(
-                    session,
-                    recent_turn_window=3,
-                    budget_chars=self._base_budgets()["history"],
-                    compress_old_tools=True,
-                    include_older_turns=True,
-                )
-                compressed_section_texts["history"] = history_render.rendered
-                history_details = history_render.details or {}
-            case 2:
-                selected_budgets["skill"] = max(MIN_SECTION_BUDGETS["skill"], int(budgets["skill"] * 0.7))
-                compressed_section_texts["skill"] = tail_clip(section_texts.get("skill", ""), selected_budgets["skill"])
-                history_render = self._build_history_section_texts(
-                    session,
-                    recent_turn_window=2,
-                    budget_chars=self._base_budgets()["history"],
-                    compress_old_tools=True,
-                    include_older_turns=True,
-                )
-                compressed_section_texts["history"] = history_render.rendered
-                history_details = history_render.details or {}
-                recent_turn_window = 2
-            case 3:
-                selected_budgets["skill"] = max(MIN_SECTION_BUDGETS["skill"], int(budgets["skill"] * 0.5))
-                compressed_section_texts["skill"] = tail_clip(section_texts.get("skill", ""), selected_budgets["skill"])
-                history_render = self._build_history_section_texts(
-                    session,
-                    recent_turn_window=2,
-                    budget_chars=self._base_budgets()["history"],
-                    compress_old_tools=True,
-                    include_older_turns=True,
-                )
-                compressed_section_texts["history"] = history_render.rendered
-                history_details = history_render.details or {}
-                recent_turn_window = 2
-            case 4:
-                selected_budgets["skill"] = max(MIN_SECTION_BUDGETS["skill"], int(budgets["skill"] * 0.5))
-                selected_budgets["working_memory"] = max(MIN_SECTION_BUDGETS["working_memory"], int(budgets["working_memory"] * 0.7))
-                compact_info, compact_audit = self.compact_history(session, working_memory, retain_turns=4, summary_mode="deterministic")
-                compact_info["trigger"] = "semantic_summary"
-                compact_info["should_compact"] = True
-                compact_info["eligible"] = True
-                compressed_section_texts["skill"] = tail_clip(section_texts.get("skill", ""), selected_budgets["skill"])
-                compressed_section_texts["working_memory"] = tail_clip(section_texts.get("working_memory", ""), selected_budgets["working_memory"])
-                history_render = self._build_history_section_texts(
-                    session,
-                    recent_turn_window=2,
-                    budget_chars=self._base_budgets()["history"],
-                    compress_old_tools=True,
-                    include_older_turns=False,
-                )
-                compressed_section_texts["history"] = history_render.rendered
-                history_details = history_render.details or {}
-                compact_info["history_render"] = {
-                    "raw": history_render.raw,
-                    "rendered": history_render.rendered,
-                    "budget_chars": history_render.budget_chars,
-                    "details": history_render.details or {},
-                }
-                recent_turn_window = 2
-            case _:
-                pass
-
-        if "history_render" not in compact_info:
-            history_render = self._build_history_section_texts(
-                session,
-                recent_turn_window=recent_turn_window,
-                budget_chars=self._base_budgets()["history"],
-                compress_old_tools=True,
-                include_older_turns=include_older_turns,
-            )
-            compact_info["history_render"] = {
-                "raw": history_render.raw,
-                "rendered": history_render.rendered,
-                "budget_chars": history_render.budget_chars,
-                "details": history_render.details or {},
-            }
-
-        compression_records = self._build_compression_records(
-            initial_section_texts=section_texts,
-            compressed_section_texts=compressed_section_texts,
-            initial_budgets=budgets,
-            compressed_budgets=selected_budgets,
-            history_details=history_details,
-        )
-        return compressed_section_texts, {
-            "level": level,
-            "recent_turn_window": recent_turn_window,
-            "selected_budgets": selected_budgets,
-            "initial_budgets": budgets,
-            "compression_records": compression_records,
-            "history_records": history_details.get("compression_records", []),
-            "compact": compact_info,
-        }, compact_audit
-
-    def _build_ctx_info(
-        self,
-        *,
-        session: dict,
-        working_memory,
-        user_message: str,
-        initial_rendered: dict[str, _SectionRender],
-        compressed_section_texts: dict,
-        initial_prompt: str,
-        final_prompt: str,
-        initial_pressure: dict,
-        final_pressure: dict,
-        compression_info: dict,
-        cache_info: dict,
-    ) -> dict:
-        initial_total_chars = len(initial_prompt)
-        final_total_chars = len(final_prompt)
-        initial_total_tokens = estimate_tokens(initial_prompt)
-        final_total_tokens = estimate_tokens(final_prompt)
-        selected_budgets = dict(compression_info.get("selected_budgets", {}))
-        budget_sections = {
-            section: (None if section == CURRENT_REQUEST_SECTION else int(selected_budgets.get(section, 0)))
-            for section in SECTION_ORDER
-        }
-        initial_budget_sections = {
-            section: (None if section == CURRENT_REQUEST_SECTION else int(self._base_budgets().get(section, 0)))
-            for section in SECTION_ORDER
-        }
-        history_render_info = dict(compression_info.get("compact", {}).get("history_render", {}) or {})
-        history_render_raw = str(history_render_info.get("raw", initial_rendered["history"].raw))
-        history_render_rendered = str(history_render_info.get("rendered", compressed_section_texts.get("history", "")))
-        history_render_budget = history_render_info.get("budget_chars", initial_rendered["history"].budget_chars)
-        history_render_details = dict(history_render_info.get("details", {}) or {})
-        ctx_info = {
-            "workspace": self._workspace_info(),
-            "prefix": {
-                "hash": cache_info["prefix_hash"],
-                "cache_key": cache_info["prompt_cache_key"],
-                "sections": {
-                    key: value
-                    for key, value in {
-                        section: {
-                            "raw_chars": initial_rendered[section].raw_chars if section != "history" else len(history_render_raw),
-                            "rendered_chars": initial_rendered[section].rendered_chars if section != "history" else len(history_render_rendered),
-                            "budget_chars": initial_rendered[section].budget_chars if section != "history" else history_render_budget,
-                        }
-                        for section in ("prefix", "skill")
-                    }.items()
-                },
-            },
-            "budget": {
-                "total_budget_chars": self.total_budget,
-                "total_budget_tokens": self._budget_tokens(),
-                "section_ratios": dict(SECTION_RATIO_HINTS),
-                "section_order": list(SECTION_ORDER),
-                "initial_section_budgets": initial_budget_sections,
-                "section_budgets": budget_sections,
-                "sections": {
-                    section: {
-                        "raw_chars": initial_rendered[section].raw_chars if section != "history" else len(history_render_raw),
-                        "rendered_chars": len(compressed_section_texts.get(section, "")) if section != "history" else len(history_render_rendered),
-                        "budget_chars": selected_budgets.get(section, None) if section != CURRENT_REQUEST_SECTION else None,
-                    }
-                    for section in SECTION_ORDER
-                },
-                "total_chars": final_total_chars,
-                "total_estimated_tokens": final_total_tokens,
-                "initial_total_chars": initial_total_chars,
-                "initial_total_estimated_tokens": initial_total_tokens,
-            },
-            "pressure": final_pressure,
-            "pressure_initial": initial_pressure,
-            "history": {
-                "turn_count": len(self._group_turns([item for item in session.get("history", []) if item.get("kind") != "compact_summary"])),
-                "rendered_turn_count": history_render_details.get("rendered_turn_count", 0),
-                "recent_turn_window": history_render_details.get("recent_turn_window", compression_info.get("recent_turn_window", 5)),
-                "turns": history_render_details.get("turns", []),
-                "compact_summary": working_memory.compact_summary,
-                "compression_records": history_render_details.get("compression_records", []),
-            },
-            "compact": compression_info.get("compact", {
-                "status": "idle",
-                "mode": "none",
-                "eligible": False,
-                "should_compact": False,
-                "trigger": "",
-                "summary_source": "",
-                "fallback_reason": "",
-                "retain_turns": 2,
-                "before": {},
-                "after": {},
-                "summary_item": {},
-                "summary_text": "",
-            }),
-            "cache": cache_info,
-            "memory": {
-                "retrieval": {
-                    "enabled": False,
-                    "items": [],
-                    "query": user_message,
-                },
-                "compact_summary": working_memory.compact_summary,
-            },
-            "compression": {
-                "initial": {
-                "prompt_chars": initial_total_chars,
-                "prompt_tokens": initial_total_tokens,
-                "section_texts": {
-                    section: {
-                        "before_preview": self._preview_text(initial_rendered[section].rendered),
-                        "after_preview": self._preview_text(compressed_section_texts.get(section, "")),
-                        "before_chars": initial_rendered[section].rendered_chars,
-                        "after_chars": len(compressed_section_texts.get(section, "")),
-                    }
-                    for section in SECTION_ORDER
-                },
-                },
-                "final": {
-                    "prompt_chars": final_total_chars,
-                    "prompt_tokens": final_total_tokens,
-                },
-                "records": compression_info.get("compression_records", []),
-            },
-        }
-        ctx_info["workspace"]["workspace_hash"] = cache_info["workspace_hash"]
-        ctx_info["compact"]["eligible"] = bool(final_pressure.get("level", 0) == 4 or compression_info.get("compact", {}).get("status") == "applied")
-        ctx_info["compact"]["should_compact"] = bool(compression_info.get("compact", {}).get("should_compact", False))
-        ctx_info["compact"]["trigger"] = str(compression_info.get("compact", {}).get("trigger", "") or "")
-        ctx_info["compact"]["status"] = str(compression_info.get("compact", {}).get("status", "idle"))
-        ctx_info["compact"]["summary_source"] = str(compression_info.get("compact", {}).get("summary_source", ""))
-        ctx_info["compact"]["fallback_reason"] = str(compression_info.get("compact", {}).get("fallback_reason", ""))
-        history_render = ctx_info["compact"].get("history_render")
-        if isinstance(history_render, dict):
-            # 原始与渲染后的历史可由 ContextResult 推导，不能每轮写进 session 状态。
-            history_render.pop("raw", None)
-            history_render.pop("rendered", None)
-        return ctx_info
-
-    def compact_history(self, session: dict, working_memory, *, retain_turns: int = 4, summary_mode: str = "llm") -> tuple[dict, dict]:
-        '''
-        第四层做语义压缩，这一层会真正压缩历史结构，不是动渲染。否则会导致连续的语义压缩，成本巨高。
-        '''
-        history = [item for item in session.get("history", []) if item.get("kind") != "compact_summary"]
-        turns = self._group_turns(history)
-        ordered_turn_ids = list(turns)
-        if not ordered_turn_ids:
-            compact_info = {
-                "status": "noop",
-                "summary_mode": summary_mode,
-                "summary_source": "",
-                "retain_turns": int(retain_turns),
-                "before": {"turn_count": 0, "item_count": 0},
-                "after": {"turn_count": 0, "item_count": 0},
-            }
-            return compact_info, None
-
-        retain_turns = max(1, int(retain_turns))
-        keep_turn_ids = ordered_turn_ids[-retain_turns:]
-        kept_items = []
-        compacted_items = []
-        for turn_id, items in turns.items():
-            if turn_id in keep_turn_ids:
-                kept_items.extend(items)
-            else:
-                compacted_items.extend(items)
-
-        before_text, _ = self._build_history_text(
-            history,
-            recent_turn_window=max(2, retain_turns),
-            compress_old_tools=False,
-            include_older_turns=True,
-        )
-        summary_text, summary_audit = self._summarize_compacted_history(compacted_items, session=session, summary_mode=summary_mode)
-        session["event_seq"] = int(session.get("event_seq", 0)) + 1
-        summary_item = {
-            "role": "system",
-            "kind": "compact_summary",
-            "content": summary_text,
-            "event_id": f"event-{session['event_seq']:06d}",
-            "created_at": now_iso(),
-            "source": "context_manager",
-            "run_id": keep_turn_ids[-1] if keep_turn_ids else "",
-            "turn_id": f"compact-{session['event_seq']:06d}",
-        }
-        session["history"] = [summary_item, *kept_items]
-        working_memory.set_compact_summary(summary_text)
-
-        after_text, _ = self._build_history_text(
-            session["history"],
-            recent_turn_window=max(2, retain_turns),
-            compress_old_tools=False,
-            include_older_turns=True,
-        )
-        ctx_info = {
-            "compact": {
-                "status": "applied",
-                "mode": "semantic",
-                "summary_mode": summary_mode,
-                "summary_source": str(summary_audit.get("source", "deterministic")),
-                "retain_turns": retain_turns,
-                "before": {
-                    "turn_count": len(ordered_turn_ids),
-                    "item_count": len(history),
-                    "rendered_chars": len(before_text),
-                    "text": before_text,
-                },
-                "after": {
-                    "turn_count": len(self._group_turns(session["history"])),
-                    "item_count": len(session["history"]),
-                    "rendered_chars": len(after_text),
-                    "text": after_text,
-                },
-                "summary_item": summary_item,
-                "summary_text": summary_text,
-                "fallback_reason": str(summary_audit.get("fallback_reason", "")),
-            }
-        }
-        session["ctx_info"] = dict(session.get("ctx_info", {}), **ctx_info)
-        return ctx_info["compact"], summary_audit
-
-    def _build_sections_texts(
-        self,
-        *,
-        session: dict,
-        working_memory,
-        user_message: str,
-        budgets: dict,
-        recent_turn_window: int,
-        compress_old_tools: bool,
-        include_older_turns: bool,
-    ) -> dict[str, _SectionRender]:
-        rendered: dict[str, _SectionRender] = {}
-        history_render = self._build_history_section_texts(
-            session,
-            recent_turn_window=recent_turn_window,
-            budget_chars=int(budgets.get("history", self._base_budgets()["history"])),
-            compress_old_tools=compress_old_tools,
-            include_older_turns=include_older_turns,
-        )
-        section_texts = {
-            "prefix": render_prefix(self.workspace, self.registry),
-            "skill": render_skill_section(),
-            "working_memory": self._build_working_memory_text(session, working_memory),
-            "history": history_render.raw,
-            CURRENT_REQUEST_SECTION: f"Current user request:\n{user_message}",
-        }
-        for section in SECTION_ORDER:
-            if section == "prefix":
-                raw = section_texts[section]
-                rendered[section] = _SectionRender(raw=raw, rendered=raw, budget_chars=None, details={})
-            elif section == "skill":
-                raw = section_texts[section]
-                budget_chars = int(budgets.get(section, 0))
-                rendered_text = tail_clip(raw, budget_chars)
-                rendered[section] = _SectionRender(raw=raw, rendered=rendered_text, budget_chars=budget_chars, details={})
-            elif section == "working_memory":
-                raw = section_texts[section]
-                budget_chars = int(budgets.get(section, 0))
-                rendered_text = tail_clip(raw, budget_chars)
-                rendered[section] = _SectionRender(raw=raw, rendered=rendered_text, budget_chars=budget_chars, details={})
-            elif section == "history":
-                rendered[section] = history_render
-            else:
-                raw = section_texts[section]
-                rendered[section] = _SectionRender(raw=raw, rendered=raw, budget_chars=None, details={})
-        return rendered
-
-    def _build_history_section_texts(
-        self,
-        session: dict,
-        *,
-        recent_turn_window: int,
-        budget_chars: int,
-        compress_old_tools: bool,
-        include_older_turns: bool, # 是否表示保留窗口外的历史，只有第四层不保存，因为要做旧历史的语义压缩。
-    ) -> _SectionRender:
-        history = [item for item in session.get("history", []) if item.get("kind") != "compact_summary"]
-        raw, compression_records = self._build_history_text(
-            history,
-            recent_turn_window=recent_turn_window,
-            compress_old_tools=compress_old_tools,
-            include_older_turns=include_older_turns,
-        )
-        turns = self._group_turns(history)
-        details = {
-            "turns": [
-                {"turn_id": turn_id, "item_count": len(items)}
-                for turn_id, items in turns.items()
-            ],
-            "turn_count": len(turns),
-            "rendered_turn_count": min(len(turns), recent_turn_window),
-            "recent_turn_window": recent_turn_window,
-            "compression_records": compression_records,
-            "include_older_turns": include_older_turns,
-        }
-        rendered = "History:\n" + tail_clip(raw, budget_chars)
-        return _SectionRender(raw=raw, rendered=rendered, budget_chars=budget_chars, details=details)
-
-    def _build_history_text(
-        self,
-        history: list[dict],
-        *,
-        recent_turn_window: int,
-        compress_old_tools: bool,
-        include_older_turns: bool,
-    ) -> tuple[str, list[dict]]:
-        turns = self._group_turns(history)
-        if not turns:
-            return "Transcript:\n- empty", []
-        recent_turn_ids = set(list(turns.keys())[-max(1, int(recent_turn_window)):])
-        lines = ["Transcript:"]
-        records: list[dict] = []
-        seen_old_read_paths: set[str] = set()
-        for turn_id, items in turns.items():
-            if turn_id not in recent_turn_ids and not include_older_turns:
-                continue
-            turn_lines = self._build_turn_history_text(
-                turn_id,
-                items,
-                compress_old_tools=compress_old_tools and turn_id not in recent_turn_ids,
-                seen_old_read_paths=seen_old_read_paths,
-                records=records,
-            )
-            if turn_lines:
-                lines.extend(turn_lines)
-        return "\n".join(lines), records
-
-    def _build_history_item_text(self, item: dict, line_limit: int | None) -> list[str]:
-        if item.get("kind") == "compact_summary":
-            return []
-        role = self._history_role(item)
-        if role == "tool":
-            return self._render_tool_history_block(item, line_limit)
-        if role == "assistant":
-            return self._render_assistant_history_block(item, line_limit)
-        if role == "user":
-            content = str(item.get("content", ""))
-            if line_limit is not None:
-                content = tail_clip(content, max(20, int(line_limit)))
-            return ["[User]", content]
-        content = str(item.get("content", ""))
-        if line_limit is not None:
-            content = tail_clip(content, max(20, int(line_limit)))
-        return [f"[{role or 'message'}]", content]
-
-    def _build_turn_history_text(
-        self,
-        turn_id: str,
-        items: list[dict],
-        *,
-        compress_old_tools: bool,
-        seen_old_read_paths: set[str],
-        records: list[dict],
-    ) -> list[str]:
-        lines = [f"--- Turn {turn_id} ---"]
-        assistant_seen = False
-        assistant_placeholder = False
-        for item in items:
-            if item.get("kind") == "compact_summary":
-                continue
-            role = self._history_role(item)
-            if role == "user":
-                self._append_history_block(lines, self._build_history_item_text(item, None))
-                continue
-            if role == "assistant":
-                self._append_history_block(lines, self._build_history_item_text(item, None))
-                assistant_seen = True
-                continue
-            if role == "tool":
-                if not assistant_seen and not assistant_placeholder:
-                    self._append_history_block(lines, self._build_empty_assistant_block())
-                    assistant_placeholder = True
-                if compress_old_tools:
-                    compressed_lines, record = self._compress_old_tool_history_item(item, seen_old_read_paths)
-                    self._append_history_block(lines, compressed_lines)
-                    if record:
-                        records.append(record)
-                else:
-                    self._append_history_block(lines, self._build_history_item_text(item, None))
-                continue
-            self._append_history_block(lines, self._build_history_item_text(item, None))
-        if not assistant_seen and not assistant_placeholder:
-            self._append_history_block(lines, self._build_empty_assistant_block())
-        return lines
-
-    def _build_empty_assistant_block(self) -> list[str]:
-        return ["[Assistant]", ""]
-
-    def _append_history_block(self, lines: list[str], block: list[str]) -> None:
-        if not block:
-            return
-        if len(lines) > 1 and lines[-1] != "":
-            lines.append("")
-        lines.extend(block)
-
-    def _render_assistant_history_block(self, item: dict, line_limit: int | None) -> list[str]:
-        action_kind = str(item.get("kind", "")).strip()
-        reasoning = str(item.get("metadata", {}).get("reasoning", "")).strip() if isinstance(item.get("metadata"), dict) else ""
-        content = str(item.get("content", ""))
-        if line_limit is not None and action_kind == "assistant":
-            content = tail_clip(content, max(20, int(line_limit)))
-        lines = ["[Assistant]"]
-        if reasoning:
-            lines.extend(["[Reasoning]:", reasoning])
-        lines.append(content)
-        return lines
-
-    def _render_tool_history_block(self, item: dict, line_limit: int | None) -> list[str]:
-        name = str(item.get("name", ""))
-        prefix = f"[ToolResult ({name})]<args>{self._tool_args_json(item)}</args>"
-        if name == "read_file" and self._is_stale_read_file(item):
-            return [prefix, self._stale_read_file_message(item)]
-        content = str(item.get("content", ""))
-        if line_limit is not None:
-            content = tail_clip(content, max(20, int(line_limit)))
-        return [prefix, content]
-
-    def _compress_old_tool_history_item(self, item: dict, seen_old_read_paths: set[str]) -> tuple[list[str], dict | None]:
-        name = str(item.get("name", ""))
-        prefix = f"[ToolResult ({name})]<args>{self._tool_args_json(item)}</args>"
-        content = str(item.get("content", ""))
-        if not self._can_compress_tool_history_item(item):
-            return self._build_history_item_text(item, None), None
-
-        if name == "read_file" and self._is_stale_read_file(item):
-            replacement = self._stale_read_file_message(item)
-            record = self._compression_record_for_item(item, "stale_read_file_replaced", len(content), replacement)
-            return [prefix, replacement], record
-
-        artifact_path = self._artifact_path_from_content(content)
-        if artifact_path:
-            record = self._compression_record_for_item(item, "artifact_path_only", len(content), artifact_path)
-            return [prefix, artifact_path], record
-
-        if name == "read_file":
-            path = str(item.get("args", {}).get("path", "")).strip()
-            if path and path in seen_old_read_paths:
-                replacement = f"[read_file:{path}] duplicate old read omitted"
-                record = self._compression_record_for_item(item, "read_file_duplicate_omitted", len(content), replacement)
-                return [prefix, replacement], record
-            if path:
-                seen_old_read_paths.add(path)
-            return self._build_history_item_text(item, None), None
-
-        if name == "run_shell":
-            lines = self._run_shell_preview_lines(content)
-            replacement = "\n".join(lines) if lines else "(empty)"
-            record = self._compression_record_for_item(item, "run_shell_first_three_non_empty_lines", len(content), replacement)
-            return [prefix, replacement], record
-
-        replacement = content[:80]
-        record = self._compression_record_for_item(item, "tool_first_80_chars", len(content), replacement)
-        return [prefix, replacement], record
-
-    @staticmethod
-    def _is_stale_read_file(item: dict) -> bool:
-        metadata = item.get("metadata", {})
-        return item.get("name") == "read_file" and isinstance(metadata, dict) and bool(metadata.get("stale"))
-
-    @staticmethod
-    def _stale_read_file_message(item: dict) -> str:
-        metadata = item.get("metadata", {})
-        paths = metadata.get("stale_paths", []) if isinstance(metadata, dict) else []
-        path_text = ", ".join(str(path) for path in paths if str(path).strip()) or str(item.get("args", {}).get("path", ""))
-        return (
-            f"This read_file result is stale because the source file changed: {path_text}. "
-            "Treat it as historical evidence only and read the current file before relying on its content."
-        )
-
-    def _tool_args_json(self, item: dict) -> str:
-        args = dict(item.get("args", {}) or {})
-        if item.get("name") == "write_file":
-            # write_file 的 content 可能很大，history 只展示定位和控制参数。
-            args.pop("content", None)
-        return json.dumps(args, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-
-    def _can_compress_tool_history_item(self, item: dict) -> bool:
-        name = str(item.get("name", ""))
-        status = str(item.get("tool_status", item.get("status", "")))
-        if status and status not in {"success", "partial_success"}:
-            return False
-        if name in {
-            "write_file",
-            "apply_patch",
-            "todo_add",
-            "todo_update",
-            "todo_list",
-            "ask_user",
-            "enter_plan_mode",
-            "exit_plan_mode",
-            "spawn_subagent",
-            "send_subagent_message",
-            "wait_subagent",
-        }:
-            return False
-        return True
-
-    def _artifact_path_from_content(self, content: str) -> str:
-        for line in str(content).splitlines():
-            stripped = line.strip()
-            if not stripped:
-                continue
-            match = re.search(r"(\.jcode/runs/[^\s/]+/artifacts/[^\s]+)", stripped)
-            if match:
-                return match.group(1)
-        return ""
-
-    def _run_shell_preview_lines(self, content: str) -> list[str]:
-        lines: list[str] = []
-        for raw_line in str(content).splitlines():
-            line = raw_line.strip()
-            if not line or line in {"stdout:", "stderr:", "exit_code:"}:
-                continue
-            lines.append(line)
-            if len(lines) >= 3:
-                break
-        return lines
-
-    def _compression_record_for_item(self, item: dict, rule: str, before_chars: int, after_text: str) -> dict:
-        content = str(item.get("content", ""))
-        return {
-            "turn_id": str(item.get("turn_id", "")),
-            "role": str(item.get("role", "")),
-            "tool_name": str(item.get("name", "")),
-            "rule": rule,
-            "before_chars": int(before_chars),
-            "after_chars": len(str(after_text)),
-            "before_preview": self._preview_text(content),
-            "after_preview": self._preview_text(after_text),
-        }
-
-    def _build_compression_records(
-        self,
-        *,
-        initial_section_texts: dict,
-        compressed_section_texts: dict,
-        initial_budgets: dict,
-        compressed_budgets: dict,
-        history_details: dict,
-    ) -> list[dict]:
-        records: list[dict] = []
-        for section in SECTION_ORDER:
-            before = str(initial_section_texts.get(section, ""))
-            after = str(compressed_section_texts.get(section, ""))
-            record = {
-                "section": section,
-                "before_chars": len(before),
-                "after_chars": len(after),
-                "before_preview": self._preview_text(before),
-                "after_preview": self._preview_text(after),
-                "budget_before": None if section == CURRENT_REQUEST_SECTION else int(initial_budgets.get(section, 0)),
-                "budget_after": None if section == CURRENT_REQUEST_SECTION else int(compressed_budgets.get(section, 0)),
-                "changed": before != after,
-            }
-            if section == "history":
-                record["tool_records"] = list(history_details.get("compression_records", []))
-            records.append(record)
-        return records
-
-    def _history_window_for_level(self, level: int) -> int:
-        if level <= 0:
-            return 7
-        if level == 1:
-            return 6
-        if level == 2:
-            return 5
-        return 4
-
-    def _preview_text(self, value: str, limit: int = 240) -> str:
-        text = str(value or "").replace("\r\n", "\n").strip()
-        if len(text) <= limit:
-            return text
-        return text[:limit].rstrip() + f"...[{len(text) - limit} chars]"
-
-    def _summarize_compacted_history(self, items: list[dict], *, session: dict, summary_mode: str) -> tuple[str, dict]:
-        """语义压缩只读取结构化历史，避免为摘要再引入非原生文本模型调用。"""
-        summary_text = self._summarize_compacted_history_deterministic(items, session=session)
-        return summary_text, {
-            "source": "deterministic",
-            "mode": summary_mode,
-            "status": "success",
-            "fallback_reason": "",
-            "summary_text": summary_text,
-            "prompt": "",
-            "response": "",
-        }
-
-    def _summarize_compacted_history_deterministic(self, items: list[dict], *, session: dict) -> str:
-        goal = self._latest_user_message(items) or self._latest_user_message(session.get("history", [])) or "Continue the current task."
-        constraints = self._collect_sentences(items, ("must", "only", "keep", "cannot", "don't", "do not", "avoid", "preserve", "不能", "必须", "只", "保持"))
-        files_read = self._collect_paths(items, "read_file")
-        files_modified = self._collect_paths(items, "write_file", "patch_file")
-        key_decisions = self._collect_sentences(items, ("decide", "choose", "switch", "use", "改用", "选择", "决定"))
-        blockers = self._collect_blockers(items)
-        next_steps = self._collect_next_steps(items) or ["Continue from the latest preserved turn."]
-        lines = ["## Goal", goal]
-        if constraints:
-            lines.extend(["", "## Constraints", *[f"- {item}" for item in constraints]])
-        if files_read:
-            lines.extend(["", "## Files Read", *[f"- {item}" for item in files_read]])
-        if files_modified:
-            lines.extend(["", "## Files Modified", *[f"- {item}" for item in files_modified]])
-        if key_decisions:
-            lines.extend(["", "## Key Decisions", *[f"- {item}" for item in key_decisions]])
-        if blockers:
-            lines.extend(["", "## Blockers", *[f"- {item}" for item in blockers]])
-        lines.extend(["", "## Next Steps", *[f"- {item}" for item in next_steps]])
-        return "\n".join(lines).strip()
-
-    def _collect_sentences(self, items: list[dict], patterns: tuple[str, ...]) -> list[str]:
-        found: list[str] = []
-        lowered_patterns = tuple(pattern.lower() for pattern in patterns)
-        for item in items:
-            if self._history_role(item) not in {"user", "assistant", "tool"}:
-                continue
-            text = str(item.get("content", "")).strip()
-            if not text:
-                continue
-            for sentence in re.split(r"[。！？!?]+|\n+|\.(?:\s+|$)", text):
-                value = sentence.strip(" \t\r\n:;,.，；、")
-                if not value:
+    def _fit_optional_history(self, history, prefix, skill, memory, tools, continuation, window, decisions=None):
+        """容量不足时按完整事件组淘汰最旧可变历史，绝不拆分工具调用闭环。"""
+        current_turn = history[-1].turn_id if history else ""
+        working = list(history)
+        while working:
+            probe = ContextResult(prefix, skill, working, memory, tools, {}, provider_continuation=continuation)
+            snapshot = compile_provider_input_snapshot(probe, self.tokenizer)
+            if snapshot.serialized_input_tokens + self.actual_max_new_tokens + SAFETY_MARGIN <= window:
+                return working
+            removable_turns = []
+            for event in working:
+                if event.kind == "compact_summary" or event.turn_id == current_turn:
                     continue
-                lowered = value.lower()
-                if any(pattern in lowered for pattern in lowered_patterns):
-                    if value not in found:
-                        found.append(value)
-        return found[:6]
-
-    def _collect_paths(self, items: list[dict], *names: str) -> list[str]:
-        result: list[str] = []
-        wanted = {name for name in names}
-        for item in items:
-            if item.get("name") not in wanted:
-                continue
-            path = str(item.get("args", {}).get("path", "")).strip()
-            if path and path not in result:
-                result.append(path)
-        return result[:10]
-
-    def _collect_blockers(self, items: list[dict]) -> list[str]:
-        blockers: list[str] = []
-        for item in items:
-            status = str(item.get("tool_status", "")).strip()
-            if self._history_role(item) == "tool" and status and status != "success":
-                text = str(item.get("content", "")).strip()
-                if text and text not in blockers:
-                    blockers.append(text)
-            if self._history_role(item) == "assistant":
-                text = str(item.get("content", "")).strip()
-                if any(marker in text.lower() for marker in ("blocked", "unable", "cannot", "failed")) and text not in blockers:
-                    blockers.append(text)
-        return blockers[:5]
-
-    def _collect_next_steps(self, items: list[dict]) -> list[str]:
-        for item in reversed(items):
-            if self._history_role(item) != "assistant":
-                continue
-            text = str(item.get("content", "")).strip()
-            if text:
-                for sentence in re.split(r"[。！？!?]+|\n+|\.(?:\s+|$)", text):
-                    value = sentence.strip(" \t\r\n:;,.，；、")
-                    if value and any(marker in value.lower() for marker in ("next", "continue", "then", "之后", "接着", "继续")):
-                        return [value]
-        return []
-
-    def _latest_user_message(self, items: list[dict]) -> str:
-        for item in reversed(items):
-            if self._history_role(item) == "user":
-                text = str(item.get("content", "")).strip()
-                if text:
-                    return text
-        return ""
-
-    def _group_turns(self, items: list[dict]) -> OrderedDict[str, list[dict]]:
-        turns: OrderedDict[str, list[dict]] = OrderedDict()
-        for index, item in enumerate(items):
-            turn_id = str(item.get("turn_id") or item.get("run_id") or f"legacy-{index:06d}")
-            turns.setdefault(turn_id, []).append(item)
-        return turns
+                if event.turn_id not in removable_turns:
+                    removable_turns.append(event.turn_id)
+            if not removable_turns:
+                return working
+            candidates = [ContextBudgetCandidate("history", str(turn), turn, index) for index, turn in enumerate(removable_turns)]
+            remove_turn = sorted(candidates, key=lambda candidate: candidate.sort_key())[0].stable_name
+            if decisions is not None:
+                decisions.append({"action": "drop", "section": "history", "turn_id": remove_turn, "reason": "capacity"})
+            working = [event for event in working if event.turn_id != remove_turn]
+        return working
 
     @staticmethod
-    def _history_role(item: dict) -> str:
-        """为压缩审计提供统一角色视图，不把旧协议写回 session。"""
-        role = str(item.get("role") or "")
-        if role:
-            return role
-        return {
-            "user": "user",
-            "assistant": "assistant",
-            "tool_call": "assistant",
-            "tool_result": "tool",
-        }.get(str(item.get("kind") or ""), "")
+    def _reduce_memory(memory) -> None:
+        """高压时只保留当前任务所需的热文件和未完成状态。"""
+        memory.recent_files = memory.recent_files[-12:]
+        memory.retrieved_memory = []
+        memory.subagent_results = []
+        memory.compact_summary = ""
 
-    def _sync_compact_summary_from_history(self, session: dict, working_memory) -> None:
-        for item in reversed(session.get("history", [])):
-            if item.get("kind") == "compact_summary":
-                working_memory.set_compact_summary(str(item.get("content", "")).strip())
-                return
+    def _reduce_working_memory_for_pressure(self, memory) -> None:
+        """公开压力治理入口，供运行时和审计测试复用。"""
+        self._reduce_memory(memory)
 
-    def _build_working_memory_text(self, session: dict, working_memory) -> str:
-        text = working_memory.render() + f"\n- workspace_root: {self.workspace.root}"
-        runtime_mode_text = render_runtime_mode_text(session)
-        if runtime_mode_text:
-            text += "\n" + runtime_mode_text
-        text += "\n" + self.workspace.runtime_text()
-        return text
-
-    def _pressure_level(self, ratio: float) -> tuple[int, str, str]:
-        if ratio < 0.60:
+    @staticmethod
+    def _pressure_level(ratio: float) -> tuple[int, str, str]:
+        """将审计比例映射到 9.5 五档压力。"""
+        value = float(ratio)
+        if value < 0.60:
             return 0, "0-60", "tier0"
-        for low, high, level, label in PRESSURE_LEVELS:
-            if low <= ratio < high:
-                return level, label, f"tier{level}"
-        return 4, "90+", "tier4"
-
-    def _budget_tokens(self) -> int:
-        return max(1, (int(self.total_budget) + 3) // 4)
-
-    def _base_budgets(self) -> dict:
-        return compute_section_budgets(self.total_budget, ratios=SECTION_RATIO_HINTS)
-
-    def _workspace_info(self) -> dict:
-        docs = []
-        for path, snippet in getattr(self.workspace, "project_docs", {}).items():
-            docs.append({"path": path, "chars": len(snippet)})
-        return {
-            "cwd": str(getattr(self.workspace, "cwd", getattr(self.workspace, "root", ""))),
-            "repo_root": str(getattr(self.workspace, "repo_root", getattr(self.workspace, "root", ""))),
-            "branch": str(getattr(self.workspace, "branch", "-")),
-            "default_branch": str(getattr(self.workspace, "default_branch", "main")),
-            "status": str(getattr(self.workspace, "status", "clean")),
-            "recent_commits": list(getattr(self.workspace, "recent_commits", [])),
-            "docs": docs,
-            "workspace_hash": getattr(self.workspace, "workspace_hash", lambda: "")(),
-        }
-
-    def _build_cache_info(self, session: dict, prefix_text: str) -> dict:
-        previous = dict(session.get("ctx_info", {}) or {})
-        previous_cache = dict(previous.get("cache", {}) or {})
-        prefix_hash = hashlib.sha256(str(prefix_text or "").encode("utf-8")).hexdigest()
-        workspace_hash = getattr(self.workspace, "workspace_hash", lambda: "")()
-        cache = {
-            "prefix_hash": prefix_hash,
-            "prompt_cache_key": prefix_hash,
-            "workspace_hash": workspace_hash,
-            "prefix_changed": bool(previous_cache.get("prefix_hash") and previous_cache.get("prefix_hash") != prefix_hash),
-            "workspace_changed": bool(previous_cache.get("workspace_hash") and previous_cache.get("workspace_hash") != workspace_hash),
-            "previous_prefix_hash": str(previous_cache.get("prefix_hash", "")),
-            "previous_workspace_hash": str(previous_cache.get("workspace_hash", "")),
-        }
-        return cache
+        if value < 0.75:
+            return 1, "60-75", "tier1"
+        if value < 0.85:
+            return 2, "75-85", "tier2"
+        if value < 0.95:
+            return 3, "85-95", "tier3"
+        return 4, "95+", "tier4"
