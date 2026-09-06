@@ -34,6 +34,8 @@ MAX_OUTPUT_CONTINUATIONS = 2
 CONTINUATION_REQUEST = """[Continuation Required]
 Your previous response was truncated before completion. Continue directly from the unfinished point.
 Do not repeat prior content, do not restate the task, and complete the remaining work."""
+CANCELLED_TOOL_TEXT = "[JCode tool execution cancelled]\nstatus: cancelled\nreason: user_abort\nmessage: 该工具调用因用户中止当前运行而未实际执行；不得将其视为已完成。"
+INTERRUPTED_TOOL_TEXT = "[JCode tool execution interrupted]\nstatus: interrupted\nreason: user_abort\nmessage: 该工具执行期间被用户终止，可能已经产生文件、命令、进程或其他运行时副作用；必须先检查工作区和运行状态，不得将其视为完成。"
 
 if TYPE_CHECKING:
     from src.app.config import AppConfig
@@ -301,7 +303,8 @@ class JCodeAgent:
             )
             for call in tool_calls:
                 if self.abort_requested:
-                    break
+                    self._record_cancelled_tool_call(call, task_state, run_dir, checkpoint)
+                    continue
                 self._execute_tool_call(call.name, call.arguments, task_state, run_dir, checkpoint, call_id=call.call_id)
             step += 1
 
@@ -583,6 +586,7 @@ class JCodeAgent:
                 metadata={"model_profile": task_state.model_profile},
             )
         for call in response.tool_calls or []:
+            task_state.register_native_tool_call(call.call_id, call.name, call.arguments)
             self._append_history(
                 "tool_call",
                 "",
@@ -615,6 +619,7 @@ class JCodeAgent:
         trace_meta = dict(trace_meta or {})
         history_meta = dict(history_meta or {})
         self._record_trace(run_dir, "tool_requested", task_state, name=tool_name, args=tool_args, call_id=call_id, **trace_meta)
+        task_state.update_native_tool_call(call_id, "running")
         if tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"}:
             result = self._handle_subagent_tool(tool_name, tool_args, task_state)
         else:
@@ -628,7 +633,14 @@ class JCodeAgent:
                 plan_path=runtime_mode_plan_path(self.session),
                 run_id=task_state.run_id,
                 runtime=self,
+                abort_requested=lambda: self.abort_requested,
             )
+
+        # 工具返回时若已经收到 abort，结果不能被模型误认为本次工具调用已完整完成。
+        if self.abort_requested and result.status not in {"denied", "cancelled"}:
+            result.status = "interrupted"
+            result.error_type = "user_abort"
+            result.text = INTERRUPTED_TOOL_TEXT
 
         if tool_name == "read_file":
             # artifact 文件同样按 read_file 协议直接分段返回，复用原始来源参与 stale 判断。
@@ -653,6 +665,7 @@ class JCodeAgent:
 
         unresolved_before = {item.get("failure_id") for item in task_state.unresolved_tool_failures}
         task_state.record_tool(tool_name, result, arguments=tool_args, call_id=call_id)
+        task_state.update_native_tool_call(call_id, result.status)
         unresolved_after = {item.get("failure_id") for item in task_state.unresolved_tool_failures}
         if result.status not in {"success", "ok"}:
             failure = next((item for item in task_state.unresolved_tool_failures if item.get("failure_id") not in unresolved_before), None)
@@ -709,6 +722,44 @@ class JCodeAgent:
         self._create_checkpoint(checkpoint, task_state, run_dir, "tool_executed")
         self.run_store.write_task_state(run_dir, task_state)
         return result
+
+    def _record_cancelled_tool_call(self, call, task_state, run_dir, checkpoint) -> None:
+        """为 abort 后尚未执行的原生调用补写结果，保证 function_call 与 output 成对持久化。"""
+        call_id = str(call.call_id or "")
+        result = ToolResult("cancelled", CANCELLED_TOOL_TEXT, error_type="user_abort", decision="executed")
+        task_state.record_tool(call.name, result, arguments=call.arguments, call_id=call_id)
+        task_state.update_native_tool_call(call_id, result.status)
+        self._append_history(
+            "tool_result",
+            result.text,
+            task_state,
+            tool_name=call.name,
+            call_id=call_id,
+            arguments=call.arguments,
+            metadata={
+                "tool_status": result.status,
+                "error_type": result.error_type,
+                "changed_files": [],
+                "artifacts": [],
+                "cancelled": True,
+            },
+        )
+        self.working_memory.observe_tool(call.name, result.status, result.text)
+        continuation = ProviderContinuation.from_dict(task_state.provider_continuation, run_id=task_state.run_id)
+        continuation.add_tool_output(call_id, result.text)
+        task_state.provider_continuation = continuation.to_dict()
+        self._record_trace(
+            run_dir,
+            "tool_cancelled",
+            task_state,
+            name=call.name,
+            call_id=call_id,
+            status=result.status,
+            error_type=result.error_type,
+            result_summary=result.text,
+        )
+        self._create_checkpoint(checkpoint, task_state, run_dir, "tool_cancelled")
+        self.run_store.write_task_state(run_dir, task_state)
 
     def _record_trace(self, run_dir, event: str, task_state, **payload) -> None:
         self.run_store.append_trace(run_dir, event, task_state.run_id, **payload)

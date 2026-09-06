@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from pydantic import ValidationError
 
@@ -55,6 +55,7 @@ class ToolExecutor:
         run_id: str = "",
         source: str = "model",
         runtime: object | None = None,
+        abort_requested: Callable[[], bool] | None = None,
     ) -> ToolResult:
         request = ToolCallRequest(name=name, raw_args=dict(args or {}), run_id=run_id, source=source)
         tool = self.registry.get(request.name)
@@ -127,6 +128,9 @@ class ToolExecutor:
                 # artifact 读取由上游决定渲染与外置策略，read_file 本身只负责读取文件内容。
                 if is_tool_result_artifact(parsed_args.get("path", "")):
                     result.metadata["artifact_read"] = True
+            elif request.name == "run_shell":
+                # run_shell 需要轮询 abort 状态，其它工具保持原有函数签名。
+                result = tool.execute(self.workspace, parsed, abort_requested=abort_requested)
             else:
                 result = tool.execute(self.workspace, parsed)
         except Exception as exc:

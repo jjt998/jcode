@@ -28,6 +28,7 @@ class TaskState:
     resolved_tool_failures: list[dict] = field(default_factory=list)  # 已由后续证据解决的工具失败
     verification: dict = field(default_factory=dict)  # 最近验证命令及状态
     final_readiness_summary: dict = field(default_factory=dict)  # Final Gate 最近决策摘要
+    native_tool_calls: dict[str, dict] = field(default_factory=dict)  # 原生工具调用的生命周期状态
     provider_continuation: dict = field(default_factory=dict)  # 当前 run 的 Provider 原生续接项
     output_continuation_count: int = 0  # 模型输出被截断后的续写次数
     partial_response_parts: list[str] = field(default_factory=list)  # 截断响应中已保留的正文片段
@@ -41,6 +42,25 @@ class TaskState:
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)
+
+    def register_native_tool_call(self, call_id: str, name: str, arguments: dict) -> None:
+        """登记模型返回的工具调用，后续状态迁移必须使用同一个 call_id。"""
+        if not call_id:
+            return
+        self.native_tool_calls[call_id] = {
+            "name": str(name),
+            "arguments": dict(arguments),
+            "status": "pending",
+            "updated_at": now_iso(),
+        }
+
+    def update_native_tool_call(self, call_id: str, status: str) -> None:
+        """更新调用状态，保证 checkpoint 能恢复工具是否已被中止。"""
+        if not call_id:
+            return
+        record = self.native_tool_calls.setdefault(call_id, {"name": "", "arguments": {}})
+        record["status"] = str(status)
+        record["updated_at"] = now_iso()
 
     def record_tool(self, name: str, result, *, arguments: dict | None = None, call_id: str = "") -> None:
         self.tool_steps += 1

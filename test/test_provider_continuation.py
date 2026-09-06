@@ -27,6 +27,15 @@ def test_provider_continuation_keeps_native_call_chain():
     assert continuation.items[-1]["call_id"] == "call-1"
 
 
+def test_task_state_persists_native_tool_call_lifecycle():
+    task_state = TaskState.create("test")
+
+    task_state.register_native_tool_call("call-1", "read_file", {"path": "README.md"})
+    task_state.update_native_tool_call("call-1", "interrupted")
+
+    assert task_state.to_dict()["native_tool_calls"]["call-1"]["status"] == "interrupted"
+
+
 def test_unknown_provider_output_item_stops_run():
     with pytest.raises(UnsupportedProviderContinuationItemError):
         ProviderContinuation().add_response_items([{"type": "unsupported_native_item"}])

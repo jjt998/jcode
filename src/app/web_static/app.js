@@ -28,6 +28,7 @@ const els = {
   turnList: document.querySelector("#turnList"),
   composer: document.querySelector("#composer"),
   messageInput: document.querySelector("#messageInput"),
+  sendMessage: document.querySelector("#sendMessage"),
   stopRun: document.querySelector("#stopRun"),
   modelProfile: document.querySelector("#modelProfile"),
   reasoningToggleField: document.querySelector("#reasoningToggleField"),
@@ -109,10 +110,12 @@ function formatDuration(value) {
 }
 
 function setRunStatus(status) {
-  els.runState.textContent = status || "idle";
+  els.runState.textContent = status === "aborting" ? "正在终止工具，请稍等。" : (status || "idle");
   els.runState.dataset.status = status || "idle";
   els.modelProfile.disabled = ["running", "waiting_approval", "aborting"].includes(status);
   const running = els.modelProfile.disabled;
+  els.messageInput.disabled = running;
+  els.sendMessage.disabled = running;
   els.thinkingEnabled.disabled = running || els.thinkingEnabled.dataset.locked === "true" || els.thinkingEnabled.dataset.supported !== "true";
   els.reasoningEffort.disabled = running || els.reasoningEffort.dataset.supported !== "true" || els.thinkingEnabled.checked === false;
 }
