@@ -25,6 +25,7 @@ def test_steps_show_process_content_without_reasoning():
     assert steps[0]["tool_calls"][0]["result_text"] == "read ok"
     assert steps[0]["tool_calls"][0]["artifact_ref"].endswith("read_file-output.txt")
     assert steps[0]["process_content"] == "I will inspect the file."
+    assert all(detail["event"] != "native_tool_calls_received" for detail in steps[0]["details"])
     assert steps[0]["context_audit_ref"].endswith("context-0001.json")
     assert "reasoning_text" not in steps[0]
     assert steps[1]["response_text"] == "done"

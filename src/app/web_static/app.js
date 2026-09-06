@@ -37,7 +37,8 @@ const els = {
   reasoningSupport: document.querySelector("#reasoningSupport"),
 };
 
-const STREAM_EVENTS = [
+// Web 只订阅明确允许展示的事件；新增后端事件不会自动进入前端。
+const STREAM_EVENTS = Object.freeze([
   "web_run_started",
   "jcode_run_bound",
   "run_started",
@@ -69,7 +70,28 @@ const STREAM_EVENTS = [
   "run_failed",
   "runtime_stopped",
   "stream_closed",
-];
+]);
+
+// 步骤详情同样采用白名单，避免未知事件落入通用兜底后被意外展示。
+const DISPLAYABLE_DETAIL_EVENTS = new Set([
+  "context_built",
+  "tool_requested",
+  "tool_executed",
+  "subagent_completed",
+  "checkpoint_created",
+  "final_readiness_decision",
+  "final_readiness_evaluated",
+  "final_gate_blocked",
+  "memory_maintained",
+  "run_finished",
+  "approval_required",
+  "approval_answered",
+  "web_run_completed",
+  "run_abort_requested",
+  "run_aborted",
+  "run_failed",
+  "runtime_stopped",
+]);
 
 const HIDDEN_REASON_DETAIL_EVENTS = new Set([
   "model_requested",
@@ -422,6 +444,7 @@ function stepItem(turn, step) {
   }
   for (const detail of step.details || []) {
     // 隐藏模型请求和工具执行底层事件，只留下有业务价值的上下文与工具明细。
+    if (!DISPLAYABLE_DETAIL_EVENTS.has(detail.event)) continue;
     if (HIDDEN_REASON_DETAIL_EVENTS.has(detail.event) || detail.event === "model_responded" || detail.event === "model_parsed") continue;
     if (detail.event === "context_built") {
       body.append(detailBlock("完整上下文文本", detail.content || "", `step-detail:${turnKey(turn)}:${step.step_id}:${detail.event}:${detail.created_at || ""}`));

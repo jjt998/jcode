@@ -53,7 +53,6 @@ class StepTimelineBuilder:
             step["error_text"] = ""
             if step["process_content"]:
                 self._push_detail(step, "model_responded", "模型过程消息", step["process_content"], event)
-            self._push_detail(step, "native_tool_calls_received", "原生工具调用", json.dumps(step["parsed_action"], ensure_ascii=False, indent=2), event)
             self.current_step = step
             self.pending_context_text = ""
             self.steps.append(step)
@@ -267,7 +266,6 @@ def _event_title(name: str, event: dict) -> str:
     labels = {
         "context_built": "Context 拼凑",
         "model_responded": "模型过程消息",
-        "native_tool_calls_received": "原生工具调用",
         "tool_requested": f"工具请求{f': {tool}' if tool else ''}",
         "tool_executed": f"工具结果{f': {tool}' if tool else ''}",
         "subagent_completed": f"子任务结果{f': {tool}' if tool else ''}",
