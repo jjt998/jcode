@@ -56,7 +56,7 @@ max_steps = 50
 max_new_tokens = 32768
 ```
 
-模型档案必须声明 `context_window_tokens` 和 `max_output_tokens`。JCode 的有效上下文窗口为 `min(150000, profile.context_window_tokens)`；`max_new_tokens` 超出模型输出上限或最终容量公式时直接报错，不会静默截断。当前配置同时支持 DeepSeek 和 MiniMax 的 `openai_responses` 协议。
+模型档案必须声明 `context_window_tokens` 和 `max_output_tokens`。JCode 的有效上下文窗口为 `min(375000, profile.context_window_tokens)`；`max_new_tokens` 超出模型输出上限或最终容量公式时直接报错，不会静默截断。当前配置同时支持 DeepSeek 和 MiniMax 的 `openai_responses` 协议。
 
 如果没有设置 `DEEPSEEK_API_KEY`，JCode 仍会构建上下文并写入运行证据，但不会发送真实模型请求。DeepSeek 原生思考和工具调用以 API 结构保存，不进入文本协议解析。
 

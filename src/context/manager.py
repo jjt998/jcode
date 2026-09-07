@@ -152,7 +152,8 @@ class ContextManager:
             if not any(ref.get("path") == history_artifact_ref["path"] for ref in artifact_chain):
                 artifact_chain.append(history_artifact_ref)
             summary.artifact_paths = [str(ref.get("path")) for ref in artifact_chain if ref.get("path")]
-            summary_event = HistoryEvent("compact_summary", f"compact-{session_candidate.get('event_seq', 0) + 1}", ids[-3] if ids else "", summary.model_dump_json(exclude_none=True), metadata={"summary_version": summary.summary_version, "history_artifact": history_artifact_ref, "artifact_chain": artifact_chain})
+            summary_turn_id = self._compact_summary_turn_id(ids)
+            summary_event = HistoryEvent("compact_summary", f"compact-{session_candidate.get('event_seq', 0) + 1}", summary_turn_id, summary.model_dump_json(exclude_none=True), metadata={"summary_version": summary.summary_version, "history_artifact": history_artifact_ref, "artifact_chain": artifact_chain})
             history = [summary_event] + [event for event in verified_history if event.turn_id in keep_ids]
             session_candidate["history"] = [event.to_dict() for event in history]
             session_candidate["event_seq"] = int(session_candidate.get("event_seq", 0)) + 1
@@ -226,6 +227,13 @@ class ContextManager:
             }
         result.compact_audit = compact_audit
         return ContextBuildOutcome(result, session_candidate, memory_candidate, session_commit_required, history_artifact_ref)
+
+    @staticmethod
+    def _compact_summary_turn_id(turn_ids: list[str]) -> str:
+        """为压缩摘要选择稳定锚点，历史不足三回合时使用最早回合。"""
+        if not turn_ids:
+            return ""
+        return turn_ids[-3] if len(turn_ids) >= 3 else turn_ids[0]
 
     @staticmethod
     def _select_history(history: list[HistoryEvent], level: int) -> list[HistoryEvent]:

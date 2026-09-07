@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from src.context.budget import ContextBudgetCandidate, ReasoningContinuationBudgetOccupant, TokenizerAdapter, ToolContinuationBudgetOccupant, pack_budget_candidates, serialize_counted_input
+from src.context.budget import ContextBudgetCandidate, ReasoningContinuationBudgetOccupant, TokenizerAdapter, ToolContinuationBudgetOccupant, effective_window, pack_budget_candidates, serialize_counted_input
 from src.context.manager import ContextManager
 from src.memory.working import WorkingMemory
 from src.state.workspace import Workspace
@@ -11,6 +11,12 @@ def test_empty_continuation_occupants_are_zero():
     tokenizer = TokenizerAdapter()
     assert ReasoningContinuationBudgetOccupant([], tokenizer).tokens == 0
     assert ToolContinuationBudgetOccupant([], tokenizer).tokens == 0
+
+
+def test_effective_window_uses_new_cap_without_exceeding_profile():
+    """统一窗口上限提升到 375000，但仍尊重模型自身较小的窗口声明。"""
+    assert effective_window(1_000_000) == 375000
+    assert effective_window(204800) == 204800
 
 
 def test_serialized_input_occupancies_partition_actual_input():
@@ -33,7 +39,7 @@ def test_candidate_packing_is_stable_and_rejects_oversized_optional_items():
 
 
 def test_list_files_window_merges_last_pair_and_removes_orphan(tmp_path):
-    profile = SimpleNamespace(context_window_tokens=150000, max_output_tokens=16384, snapshot=lambda: {})
+    profile = SimpleNamespace(context_window_tokens=375000, max_output_tokens=16384, snapshot=lambda: {})
     manager = ContextManager(Workspace.build(tmp_path), object(), build_default_registry(), model_profile=profile)
     history = []
     for index in range(1, 8):
@@ -54,7 +60,7 @@ def test_list_files_window_merges_last_pair_and_removes_orphan(tmp_path):
 
 
 def test_internal_continuation_instruction_is_sent_without_replacing_goal(tmp_path):
-    profile = SimpleNamespace(context_window_tokens=150000, max_output_tokens=16384, snapshot=lambda: {})
+    profile = SimpleNamespace(context_window_tokens=375000, max_output_tokens=16384, snapshot=lambda: {})
     manager = ContextManager(Workspace.build(tmp_path), object(), build_default_registry(), model_profile=profile)
     memory = WorkingMemory(tmp_path)
     memory.task_goal = "original task"

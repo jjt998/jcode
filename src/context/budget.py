@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from math import ceil
 from typing import Callable, Iterable
 
-MAX_CONTEXT_TOKENS = 150000
+# 统一有效窗口上限；实际值仍受模型档案声明的窗口限制。
+MAX_CONTEXT_TOKENS = 375000
 DEFAULT_MAX_NEW_TOKENS = 16384
 SAFETY_MARGIN = 7500
 

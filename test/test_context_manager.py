@@ -10,7 +10,7 @@ from src.state.workspace import Workspace
 from src.tools.registry import build_default_registry
 
 
-def manager(tmp_path, window=150000, output=16384):
+def manager(tmp_path, window=375000, output=16384):
     profile = SimpleNamespace(context_window_tokens=window, max_output_tokens=output, snapshot=lambda: {"id": "test"})
     return ContextManager(Workspace.build(tmp_path), object(), build_default_registry(), model_profile=profile, actual_max_new_tokens=output, tokenizer=TokenizerAdapter())
 
@@ -46,3 +46,12 @@ def test_mandatory_capacity_failure(tmp_path):
 
 def test_level_windows():
     assert [ContextManager._history_window_for_level(i) for i in range(5)] == [7, 5, 4, 3, 3]
+
+
+@pytest.mark.parametrize(
+    ("turn_ids", "expected"),
+    [([], ""), (["turn-1"], "turn-1"), (["turn-1", "turn-2"], "turn-1"), (["turn-1", "turn-2", "turn-3"], "turn-1"), (["turn-1", "turn-2", "turn-3", "turn-4"], "turn-2")],
+)
+def test_compact_summary_turn_id_handles_short_history(turn_ids, expected):
+    """历史回合不足三项时也必须生成合法的摘要锚点。"""
+    assert ContextManager._compact_summary_turn_id(turn_ids) == expected
