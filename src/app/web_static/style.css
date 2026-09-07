@@ -383,6 +383,13 @@ h3 {
   border-left: 2px solid rgba(90, 83, 126, 0.18);
 }
 
+/* 已有步骤时保留运行态提示，避免用户误以为推理已经结束。 */
+.step-progress {
+  padding: 11px 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .step-empty {
   padding: 12px 14px;
   color: var(--muted);

@@ -171,7 +171,7 @@ const DISPLAYABLE_DETAIL_EVENTS = new Set([
   "checkpoint_created",
   "final_readiness_decision",
   "final_readiness_evaluated",
-  "final_gate_blocked",
+  "final_gate_rerun_requested",
   "memory_maintained",
   "run_finished",
   "approval_required",
@@ -521,6 +521,12 @@ function stepTimeline(turn) {
   }
   for (const step of steps) {
     section.append(stepItem(turn, step));
+  }
+  if (turn.status === "running") {
+    const progress = document.createElement("div");
+    progress.className = "step-progress";
+    progress.textContent = "正在推理中";
+    section.append(progress);
   }
   return section;
 }

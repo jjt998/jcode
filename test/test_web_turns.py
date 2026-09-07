@@ -129,3 +129,23 @@ def test_session_turns_keep_history_order_when_run_ids_are_reversed():
 
     assert [turn["run_id"] for turn in turns] == ["run-first", "history-2", "run-later"]
     assert [turn["sequence"] for turn in turns] == [0, 1, 2]
+
+
+def test_session_turns_attach_turn_id_and_current_messages_to_their_run():
+    """中途确认消息的 turn_id 不能被错误展示为独立的空轮次。"""
+    session = {
+        "id": "session-1",
+        "run_ids": ["run-1"],
+        "history": [
+            {"kind": "user", "content": "开始任务", "turn_id": "run-1"},
+            {"kind": "assistant", "content": "处理中", "turn_id": "run-1"},
+            {"kind": "user", "content": "继续", "turn_id": "current"},
+            {"kind": "assistant", "content": "已完成", "run_id": "run-1", "turn_id": "run-1"},
+        ],
+    }
+
+    turns = build_session_turns("project-1", Path("turn-id-order-root"), session)["turns"]
+
+    assert [turn["run_id"] for turn in turns] == ["run-1"]
+    assert turns[0]["user_message"] == "开始任务"
+    assert turns[0]["final_text"] == "已完成"
