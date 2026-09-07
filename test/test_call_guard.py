@@ -82,6 +82,22 @@ def test_run_shell_stops_when_abort_is_requested(tmp_path: Path):
     assert result.error_type == "user_abort"
 
 
+def test_run_shell_failure_with_workspace_change_returns_partial_success(tmp_path: Path):
+    workspace = Workspace(root=tmp_path, cwd=tmp_path, repo_root=tmp_path)
+    executor = build_executor(workspace)
+    working_memory = WorkingMemory.from_dict({}, tmp_path)
+    command = 'powershell -NoProfile -Command "Set-Content -LiteralPath changed.txt -Value changed; exit 1"'
+
+    result = executor.execute("run_shell", {"command": command}, working_memory=working_memory)
+
+    assert result.status == "partial_success"
+    assert "工具执行失败，但可能已经对工作区产生部分修改。" in result.text
+    assert "已检测到变更路径：" in result.text
+    assert "建议重新读取受影响文件。" in result.text
+    assert "changed.txt" in result.changed_files
+    assert result.metadata["side_effect_possible"] is True
+
+
 def test_todo_tools_skip_repeated_call_guard(tmp_path: Path):
     workspace = Workspace(root=tmp_path, cwd=tmp_path, repo_root=tmp_path)
     executor = build_executor(workspace)

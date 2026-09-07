@@ -653,6 +653,13 @@ class JCodeAgent:
         history_meta = dict(history_meta or {})
         self._record_trace(run_dir, "tool_requested", task_state, name=tool_name, args=tool_args, call_id=call_id, **trace_meta)
         task_state.update_native_tool_call(call_id, "running")
+        subagent_snapshot_before = None
+        subagent_snapshot_uncertain = False
+        if tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"}:
+            try:
+                subagent_snapshot_before = self.workspace.snapshot()
+            except Exception:
+                subagent_snapshot_uncertain = True
         if tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"}:
             result = self._handle_subagent_tool(tool_name, tool_args, task_state)
         else:
@@ -668,6 +675,23 @@ class JCodeAgent:
                 runtime=self,
                 abort_requested=lambda: self.abort_requested,
             )
+
+        if tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"} and result.status not in {"success", "ok"}:
+            try:
+                subagent_snapshot_after = self.workspace.snapshot()
+                subagent_changed = (
+                    []
+                    if subagent_snapshot_uncertain
+                    else sorted(set(subagent_snapshot_after) ^ set(subagent_snapshot_before or {}))
+                )
+            except Exception:
+                subagent_changed = []
+                subagent_snapshot_uncertain = True
+            if subagent_changed or subagent_snapshot_uncertain:
+                result.status = "partial_success"
+                result.changed_files = sorted(set(result.changed_files) | set(subagent_changed))
+                result.text += self._partial_side_effect_notice(result.changed_files)
+                result.metadata.update({"side_effect_possible": True, "side_effect_paths_confirmed": bool(result.changed_files), "snapshot_uncertain": subagent_snapshot_uncertain})
 
         # 工具返回时若已经收到 abort，结果不能被模型误认为本次工具调用已完整完成。
         if self.abort_requested and result.status not in {"denied", "cancelled"}:
@@ -755,6 +779,14 @@ class JCodeAgent:
         self._create_checkpoint(checkpoint, task_state, run_dir, "tool_executed")
         self.run_store.write_task_state(run_dir, task_state)
         return result
+
+
+    @staticmethod
+    def _partial_side_effect_notice(changed_paths: list[str]) -> str:
+        """生成仅回注 LLM 的子 Agent 失败副作用提醒。"""
+        if changed_paths:
+            return "\n工具执行失败，但可能已经对工作区产生部分修改。\n已检测到变更路径：" + ", ".join(str(path) for path in changed_paths) + "\n建议重新读取受影响文件。"
+        return "\n工具执行失败，但可能已经对工作区产生部分修改。"
 
     def _record_cancelled_tool_call(self, call, task_state, run_dir, checkpoint) -> None:
         """为 abort 后尚未执行的原生调用补写结果，保证 function_call 与 output 成对持久化。"""

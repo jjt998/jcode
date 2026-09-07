@@ -120,7 +120,15 @@ class ToolExecutor:
             if not sandbox_decision.allowed:
                 return self._denied(sandbox_decision, invocation=invocation)
         # 工具执行前后对比工作区状态，记录变更文件列表，确保记录到工具副作用。
-        before = self.workspace.snapshot() if tool.risky else {}
+        snapshot_uncertain = False
+        if tool.risky:
+            try:
+                before = self.workspace.snapshot()
+            except Exception:
+                before = {}
+                snapshot_uncertain = True
+        else:
+            before = {}
         try:
             if request.name == "read_file":
                 # read_file 需要记录文件新鲜度，所以参数多一个working_memory，其它工具仍保持 workspace + args 的通用签名。
@@ -134,16 +142,34 @@ class ToolExecutor:
             else:
                 result = tool.execute(self.workspace, parsed)
         except Exception as exc:
-            after = self.workspace.snapshot() if tool.risky else before
-            changed = sorted(set(after) ^ set(before))
-            status = "partial_success" if changed else "error"
+            try:
+                after = self.workspace.snapshot() if tool.risky else before
+                changed = [] if snapshot_uncertain else sorted(set(after) ^ set(before))
+            except Exception:
+                after = before
+                changed = []
+                snapshot_uncertain = True
+            status = "partial_success" if (changed or snapshot_uncertain) and request.name == "run_shell" else "error"
             code = "tool_partial_success" if changed else "tool_failed"
             metadata = self._metadata(invocation, [profile_decision, scope_decision, policy, permission, sandbox_decision], {"decision": "execution"})
-            return ToolResult(status, f"error: tool {request.name} failed: {exc}", changed_files=changed, error_type=code, metadata=metadata, decision="executed")
-        after = self.workspace.snapshot() if tool.risky else before
-        changed = sorted(set(after) ^ set(before))
+            text = f"error: tool {request.name} failed: {exc}"
+            if request.name == "run_shell" and (changed or snapshot_uncertain):
+                text += _side_effect_notice(changed)
+                metadata.update({"side_effect_possible": True, "side_effect_paths_confirmed": bool(changed), "snapshot_uncertain": snapshot_uncertain})
+            return ToolResult(status, text, changed_files=changed, error_type=code, metadata=metadata, decision="executed")
+        try:
+            after = self.workspace.snapshot() if tool.risky else before
+            changed = [] if snapshot_uncertain else sorted(set(after) ^ set(before))
+        except Exception:
+            after = before
+            changed = []
+            snapshot_uncertain = True
         if changed and not result.changed_files:
             result.changed_files = changed
+        if request.name == "run_shell" and result.status not in {"success", "ok"} and (result.changed_files or snapshot_uncertain):
+            result.status = "partial_success"
+            result.text += _side_effect_notice(result.changed_files)
+            result.metadata.update({"side_effect_possible": True, "side_effect_paths_confirmed": bool(result.changed_files), "snapshot_uncertain": snapshot_uncertain})
         if result.ok and result.changed_files:
             # JCode 自己的成功写入刷新基准，后续连续写入无需断开重读。
             for changed_path in result.changed_files:
@@ -165,6 +191,7 @@ class ToolExecutor:
             )
         )
         return result
+
 
     def _execute_runtime_tool(self, runtime: object | None, invocation: ToolInvocation, parsed_args: dict) -> ToolResult:
         if runtime is None:
@@ -288,3 +315,10 @@ class ToolExecutor:
         metadata["policy"] = [decision.to_dict() for decision in decisions]
         metadata.update(dict(extra or {}))
         return metadata
+
+
+def _side_effect_notice(changed_paths: list[str]) -> str:
+    """生成只提供给 LLM 的失败副作用提醒。"""
+    if changed_paths:
+        return "\n工具执行失败，但可能已经对工作区产生部分修改。\n已检测到变更路径：" + ", ".join(str(path) for path in changed_paths) + "\n建议重新读取受影响文件。"
+    return "\n工具执行失败，但可能已经对工作区产生部分修改。"
