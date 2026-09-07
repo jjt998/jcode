@@ -20,7 +20,6 @@ class WorkingMemory:
     last_retrieval_query: str = ""
     subagent_results: list[str] = field(default_factory=list)
     safety_notes: list[str] = field(default_factory=list)
-    compact_summary: str = ""
     runtime_context: str = ""  # 当前运行模式与工作区上下文
     todo_items: list[dict] = field(default_factory=list)  # 当前会话 todo 的只读投影
     cold_files: dict[str, dict] = field(default_factory=dict)  # Level 4 归档的冷文件索引
@@ -37,7 +36,6 @@ class WorkingMemory:
         retrieval = data.get("retrieval", {}) if isinstance(data.get("retrieval"), dict) else {}
         tools = data.get("tools", {}) if isinstance(data.get("tools"), dict) else {}
         safety = data.get("safety", {}) if isinstance(data.get("safety"), dict) else {}
-        compact = data.get("compact", {}) if isinstance(data.get("compact"), dict) else {}
         read_file_counts = _read_file_counts_from_dict(files.get("read_file_counts", {}))
         file_reads = _file_reads_from_dict(files.get("reads", {}))
         return cls(
@@ -54,7 +52,6 @@ class WorkingMemory:
             last_retrieval_query=str(retrieval.get("last_query", "")),
             subagent_results=list(tools.get("subagent_results", [])),
             safety_notes=list(safety.get("notes", [])),
-            compact_summary=str(compact.get("summary", "")),
             runtime_context=str(data.get("runtime_context", "")),
             todo_items=[item for item in (data.get("todo", {}).get("items", []) if isinstance(data.get("todo", {}), dict) else []) if isinstance(item, dict)],
             cold_files={str(k): dict(v) for k, v in dict(files.get("cold", {})).items() if isinstance(v, dict)},
@@ -87,10 +84,6 @@ class WorkingMemory:
             "safety": {
                 "notes": self.safety_notes[-20:],
             },
-            "compact": {
-                "summary": self.compact_summary,
-            },
-            "compact_summary": self.compact_summary,
             "runtime_context": self.runtime_context,
             "todo": {
                 "items": [dict(item) for item in self.todo_items],
@@ -161,9 +154,6 @@ class WorkingMemory:
     def note_safety(self, text: str) -> None:
         self.safety_notes.append(text[:1000])
 
-    def set_compact_summary(self, text: str) -> None:
-        self.compact_summary = str(text or "")
-
     def render(self) -> str:
         if self.resume_context:
             lines = ["Checkpoint:"]
@@ -190,9 +180,6 @@ class WorkingMemory:
             lines.append("- subagent_results:\n" + "\n".join(f"  - {x}" for x in self.subagent_results[-5:]))
         if self.tool_observations:
             lines.append("- recent_tool_observations:\n" + "\n".join(f"  - {item['tool']} ({item['status']}): {item['summary']} {item['artifact']}" for item in self.tool_observations[-5:]))
-        #lines.append("[compact]")
-        #if self.compact_summary:这里的压缩摘要是哪里的？历史对话的？先不写这个。 
-        #    lines.append("- summary:\n" + "\n".join(f"  - {x}" for x in self.compact_summary.splitlines()[:8]))
         if self.safety_notes:
             lines.append("- safety_notes:\n" + "\n".join(f"  - {x}" for x in self.safety_notes[-5:]))
         if self.runtime_context:

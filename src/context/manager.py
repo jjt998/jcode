@@ -44,13 +44,6 @@ class ContextManager:
         internal_instruction = str(user_message) if str(user_message).startswith("[Continuation Required]") else ""
         memory_candidate.task_goal = original_goal if internal_instruction else str(user_message)
         memory_candidate.sync_todos(session_candidate.get("todo_ledger", {}))
-        # 直接调用 ContextManager 时也保证当前请求在 History 与 core.task_goal 同时存在。
-        if not str(user_message).startswith("[Continuation Required]"):
-            history_items = session_candidate.setdefault("history", [])
-            sequence = int(session_candidate.get("event_seq", 0) or 0) + 1
-            turn_id = str(session_candidate.get("active_run_id") or "current")
-            history_items.append({"kind": "user", "event_id": f"event-{sequence}", "turn_id": turn_id, "content": str(user_message)})
-            session_candidate["event_seq"] = sequence
         runtime_text = getattr(self.workspace, "runtime_text", lambda: "")()
         memory_candidate.runtime_context = "\n".join(part for part in (render_runtime_mode_text(session_candidate), runtime_text) if part)
         history = [HistoryEvent.from_dict(item) for item in session_candidate.get("history", [])]
@@ -119,7 +112,7 @@ class ContextManager:
                         continue
                     for item in run_store.read_verified_artifact(ref):
                         event_id = str(item.get("event_id", ""))
-                        if not event_id or item.get("kind") == "compact_summary":
+                        if not event_id or item.get("kind") == "compact_summary" or str(item.get("turn_id") or "") in keep_ids:
                             continue
                         previous = rebuilt.get(event_id)
                         if previous is not None and previous != item:
@@ -127,7 +120,13 @@ class ContextManager:
                             raise ArtifactIntegrityError(f"history event conflict: {event_id}")
                         rebuilt.setdefault(event_id, item)
                 if rebuilt:
-                    evicted = list(rebuilt.values())
+                    # 旧摘要负责概括已压缩历史；artifact 只补充当前保留窗口之外的原始事件。
+                    merged = dict(rebuilt)
+                    for item in evicted:
+                        event_id = str(item.get("event_id", ""))
+                        if event_id:
+                            merged.setdefault(event_id, item)
+                    evicted = list(merged.values())
             summary = None
             summary_model_audit = None
             if self.summary_router is not None and evicted:
@@ -154,7 +153,7 @@ class ContextManager:
             summary.artifact_paths = [str(ref.get("path")) for ref in artifact_chain if ref.get("path")]
             summary_turn_id = self._compact_summary_turn_id(ids)
             summary_event = HistoryEvent("compact_summary", f"compact-{session_candidate.get('event_seq', 0) + 1}", summary_turn_id, summary.model_dump_json(exclude_none=True), metadata={"summary_version": summary.summary_version, "history_artifact": history_artifact_ref, "artifact_chain": artifact_chain})
-            history = [summary_event] + [event for event in verified_history if event.turn_id in keep_ids]
+            history = [summary_event] + [event for event in verified_history if event.turn_id in keep_ids and event.kind != "compact_summary"]
             session_candidate["history"] = [event.to_dict() for event in history]
             session_candidate["event_seq"] = int(session_candidate.get("event_seq", 0)) + 1
             session_commit_required = True
@@ -329,7 +328,6 @@ class ContextManager:
         memory.recent_files = memory.recent_files[-12:]
         memory.retrieved_memory = []
         memory.subagent_results = []
-        memory.compact_summary = ""
 
     def _reduce_working_memory_for_pressure(self, memory) -> None:
         """公开压力治理入口，供运行时和审计测试复用。"""

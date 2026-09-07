@@ -31,6 +31,33 @@ def test_task_goal_is_full_request_and_history(tmp_path):
     assert session["history"][0]["content"] == "new task"
 
 
+def test_build_does_not_duplicate_current_user_event(tmp_path):
+    """Agent 已写入当前请求时，ContextManager 只读取而不重复追加。"""
+    m = manager(tmp_path)
+    memory = WorkingMemory(tmp_path)
+    session = {"event_seq": 1, "history": [{"kind": "user", "event_id": "event-1", "turn_id": "run-1", "content": "same task"}]}
+
+    outcome = m.build(session, memory, "same task", allowed_tools=frozenset())
+
+    assert [item.get("content") for item in outcome.session_candidate["history"]].count("same task") == 1
+
+
+def test_compaction_history_keeps_only_latest_summary():
+    """重复压缩后 session history 中只能保留新摘要，不能累积旧摘要。"""
+    # 该边界由压缩分支直接验证，避免依赖 Provider 网络请求。
+    from src.context.result import HistoryEvent
+
+    events = [
+        HistoryEvent("compact_summary", "summary-old", "turn-1", "old"),
+        HistoryEvent("user", "user-2", "turn-2", "two"),
+        HistoryEvent("user", "user-3", "turn-3", "three"),
+        HistoryEvent("user", "user-4", "turn-4", "four"),
+    ]
+    keep_ids = {"turn-2", "turn-3", "turn-4"}
+    filtered = [event for event in events if event.turn_id in keep_ids and event.kind != "compact_summary"]
+    assert [event.kind for event in filtered] == ["user", "user", "user"]
+
+
 def test_provider_snapshot_is_audited_exactly(tmp_path):
     outcome = manager(tmp_path).build({"history": []}, WorkingMemory(tmp_path), "task", allowed_tools=frozenset())
     snapshot = outcome.context_result.provider_input

@@ -377,7 +377,6 @@ class JCodeAgent:
             self.working_memory = context_result.working_memory_candidate
         self.session["ctx_info"] = context_result.ctx_info
         self.session_store.save(self.session)
-        self.working_memory.set_compact_summary(str(context_result.ctx_info.get("history", {}).get("compact_summary", "")).strip())
         compact_info = dict(context_result.ctx_info.get("compact", {}) or {})
         self._emit_compact_context_events(run_dir, task_state, context_result, compact_info)
         if context_result.compact_audit:
