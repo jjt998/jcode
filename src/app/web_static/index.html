@@ -24,7 +24,11 @@
         <div class="project-list" id="projectList"></div>
         <div class="divider"></div>
         <button class="new-session" id="newSession">在项目中新建会话</button>
-        <div class="session-list" id="sessionList"></div>
+        <button class="session-toggle" id="sessionToggle" type="button" aria-expanded="false">会话</button>
+        <div class="session-panel" id="sessionPanel" hidden>
+          <div class="session-list" id="sessionList"></div>
+          <button class="session-scroll-down" id="sessionScrollDown" type="button" title="向下滚动" aria-label="向下滚动">⌄</button>
+        </div>
       </aside>
 
       <main class="conversation" aria-label="Conversation">

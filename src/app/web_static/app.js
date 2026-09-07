@@ -20,6 +20,9 @@ const els = {
   projectPath: document.querySelector("#projectPath"),
   projectName: document.querySelector("#projectName"),
   sessionList: document.querySelector("#sessionList"),
+  sessionPanel: document.querySelector("#sessionPanel"),
+  sessionToggle: document.querySelector("#sessionToggle"),
+  sessionScrollDown: document.querySelector("#sessionScrollDown"),
   newSession: document.querySelector("#newSession"),
   refreshAll: document.querySelector("#refreshAll"),
   sessionTitle: document.querySelector("#sessionTitle"),
@@ -36,6 +39,24 @@ const els = {
   reasoningEffort: document.querySelector("#reasoningEffort"),
   reasoningSupport: document.querySelector("#reasoningSupport"),
 };
+
+// 会话区默认收起，展开后会话列表在固定区域内滚动。
+els.sessionToggle.addEventListener("click", () => {
+  const expanded = els.sessionToggle.getAttribute("aria-expanded") === "true";
+  els.sessionToggle.setAttribute("aria-expanded", String(!expanded));
+  els.sessionPanel.hidden = expanded;
+  if (!expanded) requestAnimationFrame(updateSessionScrollDownVisibility);
+});
+els.sessionScrollDown.addEventListener("click", () => {
+  els.sessionList.scrollTo({ top: els.sessionList.scrollHeight, behavior: "smooth" });
+});
+window.addEventListener("resize", updateSessionScrollDownVisibility);
+
+// 仅在会话列表超过侧栏可用高度时显示向下滚动按钮。
+function updateSessionScrollDownVisibility() {
+  if (els.sessionPanel.hidden) return;
+  els.sessionScrollDown.hidden = els.sessionList.scrollHeight <= els.sessionList.clientHeight + 1;
+}
 
 // Web 只订阅明确允许展示的事件；新增后端事件不会自动进入前端。
 const STREAM_EVENTS = Object.freeze([
@@ -215,6 +236,7 @@ function renderSessions() {
   els.sessionList.innerHTML = "";
   if (!state.sessions.length) {
     els.sessionList.append(emptyNode(state.projectId ? "这个项目还没有会话" : "先选择项目"));
+    requestAnimationFrame(updateSessionScrollDownVisibility);
     return;
   }
   for (const session of state.sessions) {
@@ -229,6 +251,7 @@ function renderSessions() {
     button.addEventListener("click", () => selectSession(session.id));
     els.sessionList.append(button);
   }
+  requestAnimationFrame(updateSessionScrollDownVisibility);
 }
 
 async function selectSession(sessionId) {

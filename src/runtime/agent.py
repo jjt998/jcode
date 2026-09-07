@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 import time
+import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -214,17 +216,25 @@ class JCodeAgent:
             if context is not None:
                 try:
                     return self._finish_run(*context, exc.user_message, exc.code)
-                except Exception:
+                except Exception as finish_exc:
+                    self._print_runtime_error(finish_exc)
                     return exc.user_message
             return exc.user_message
         except Exception as exc:
+            self._print_runtime_error(exc)
             context = self._active_run_context
             if context is not None:
                 try:
                     return self._finish_run(*context, f"运行时错误: {exc}", UNEXPECTED_RUNTIME_ERROR)
-                except Exception:
+                except Exception as finish_exc:
+                    self._print_runtime_error(finish_exc)
                     pass
             return f"运行时错误: {exc}"
+
+    def _print_runtime_error(self, exc: Exception) -> None:
+        """将脱敏后的异常堆栈输出到控制台，便于定位后台运行失败。"""
+        error_trace = "".join(traceback.format_exception(exc))
+        print(self.redactor.redact(error_trace), file=sys.stderr, flush=True)
 
     def _ask_loop(self, user_message: str) -> str:
         self.abort_requested = False
@@ -248,6 +258,7 @@ class JCodeAgent:
                 self._record_trace(run_dir, "runtime_stopped", task_state, stop_reason=exc.code, audit=exc.audit)
                 return self._finish_run(task_state, run_dir, exc.user_message, exc.code)
             except Exception as exc:
+                self._print_runtime_error(exc)
                 self._record_trace(
                     run_dir,
                     "run_failed",
@@ -457,7 +468,6 @@ class JCodeAgent:
             audit = dict(context_result.compact_audit or {})
             comparison_payload = {
                 **comparison,
-                "run_id": task_state.run_id,
                 "pressure_level": int(event_payload.get("pressure_level", 0) or 0),
                 "result": {
                     "status": "fallback" if audit.get("status") == "fallback" else "applied",

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import sys
 import threading
+import traceback
 import uuid
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -406,6 +408,12 @@ class WebRunManager:
                     run.status = "completed"
                     run.emit("web_run_completed", final_text=final_text)
         except Exception as exc:
+            error_trace = "".join(traceback.format_exception(exc))
+            redactor = getattr(run.agent, "redactor", None)
+            if redactor is not None:
+                error_trace = redactor.redact(error_trace)
+            # Web 后台线程的异常不会自动显示，必须显式写入控制台。
+            print(error_trace, file=sys.stderr, flush=True)
             with run.lock:
                 run.status = "failed"
                 run.error = f"{type(exc).__name__}: {exc}"

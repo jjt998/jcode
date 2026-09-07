@@ -54,6 +54,9 @@ button {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .brand,
@@ -154,6 +157,47 @@ h3 {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 0;
+}
+
+.session-toggle {
+  width: 100%;
+  padding: 9px 12px;
+  text-align: left;
+  background: transparent;
+  color: var(--rail-ink);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.session-panel {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 6px;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.session-panel[hidden] {
+  display: none;
+}
+
+.session-scroll-down {
+  width: 100%;
+  min-height: 28px;
+  padding: 2px 8px;
+  background: transparent;
+  color: var(--rail-ink);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.session-scroll-down[hidden] {
+  display: none;
 }
 
 .project-list {
