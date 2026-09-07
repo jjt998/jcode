@@ -43,7 +43,11 @@
         </header>
         <div class="horizontal-resizer" id="topbarResizer" role="separator" tabindex="0" aria-label="调整标题区高度" aria-orientation="horizontal"></div>
 
-        <section class="messages" id="turnList" aria-live="polite"></section>
+        <section class="messages" id="turnList" aria-live="polite">
+          <button type="button" class="jump-latest" id="jumpLatest" aria-label="跳转到最新内容" title="跳转到最新内容" hidden>
+            <span aria-hidden="true">↓</span>
+          </button>
+        </section>
 
         <div class="horizontal-resizer" id="composerResizer" role="separator" tabindex="0" aria-label="调整输入区高度" aria-orientation="horizontal"></div>
 

@@ -390,13 +390,6 @@ h3 {
   font-size: 13px;
 }
 
-.step-empty {
-  padding: 12px 14px;
-  color: var(--muted);
-  font-family: Consolas, "Cascadia Mono", monospace;
-  font-size: 12px;
-}
-
 .step {
   border: 1px solid var(--line);
   border-left-width: 5px;
@@ -680,6 +673,44 @@ h3 {
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.compression-summary-text,
+.compression-audit-fields {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.compression-summary-text pre {
+  margin: 0;
+  max-width: 100%;
+  overflow: auto;
+  background: var(--code);
+  color: #e7efe8;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.compression-audit-fields > div {
+  display: grid;
+  grid-template-columns: minmax(92px, 140px) minmax(0, 1fr);
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.compression-audit-fields > div span:first-child {
+  color: var(--muted);
+}
+
+.compression-audit-fields > div span:last-child {
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
@@ -1080,8 +1111,33 @@ body {
 }
 
 .messages {
-  padding: 30px clamp(18px, 5vw, 72px);
+  padding: 30px clamp(18px, 5vw, 72px) 64px;
   gap: 26px;
+  position: relative;
+  overflow-anchor: none;
+}
+
+.jump-latest {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: 16px;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0;
+  border: 1px solid rgba(22, 131, 111, 0.42);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--signal);
+  box-shadow: 0 6px 18px rgba(23, 42, 38, 0.14);
+  transform: translateX(-50%);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.jump-latest:hover {
+  background: #edf8f4;
 }
 
 .message,

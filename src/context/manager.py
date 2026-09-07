@@ -158,7 +158,8 @@ class ContextManager:
             session_candidate["history"] = [event.to_dict() for event in history]
             session_candidate["event_seq"] = int(session_candidate.get("event_seq", 0)) + 1
             session_commit_required = True
-            compact_audit = {"mode": "model" if summary_model_audit and summary_model_audit.get("status") == "success" else "deterministic", "source": "summary_model" if summary_model_audit and summary_model_audit.get("status") == "success" else "structured_metadata", "status": "applied", "fallback_reason": (summary_model_audit or {}).get("fallback_reason", ""), "summary_text": summary.model_dump_json(exclude_none=True), "artifact_ref": history_artifact_ref, "summary_model": summary_model_audit or {}}
+            summary_model_succeeded = bool(summary_model_audit and summary_model_audit.get("status") == "success")
+            compact_audit = {"mode": "model" if summary_model_succeeded else "deterministic", "source": "summary_model" if summary_model_succeeded else "rule", "status": "applied" if summary_model_succeeded else "fallback", "fallback_reason": (summary_model_audit or {}).get("fallback_reason", ""), "summary_text": summary.model_dump_json(exclude_none=True), "artifact_ref": history_artifact_ref, "summary_model": summary_model_audit or {}}
         history = self._build_structured_history(session_candidate, pressure_level=level)[0]
         skill = render_skill_section(select_skill_entries(level))
         if level >= 3:

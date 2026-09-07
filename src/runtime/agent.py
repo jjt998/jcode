@@ -470,6 +470,8 @@ class JCodeAgent:
                     "trigger": compact_info.get("trigger", "") or "pressure_threshold",
                     "summary_source": audit.get("source", "") or "rule",
                     "artifact_ref": audit.get("artifact_ref", ""),
+                    # 第四档直接携带最终摘要，前端无需读取历史审计文件。
+                    "summary_text": audit.get("summary_text", ""),
                 },
             }
             self.session_events.emit("context_compression_compared", run_id=task_state.run_id, **comparison_payload)

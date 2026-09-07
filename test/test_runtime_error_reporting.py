@@ -24,9 +24,9 @@ def test_context_compression_event_does_not_pass_run_id_twice():
     context_result = SimpleNamespace(
         ctx_info={
             "pressure": {"level": 1, "range": "high"},
-            "compression_comparison": {"before_tokens": 100, "after_tokens": 80},
+            "compression_comparison": {"before_tokens": 100, "after_tokens": 80, "content_changes": [{"change": "removed"}]},
         },
-        compact_audit={},
+        compact_audit={"status": "fallback", "source": "rule", "summary_text": '{"summary":"规则摘要"}', "artifact_ref": "audit.json"},
     )
 
     agent._emit_compact_context_events(
@@ -38,6 +38,10 @@ def test_context_compression_event_does_not_pass_run_id_twice():
 
     comparison_event = next(row for row in event_recorder.rows if row["event"] == "context_compression_compared")
     assert comparison_event["run_id"] == "run-1"
+    assert comparison_event["content_changes"] == [{"change": "removed"}]
+    assert comparison_event["result"]["status"] == "fallback"
+    assert comparison_event["result"]["label"] == "降级为规则压缩"
+    assert comparison_event["result"]["summary_text"] == '{"summary":"规则摘要"}'
 
 
 def test_unexpected_runtime_error_is_printed_to_stderr(capsys):

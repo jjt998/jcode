@@ -47,6 +47,28 @@ def test_steps_keep_full_tool_result_summary():
     assert steps[0]["tool_calls"][0]["result_text"] == full_result
 
 
+def test_steps_preserve_compression_summary_and_attach_one_comparison():
+    """压缩事件挂到后续模型步骤，重复事件不生成额外步骤或卡片。"""
+    comparison = {
+        "before": {"pressure_level": 4, "total_input_tokens": 128000},
+        "after": {"pressure_level": 4, "total_input_tokens": 84000},
+        "delta": {"fixed_items": {"history": -42000}, "total_released_tokens": 44000},
+        "content_changes": [{"change": "removed"}],
+        "result": {"status": "applied", "summary_text": "完整摘要\n第二行"},
+    }
+    events = [
+        {"event": "context_compression_compared", "created_at": "2026-08-30T15:23:40Z", **comparison},
+        {"event": "context_compression_compared", "created_at": "2026-08-30T15:23:40.100Z", **comparison},
+        {"event": "model_responded", "created_at": "2026-08-30T15:23:41Z", "response_text": "完成", "native_tool_calls": []},
+    ]
+
+    steps, _ = build_reasoning_steps(events, run_id="run-1")
+
+    assert len(steps) == 1
+    assert steps[0]["compression_comparison"]["result"]["summary_text"] == "完整摘要\n第二行"
+    assert steps[0]["compression_comparison"]["content_changes"] == [{"change": "removed"}]
+
+
 def test_active_run_snapshot_contains_current_steps_and_cursor():
     run = WebRun("web-run-1", "project-1", Path("."), "session-1", user_message="检查代码")
     run.reasoning_steps = [{"step_id": "run-1:1", "index": 1, "status": "running"}]

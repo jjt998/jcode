@@ -373,6 +373,7 @@ class WebRunManager:
         original_start_run = agent.run_store.start_run
         original_append_trace = agent.run_store.append_trace
         step_builder = StepTimelineBuilder()
+        last_step_patch_signatures: dict[str, str] = {}
 
         def start_run_wrapper(store_self, task_state):
             run_dir = original_start_run(task_state)
@@ -391,6 +392,12 @@ class WebRunManager:
             with web_run.lock:
                 web_run.reasoning_steps = step_builder.steps_snapshot()
                 for patch in patches:
+                    # 同一步骤的完全相同快照无需重复推送，降低前端无效布局更新。
+                    signature = json.dumps(patch, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                    previous = last_step_patch_signatures.get(str(patch.get("step_id")))
+                    if previous == signature:
+                        continue
+                    last_step_patch_signatures[str(patch.get("step_id"))] = signature
                     web_run.emit("step_patch", step=patch)
 
         agent.run_store.start_run = MethodType(start_run_wrapper, agent.run_store)

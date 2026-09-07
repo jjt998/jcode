@@ -12,6 +12,10 @@ const state = {
   selectionEpoch: 0,
   openDetails: new Map(),
   modelProfiles: [],
+  followLatest: true,
+  programmaticScroll: false,
+  newContentPending: false,
+  renderFrame: 0,
 };
 
 const els = {
@@ -40,7 +44,35 @@ const els = {
   thinkingEnabled: document.querySelector("#thinkingEnabled"),
   reasoningEffort: document.querySelector("#reasoningEffort"),
   reasoningSupport: document.querySelector("#reasoningSupport"),
+  jumpLatest: document.querySelector("#jumpLatest"),
 };
+
+const FOLLOW_LATEST_THRESHOLD = 24;
+
+function isAtLatest() {
+  return els.turnList.scrollHeight - els.turnList.scrollTop - els.turnList.clientHeight <= FOLLOW_LATEST_THRESHOLD;
+}
+
+els.turnList.addEventListener("scroll", () => {
+  if (state.programmaticScroll) return;
+  state.followLatest = isAtLatest();
+  if (state.followLatest) {
+    state.newContentPending = false;
+    els.jumpLatest.hidden = true;
+  }
+});
+
+els.jumpLatest.addEventListener("click", () => {
+  state.followLatest = true;
+  state.newContentPending = false;
+  els.jumpLatest.hidden = true;
+  state.programmaticScroll = true;
+  els.turnList.scrollTo({ top: els.turnList.scrollHeight, behavior: "smooth" });
+  window.setTimeout(() => {
+    state.programmaticScroll = false;
+    els.turnList.scrollTop = els.turnList.scrollHeight;
+  }, 220);
+});
 
 // 侧栏宽度只影响布局，不改变项目、会话或运行状态。
 const SIDEBAR_MIN_WIDTH = 240;
@@ -293,12 +325,14 @@ async function selectProject(projectId) {
   state.activeRunId = "";
   state.activeTurnId = "";
   state.turns = [];
+  state.followLatest = true;
+  state.newContentPending = false;
   state.openDetails.clear();
   els.projectRoot.textContent = project.root;
   els.sessionTitle.textContent = project.name;
   setRunStatus("idle");
   renderProjects();
-  renderTurns();
+  renderTurns({ initial: true });
   await loadSessions(true);
 }
 
@@ -335,6 +369,11 @@ async function selectSession(sessionId) {
   const epoch = ++state.selectionEpoch;
   // 切换窗口时立即关闭旧流，避免旧会话的尾部事件落入新窗口。
   stopStream();
+  state.turns = [];
+  state.followLatest = true;
+  state.newContentPending = false;
+  state.openDetails.clear();
+  renderTurns({ initial: true });
   const session = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions/${encodeURIComponent(sessionId)}`);
   if (epoch !== state.selectionEpoch) return;
   state.sessionId = session.id;
@@ -429,28 +468,171 @@ async function loadTurns(epoch = state.selectionEpoch) {
     state.activeTurnId = turn.local_id;
   }
   sortTurns();
-  renderTurns();
+  renderTurns({ initial: true });
 }
 
-function renderTurns() {
-  els.turnList.innerHTML = "";
+function renderTurns(options = {}) {
+  if (options.initial) {
+    state.followLatest = true;
+    state.newContentPending = false;
+  }
+  const scrollState = options.initial ? { followBottom: true } : captureTurnScrollState();
+  const detailState = captureDetailState();
   if (!state.turns.length) {
-    const node = document.createElement("div");
-    node.className = "empty-state";
-    node.innerHTML = "<strong>准备开始</strong><span>发送一个任务，步骤时间线会显示在这里。</span>";
-    els.turnList.append(node);
+    if (!els.turnList.querySelector(".empty-state")) {
+      const node = document.createElement("div");
+      node.className = "empty-state";
+      node.innerHTML = "<strong>准备开始</strong><span>发送一个任务，步骤时间线会显示在这里。</span>";
+      turnNodes().forEach((turn) => turn.remove());
+      els.turnList.insertBefore(node, els.jumpLatest);
+    }
+    els.jumpLatest.hidden = true;
     return;
   }
+
+  els.turnList.querySelector(".empty-state")?.remove();
+  const existingTurns = new Map(turnNodes().map((node) => [node.dataset.turnId, node]));
+  const desiredNodes = [];
   for (const turn of state.turns) {
-    els.turnList.append(renderTurn(turn));
+    const turnId = renderTurnId(turn);
+    const signature = turnRenderSignature(turn);
+    const existing = existingTurns.get(turnId);
+    const node = existing?.dataset.renderSignature === signature ? existing : existing ? patchTurn(existing, turn) : renderTurn(turn);
+    node.dataset.renderSignature = signature;
+    desiredNodes.push(node);
   }
-  els.turnList.scrollTop = els.turnList.scrollHeight;
+  // 先移动目标节点到正确顺序，再删除旧节点，避免内容变化时残留同一轮次的副本。
+  for (const node of desiredNodes) els.turnList.append(node);
+  const desiredNodeSet = new Set(desiredNodes);
+  for (const node of turnNodes()) {
+    if (!desiredNodeSet.has(node)) node.remove();
+  }
+  restoreDetailState(detailState);
+  restoreTurnScrollState(scrollState);
+  els.jumpLatest.hidden = state.followLatest || !state.newContentPending;
+}
+
+function patchTurn(existing, turn) {
+  const fresh = renderTurn(turn);
+  morphNode(existing, fresh);
+  return existing;
+}
+
+function morphNode(existing, fresh) {
+  if (existing.nodeType === Node.TEXT_NODE && fresh.nodeType === Node.TEXT_NODE) {
+    if (existing.nodeValue !== fresh.nodeValue) existing.nodeValue = fresh.nodeValue;
+    return existing;
+  }
+  if (existing.nodeType !== fresh.nodeType || existing.nodeName !== fresh.nodeName) return fresh;
+  const wasOpen = existing instanceof HTMLDetailsElement ? existing.open : null;
+  const scrollTop = existing.scrollTop;
+  for (const attribute of [...existing.attributes]) {
+    if (!fresh.hasAttribute(attribute.name)) existing.removeAttribute(attribute.name);
+  }
+  for (const attribute of [...fresh.attributes]) existing.setAttribute(attribute.name, attribute.value);
+  // 动态加载的正文由用户当前视图拥有，实时快照不能用占位内容覆盖它。
+  if (existing.dataset.contentLoaded === "true") return existing;
+  const oldChildren = [...existing.childNodes];
+  const freshChildren = [...fresh.childNodes];
+  const used = new Set();
+  const keyed = new Map(oldChildren.map((child) => [child.dataset?.stateKey || child.dataset?.turnId || "", child]).filter(([key]) => key));
+  freshChildren.forEach((freshChild, index) => {
+    const key = freshChild.dataset?.stateKey || freshChild.dataset?.turnId || "";
+    const candidate = (key && keyed.get(key)) || oldChildren[index];
+    if (candidate && !used.has(candidate) && candidate.nodeName === freshChild.nodeName) {
+      used.add(candidate);
+      const result = morphNode(candidate, freshChild);
+      if (result !== candidate) candidate.replaceWith(result);
+      if (candidate !== existing.childNodes[index]) existing.insertBefore(candidate, existing.childNodes[index] || null);
+      return;
+    }
+    existing.insertBefore(freshChild, existing.childNodes[index] || null);
+  });
+  for (const child of [...existing.childNodes]) if (!used.has(child) && !freshChildren.includes(child)) child.remove();
+  if (wasOpen !== null) existing.open = wasOpen;
+  existing.scrollTop = scrollTop;
+  return existing;
+}
+
+function scheduleTurnRender() {
+  if (state.renderFrame) return;
+  state.renderFrame = requestAnimationFrame(() => {
+    state.renderFrame = 0;
+    renderTurns();
+  });
+}
+
+function turnNodes() {
+  // children 只包含直接子节点，不受 :scope 选择器实现差异影响。
+  return [...els.turnList.children].filter((node) => node.classList.contains("turn"));
+}
+
+function renderTurnId(turn) {
+  return String(turn.local_id || turn.web_run_id || turn.run_id || "history");
+}
+
+function turnRenderSignature(turn) {
+  // 只包含影响 DOM 的字段，避免事件数组增长导致无意义的重绘。
+  return JSON.stringify({
+    user_message: turn.user_message || "",
+    reasoning_steps: turn.reasoning_steps || [],
+    status: turn.status || "",
+    pending_approval: Boolean(turn.pending_approval),
+    pending_question: turn.pending_question || "",
+    pending_choices: turn.pending_choices || [],
+    final_text: turn.final_text || "",
+    assistant_message: turn.assistant_message || "",
+  });
+}
+
+function captureTurnScrollState() {
+  if (state.followLatest) return { followBottom: true };
+  const visibleTurn = turnNodes().find(
+    (node) => node.offsetTop + node.offsetHeight > els.turnList.scrollTop,
+  );
+  if (!visibleTurn) return { followBottom: false };
+  return {
+    followBottom: false,
+    turnId: visibleTurn.dataset.turnId,
+    offset: visibleTurn.offsetTop - els.turnList.scrollTop,
+  };
+}
+
+function restoreTurnScrollState(scrollState) {
+  if (scrollState.followBottom || state.followLatest) {
+    state.programmaticScroll = true;
+    els.turnList.scrollTop = els.turnList.scrollHeight;
+    requestAnimationFrame(() => { state.programmaticScroll = false; });
+    return;
+  }
+  if (!scrollState.turnId) return;
+  const anchor = turnNodes().find((node) => node.dataset.turnId === scrollState.turnId);
+  if (anchor) els.turnList.scrollTop = anchor.offsetTop - scrollState.offset;
+}
+
+function captureDetailState() {
+  const states = new Map();
+  els.turnList.querySelectorAll("[data-state-key], [data-dynamic-scroll-key]").forEach((node) => {
+    const key = node.dataset.stateKey || node.dataset.dynamicScrollKey;
+    states.set(key, { open: node.open, scrollTop: node.scrollTop });
+  });
+  return states;
+}
+
+function restoreDetailState(states) {
+  els.turnList.querySelectorAll("[data-state-key], [data-dynamic-scroll-key]").forEach((node) => {
+    const key = node.dataset.stateKey || node.dataset.dynamicScrollKey;
+    const saved = states.get(key);
+    if (!saved) return;
+    if ("open" in node) node.open = saved.open;
+    node.scrollTop = saved.scrollTop;
+  });
 }
 
 function renderTurn(turn) {
   const item = document.createElement("article");
   item.className = "turn";
-  item.dataset.turnId = turn.local_id || turn.run_id;
+  item.dataset.turnId = renderTurnId(turn);
   if (turn.user_message) item.append(messageNode("user", turn.user_message));
   const steps = turn.reasoning_steps || [];
   const compressionSummary = runCompressionSummary(steps);
@@ -512,13 +694,6 @@ function stepTimeline(turn) {
   const section = document.createElement("section");
   section.className = "step-timeline";
   const steps = turn.reasoning_steps || [];
-  if (!steps.length) {
-    const empty = document.createElement("div");
-    empty.className = "step-empty";
-    empty.textContent = "等待步骤生成";
-    section.append(empty);
-    return section;
-  }
   for (const step of steps) {
     section.append(stepItem(turn, step));
   }
@@ -532,10 +707,7 @@ function stepTimeline(turn) {
 }
 
 function shouldShowStepTimeline(turn) {
-  const isActive = ["running", "waiting_approval", "aborting"].includes(turn.status);
-  // 历史接口尚未写入 trace 时，用户消息没有答案就仍是待执行状态。
-  const isWaitingForResult = Boolean(turn.user_message) && !turn.final_text && !turn.assistant_message;
-  return Boolean((turn.reasoning_steps || []).length) || isActive || isWaitingForResult;
+  return Boolean((turn.reasoning_steps || []).length);
 }
 
 function stepItem(turn, step) {
@@ -602,9 +774,17 @@ function stepItem(turn, step) {
 function compressionCard(turn, step) {
   const comparison = step.compression_comparison || {};
   const before = comparison.before || step.compression_before || {};
+  const level = Number(before.pressure_level || comparison.pressure_level || 0);
+  if (level === 4) {
+    return renderFourthLevelCompressionCard(turn, step, comparison, before);
+  }
+  return renderStandardCompressionCard(turn, step, comparison, before);
+}
+
+function renderStandardCompressionCard(turn, step, comparison, before) {
   const after = comparison.after;
   const result = comparison.result || {};
-  const level = Number(before.pressure_level || step.compression_comparison?.pressure_level || 0);
+  const level = Number(before.pressure_level || comparison.pressure_level || 0);
   const status = result.label || (level === 0 ? "未压缩" : (result.status === "fallback" ? "降级为规则压缩" : "已压缩"));
   const details = document.createElement("details");
   details.className = "mini-detail compression-card";
@@ -621,6 +801,44 @@ function compressionCard(turn, step) {
     body.append(detailBlock("内容差值", changes.length ? changes.map((item) => `${item.change || "变化"}｜第 ${item.turn || ""} 轮｜${item.tool_name || item.category || ""}\n${item.summary || item.file_ref || ""}`).join("\n\n") : "本次没有移出内容", `compression-content:${turnKey(turn)}:${step.step_id}`));
     body.append(detailBlock("压缩结果", JSON.stringify(result, null, 2), `compression-result:${turnKey(turn)}:${step.step_id}`));
   }
+  details.append(body);
+  return details;
+}
+
+function renderFourthLevelCompressionCard(turn, step, comparison, before) {
+  const after = comparison.after || {};
+  const delta = comparison.delta || {};
+  const result = comparison.result || {};
+  const fallback = result.status === "fallback";
+  const status = fallback ? "降级为规则压缩" : "已压缩";
+  const details = document.createElement("details");
+  details.className = "mini-detail compression-card compression-card-fourth-level";
+  // 第四档默认折叠，避免完整摘要在消息区抢占首屏空间。
+  rememberOpenState(details, `compression:${turnKey(turn)}:${step.step_id}`, false);
+  details.innerHTML = `<summary><span>上下文压缩：${escapeHtml(status)} · 4 档 · 压力 ${escapeHtml(formatRatio(before.pressure_ratio))} · ${escapeHtml(String(before.total_input_tokens || 0))} tokens</span></summary>`;
+
+  const body = document.createElement("div");
+  body.className = "compression-body";
+  body.append(compressionMetricBlock("压缩前", before));
+  body.append(compressionMetricBlock("压缩后", after));
+  body.append(compressionDeltaBlock(delta));
+
+  const summarySection = document.createElement("section");
+  summarySection.className = "compression-summary-text";
+  const summaryText = result.summary_text || "";
+  summarySection.innerHTML = `<strong>压缩后摘要</strong><pre>${escapeHtml(summaryText || "压缩摘要为空")}</pre>`;
+  body.append(summarySection);
+
+  const auditSection = document.createElement("section");
+  auditSection.className = "compression-audit-fields";
+  const fields = [
+    ["压缩状态", status],
+    ["触发条件", result.trigger || ""],
+    ["摘要来源", result.summary_source || ""],
+    ["artifact 引用", result.artifact_ref || ""],
+  ];
+  auditSection.innerHTML = `<strong>压缩状态与审计信息</strong>${fields.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><span>${escapeHtml(String(value || "未提供"))}</span></div>`).join("")}`;
+  body.append(auditSection);
   details.append(body);
   return details;
 }
@@ -690,7 +908,12 @@ function toolArtifactNode(ref) {
     button.textContent = "加载中";
     try {
       const data = await api(`/api/projects/${encodeURIComponent(state.projectId)}/tool-artifact?ref=${encodeURIComponent(ref)}`);
-      section.append(detailBlock("完整输出", data.content || "", `tool-artifact:${state.projectId}:${ref}`));
+      const loadedDetail = detailBlock("完整输出", data.content || "", `tool-artifact:${state.projectId}:${ref}`);
+      loadedDetail.dataset.contentLoaded = "true";
+      loadedDetail.dataset.loaded = "true";
+      loadedDetail.querySelector("pre")?.setAttribute("data-content-loaded", "true");
+      loadedDetail.querySelector("pre")?.setAttribute("data-dynamic-scroll-key", `${loadedDetail.dataset.stateKey}:content`);
+      section.append(loadedDetail);
       button.dataset.loaded = "true";
       button.textContent = "完整输出已加载";
     } catch (error) {
@@ -720,6 +943,7 @@ function contextAuditBlock(ref, key) {
   const summary = document.createElement("summary");
   summary.textContent = "完整上下文审计";
   const pre = document.createElement("pre");
+  pre.dataset.dynamicScrollKey = `${key}:content`;
   pre.textContent = ref;
   details.append(summary, pre);
   details.addEventListener("toggle", async () => {
@@ -728,6 +952,9 @@ function contextAuditBlock(ref, key) {
       const data = await api(`/api/projects/${encodeURIComponent(state.projectId)}/context-audit?ref=${encodeURIComponent(ref)}`);
       pre.textContent = JSON.stringify(data.context_result || data, null, 2);
       details.dataset.loaded = "true";
+      details.dataset.contentLoaded = "true";
+      details.dataset.loaded = "true";
+      pre.dataset.contentLoaded = "true";
     } catch (error) {
       pre.textContent = `无法读取审计文件: ${error.message}`;
     }
@@ -736,6 +963,7 @@ function contextAuditBlock(ref, key) {
 }
 
 function rememberOpenState(details, key, defaultOpen = false) {
+  details.dataset.stateKey = key;
   const remembered = state.openDetails.has(key) ? state.openDetails.get(key) : defaultOpen;
   details.open = Boolean(remembered);
   details.addEventListener("toggle", () => {
@@ -898,6 +1126,8 @@ function connectEvents(runId) {
 function stopStream() {
   clearTimeout(state.reconnectTimer);
   state.reconnectTimer = null;
+  if (state.renderFrame) cancelAnimationFrame(state.renderFrame);
+  state.renderFrame = 0;
   if (state.eventSource) state.eventSource.close();
   state.eventSource = null;
   state.eventIds.clear();
@@ -917,6 +1147,7 @@ function handleRunEvent(name, event, stream = {}) {
   const eventId = payload.event_id || event.lastEventId || `${name}:${Date.now()}`;
   if (state.eventIds.has(eventId)) return;
   state.eventIds.add(eventId);
+  if (!state.followLatest && name !== "stream_closed") state.newContentPending = true;
 
   const turn = activeTurn(payload);
   if (payload.run_id && !String(payload.run_id).startsWith("web-run-")) {
@@ -932,7 +1163,7 @@ function handleRunEvent(name, event, stream = {}) {
   if (name === "step_patch" && payload.step) {
     upsertStep(turn, payload.step);
     turn.event_cursor = Math.max(Number(turn.event_cursor || 0), Number(payload.event_cursor || 0));
-    renderTurns();
+    scheduleTurnRender();
     return;
   }
   if (name === "approval_required") {
@@ -977,7 +1208,7 @@ function handleRunEvent(name, event, stream = {}) {
   } else {
     stopStream();
   }
-  renderTurns();
+  scheduleTurnRender();
 }
 
 function activeTurn(payload = {}) {
