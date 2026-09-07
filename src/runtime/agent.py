@@ -428,6 +428,15 @@ class JCodeAgent:
             "pressure_level": int(info.get("pressure", {}).get("level", 0) or 0),
             "compact_status": str(compact.get("status", "idle")),
             "compact_trigger": str(compact.get("trigger", "")),
+            "compression_before": {
+                "fixed_items": {str(item.get("name")): int(item.get("tokens", 0) or 0) for item in info.get("fixed_occupancies", [])},
+                "total_input_tokens": int(info.get("serialized_input_tokens", 0) or 0),
+                "output_reserved_tokens": int(info.get("actual_max_new_tokens", 0) or 0),
+                "safety_margin_tokens": int(info.get("safety_margin_tokens", 0) or 0),
+                "remaining_capacity_tokens": int(info.get("final_capacity_status", {}).get("remaining_tokens", 0) or 0),
+                "pressure_ratio": info.get("pressure", {}).get("ratio", 0),
+                "pressure_level": int(info.get("pressure", {}).get("level", 0) or 0),
+            },
         }
 
     def _emit_compact_context_events(self, run_dir, task_state, context_result, compact_info: dict) -> None:
@@ -443,6 +452,23 @@ class JCodeAgent:
         }
         self.session_events.emit("compact_evaluated", run_id=task_state.run_id, **event_payload)
         self._record_trace(run_dir, "compact_evaluated", task_state, **event_payload)
+        comparison = context_result.ctx_info.get("compression_comparison")
+        if comparison and int(event_payload.get("pressure_level", 0) or 0) >= 1:
+            audit = dict(context_result.compact_audit or {})
+            comparison_payload = {
+                **comparison,
+                "run_id": task_state.run_id,
+                "pressure_level": int(event_payload.get("pressure_level", 0) or 0),
+                "result": {
+                    "status": "fallback" if audit.get("status") == "fallback" else "applied",
+                    "label": "降级为规则压缩" if audit.get("status") == "fallback" else "",
+                    "trigger": compact_info.get("trigger", "") or "pressure_threshold",
+                    "summary_source": audit.get("source", "") or "rule",
+                    "artifact_ref": audit.get("artifact_ref", ""),
+                },
+            }
+            self.session_events.emit("context_compression_compared", run_id=task_state.run_id, **comparison_payload)
+            self._record_trace(run_dir, "context_compression_compared", task_state, **comparison_payload)
         if not event_payload["should_compact"] and compact_info.get("status") not in {"applied"}:
             return
 

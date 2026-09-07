@@ -47,6 +47,7 @@ const STREAM_EVENTS = Object.freeze([
   "compact_triggered",
   "compact_completed",
   "compact_fallback",
+  "context_compression_compared",
   "context_built",
   "model_requested",
   "model_responded",
@@ -351,10 +352,35 @@ function renderTurn(turn) {
   item.dataset.turnId = turn.local_id || turn.run_id;
   if (turn.user_message) item.append(messageNode("user", turn.user_message));
   const steps = turn.reasoning_steps || [];
+  const compressionSummary = runCompressionSummary(steps);
+  if (compressionSummary) {
+    const summary = document.createElement("div");
+    summary.className = "run-compression-summary";
+    summary.textContent = compressionSummary;
+    item.append(summary);
+  }
   if (steps.length || turn.status !== "history") item.append(stepTimeline(turn));
   if (turn.pending_approval) item.append(approvalNode(turn));
   if (turn.final_text || turn.assistant_message) item.append(finalAnswerNode(turn.final_text || turn.assistant_message));
   return item;
+}
+
+function runCompressionSummary(steps) {
+  const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  let fallback = 0;
+  for (const step of steps) {
+    const comparison = step.compression_comparison;
+    if (!comparison) continue;
+    const level = Number(comparison.pressure_level || comparison.before?.pressure_level || 0);
+    if (level < 1 || level > 4) continue;
+    counts[level] += 1;
+    if (comparison.result?.status === "fallback") fallback += 1;
+  }
+  const counted = Object.entries(counts).filter(([, count]) => count);
+  const parts = counted.map(([level, count]) => `${level} 档 ${count} 次`);
+  if (!parts.length) return "";
+  const total = counted.reduce((sum, [, count]) => sum + count, 0);
+  return `本次运行发生 ${total} 次压缩：${parts.join("、")}${fallback ? `（其中 ${fallback} 次降级为规则压缩）` : ""}。`;
 }
 
 function messageNode(role, content) {
@@ -423,6 +449,9 @@ function stepItem(turn, step) {
   if (step.process_content) {
     body.append(detailBlock("模型过程消息", step.process_content, `step-content:${turnKey(turn)}:${step.step_id}`));
   }
+  if (step.compression_before || step.compression_comparison) {
+    body.append(compressionCard(turn, step));
+  }
   if (step.error_text) {
     const error = document.createElement("section");
     error.className = "step-error-text";
@@ -454,6 +483,53 @@ function stepItem(turn, step) {
   }
   details.append(body);
   return details;
+}
+
+function compressionCard(turn, step) {
+  const comparison = step.compression_comparison || {};
+  const before = comparison.before || step.compression_before || {};
+  const after = comparison.after;
+  const result = comparison.result || {};
+  const level = Number(before.pressure_level || step.compression_comparison?.pressure_level || 0);
+  const status = result.label || (level === 0 ? "未压缩" : (result.status === "fallback" ? "降级为规则压缩" : "已压缩"));
+  const details = document.createElement("details");
+  details.className = "mini-detail compression-card";
+  rememberOpenState(details, `compression:${turnKey(turn)}:${step.step_id}`, false);
+  details.innerHTML = `<summary><span>上下文压缩：${escapeHtml(status)} · ${escapeHtml(String(level))} 档 · 压力 ${escapeHtml(formatRatio(before.pressure_ratio))} · ${escapeHtml(String(before.total_input_tokens || 0))} tokens</span></summary>`;
+  const body = document.createElement("div");
+  body.className = "compression-body";
+  body.append(compressionMetricBlock("压缩前", before));
+  if (after) {
+    body.append(compressionMetricBlock("压缩后", after));
+    const delta = comparison.delta || {};
+    body.append(compressionDeltaBlock(delta));
+    const changes = comparison.content_changes || [];
+    body.append(detailBlock("内容差值", changes.length ? changes.map((item) => `${item.change || "变化"}｜第 ${item.turn || ""} 轮｜${item.tool_name || item.category || ""}\n${item.summary || item.file_ref || ""}`).join("\n\n") : "本次没有移出内容", `compression-content:${turnKey(turn)}:${step.step_id}`));
+    body.append(detailBlock("压缩结果", JSON.stringify(result, null, 2), `compression-result:${turnKey(turn)}:${step.step_id}`));
+  }
+  details.append(body);
+  return details;
+}
+
+function formatRatio(value) {
+  const ratio = Number(value || 0);
+  return `${(ratio <= 1 ? ratio * 100 : ratio).toFixed(1)}%`;
+}
+
+function compressionMetricBlock(title, data) {
+  const section = document.createElement("section");
+  section.className = "compression-metrics";
+  const fixed = Object.entries(data.fixed_items || {}).map(([name, tokens]) => `${name}: ${tokens}`).join("，");
+  section.innerHTML = `<strong>${escapeHtml(title)}</strong><div>固定项：${escapeHtml(fixed || "无")}</div><div>总输入：${escapeHtml(String(data.total_input_tokens || 0))} tokens；输出预留：${escapeHtml(String(data.output_reserved_tokens || 0))}；安全余量：${escapeHtml(String(data.safety_margin_tokens || 0))}</div><div>剩余容量：${escapeHtml(String(data.remaining_capacity_tokens || 0))}；压力：${escapeHtml(formatRatio(data.pressure_ratio))}（${escapeHtml(String(data.pressure_level || 0))} 档）</div>`;
+  return section;
+}
+
+function compressionDeltaBlock(delta) {
+  const section = document.createElement("section");
+  section.className = "compression-delta";
+  const fixed = Object.entries(delta.fixed_items || {}).map(([name, value]) => `${name}: ${value > 0 ? "+" : ""}${value}`).join("，");
+  section.innerHTML = `<strong>Token 差值</strong><div>${escapeHtml(fixed || "无")}</div><div>总释放：${escapeHtml(String(delta.total_released_tokens || 0))} tokens</div>`;
+  return section;
 }
 
 function toolCallNode(turn, step, tool, index) {

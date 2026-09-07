@@ -23,6 +23,8 @@ class StepTimelineBuilder:
         self.steps: list[dict] = []
         self.current_step: dict | None = None
         self.pending_context_text = ""
+        self.pending_compression_before = None
+        self.pending_compression = None
         self.final_text = ""
         self._tool_seq = 0
         self._last_event_at = ""
@@ -35,18 +37,29 @@ class StepTimelineBuilder:
 
         if name == "context_built":
             self.pending_context_text = str(event.get("context_audit_ref") or "")
+            self.pending_compression_before = deepcopy(event.get("compression_before")) if event.get("compression_before") else None
             if self.current_step is not None and not self.current_step.get("context_audit_ref"):
                 self.current_step["context_audit_ref"] = self.pending_context_text
+                self.current_step["compression_before"] = self.pending_compression_before
                 self._push_detail(self.current_step, "context_built", "Context 审计", self.pending_context_text, event)
                 patches.append(self._snapshot_step(self.current_step))
+            return patches
+
+        if name == "context_compression_compared":
+            # 压缩事件先于模型响应到达，暂存后挂到即将创建的模型步骤。
+            self.pending_compression = deepcopy(event)
             return patches
 
         if name == "model_responded":
             self._finalize_current_step(success_if_open=True, end_at=created_at or self._last_event_at)
             step = self._new_step(created_at)
             step["context_audit_ref"] = self.pending_context_text
+            step["compression_before"] = self.pending_compression_before
             step["response_text"] = str(event.get("response_text") or "")
             step["parsed_action"] = {"tool_calls": list(event.get("native_tool_calls") or [])}
+            if self.pending_compression is not None:
+                step["compression_comparison"] = deepcopy(self.pending_compression)
+                self.pending_compression = None
             if step["parsed_action"]["tool_calls"]:
                 step["process_content"] = step["response_text"]
             step["status"] = "pending"
@@ -55,6 +68,7 @@ class StepTimelineBuilder:
                 self._push_detail(step, "model_responded", "模型过程消息", step["process_content"], event)
             self.current_step = step
             self.pending_context_text = ""
+            self.pending_compression_before = None
             self.steps.append(step)
             patches.append(self._snapshot_step(step))
             return patches

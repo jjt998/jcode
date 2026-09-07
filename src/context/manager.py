@@ -54,6 +54,7 @@ class ContextManager:
         runtime_text = getattr(self.workspace, "runtime_text", lambda: "")()
         memory_candidate.runtime_context = "\n".join(part for part in (render_runtime_mode_text(session_candidate), runtime_text) if part)
         history = [HistoryEvent.from_dict(item) for item in session_candidate.get("history", [])]
+        original_history_items = [event.to_dict() for event in history]
         tools = self.registry.definitions(allowed_tools)
         prefix = render_prefix(self.workspace, self.registry)
         continuation = dict(provider_continuation or {})
@@ -196,6 +197,33 @@ class ContextManager:
             "tokenizer_source": snapshot.tokenizer_source,
             "compact": {"status": compact_status, "should_compact": level == 4, "trigger": "semantic_summary" if level == 4 else ""},
         }
+        # 保存前后上下文对比，供运行时事件和 Web 步骤卡直接展示。
+        if level >= 1:
+            before_items = {str(item.name): int(item.tokens) for item in full_snapshot.occupancies}
+            after_items = {str(item.name): int(item.tokens) for item in snapshot.occupancies}
+            before_items.update({"output_reservation": self.actual_max_new_tokens, "safety_margin": SAFETY_MARGIN})
+            after_items.update({"output_reservation": self.actual_max_new_tokens, "safety_margin": SAFETY_MARGIN})
+            kept_ids = {event.event_id for event in history if event.event_id}
+            changes = []
+            for item in [HistoryEvent.from_dict(item) for item in original_history_items]:
+                if item.event_id and item.event_id not in kept_ids:
+                    metadata = item.metadata if isinstance(item.metadata, dict) else {}
+                    changes.append({
+                        "change": "compressed" if item.kind == "compact_summary" else "removed",
+                        "category": item.kind,
+                        "turn": item.turn_id,
+                        "tool_name": str(metadata.get("tool_name") or metadata.get("name") or ""),
+                        "summary": item.content,
+                        "file_ref": str(metadata.get("artifact_ref") or ""),
+                    })
+            before_pressure = dict(pressure)
+            after_pressure = dict(result.ctx_info["final_pressure"])
+            result.ctx_info["compression_comparison"] = {
+                "before": {"fixed_items": before_items, "total_input_tokens": full_snapshot.serialized_input_tokens, "output_reserved_tokens": self.actual_max_new_tokens, "safety_margin_tokens": SAFETY_MARGIN, "remaining_capacity_tokens": max(0, window - full_snapshot.serialized_input_tokens - self.actual_max_new_tokens - SAFETY_MARGIN), "pressure_ratio": before_pressure.get("ratio", 0), "pressure_level": level},
+                "after": {"fixed_items": after_items, "total_input_tokens": snapshot.serialized_input_tokens, "output_reserved_tokens": self.actual_max_new_tokens, "safety_margin_tokens": SAFETY_MARGIN, "remaining_capacity_tokens": capacity.remaining_tokens, "pressure_ratio": after_pressure.get("ratio", 0), "pressure_level": pressure_level},
+                "delta": {"fixed_items": {name: after_items.get(name, 0) - before_items.get(name, 0) for name in sorted(set(before_items) | set(after_items))}, "total_released_tokens": max(0, full_snapshot.serialized_input_tokens - snapshot.serialized_input_tokens)},
+                "content_changes": changes,
+            }
         result.compact_audit = compact_audit
         return ContextBuildOutcome(result, session_candidate, memory_candidate, session_commit_required, history_artifact_ref)
 
