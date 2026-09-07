@@ -11,25 +11,52 @@ def build_session_turns(project_id: str, project_root: Path, session: dict) -> d
     runs_root = project_root / ".jcode" / "runs"
     history = list(session.get("history", []) or [])
     run_ids = _ordered_run_ids(session, history)
+    # history 是会话内唯一的原始顺序；不能用 run_ids 覆盖它，否则重载会打乱消息位置。
+    history_positions = _history_run_positions(history)
     turns = [_build_turn(run_id, runs_root, history) for run_id in run_ids]
     turns.extend(_orphan_history_turns(history))
+    turns.sort(key=lambda turn: _turn_sort_key(turn, history_positions))
+    for sequence, turn in enumerate(turns):
+        turn["sequence"] = sequence
     return {"project_id": project_id, "session_id": session.get("id", ""), "turns": turns}
 
 
 def _ordered_run_ids(session: dict, history: list[dict]) -> list[str]:
     seen: set[str] = set()
     run_ids: list[str] = []
-    for run_id in session.get("run_ids", []) or []:
-        value = str(run_id or "").strip()
-        if value and value not in seen:
-            run_ids.append(value)
-            seen.add(value)
     for item in history:
         value = str(item.get("run_id") or "").strip()
         if value and value not in seen:
             run_ids.append(value)
             seen.add(value)
+    # 没有历史消息的运行只能追加，不能插入已知会话时间线中间。
+    for run_id in session.get("run_ids", []) or []:
+        value = str(run_id or "").strip()
+        if value and value not in seen:
+            run_ids.append(value)
+            seen.add(value)
     return run_ids
+
+
+def _history_run_positions(history: list[dict]) -> dict[str, int]:
+    """记录每个运行在会话消息流中首次出现的位置。"""
+    positions: dict[str, int] = {}
+    for index, item in enumerate(history):
+        run_id = str(item.get("run_id") or "").strip()
+        if run_id and run_id not in positions:
+            positions[run_id] = index
+    return positions
+
+
+def _turn_sort_key(turn: dict, history_positions: dict[str, int]) -> tuple[int, int, str]:
+    """用历史索引保持对话先后，缺少历史的运行稳定放在末尾。"""
+    run_id = str(turn.get("run_id") or "")
+    position = history_positions.get(run_id)
+    if position is None and run_id.startswith("history-"):
+        position = int(run_id.removeprefix("history-") or 0)
+    if position is None:
+        return (1, 0, run_id)
+    return (0, position, run_id)
 
 
 def _build_turn(run_id: str, runs_root: Path, history: list[dict]) -> dict:

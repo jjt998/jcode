@@ -428,6 +428,7 @@ async function loadTurns(epoch = state.selectionEpoch) {
     }
     state.activeTurnId = turn.local_id;
   }
+  sortTurns();
   renderTurns();
 }
 
@@ -459,7 +460,7 @@ function renderTurn(turn) {
     summary.textContent = compressionSummary;
     item.append(summary);
   }
-  if (steps.length || turn.status !== "history") item.append(stepTimeline(turn));
+  if (shouldShowStepTimeline(turn)) item.append(stepTimeline(turn));
   if (turn.pending_approval) item.append(approvalNode(turn));
   if (turn.final_text || turn.assistant_message) item.append(finalAnswerNode(turn.final_text || turn.assistant_message));
   return item;
@@ -522,6 +523,13 @@ function stepTimeline(turn) {
     section.append(stepItem(turn, step));
   }
   return section;
+}
+
+function shouldShowStepTimeline(turn) {
+  const isActive = ["running", "waiting_approval", "aborting"].includes(turn.status);
+  // 历史接口尚未写入 trace 时，用户消息没有答案就仍是待执行状态。
+  const isWaitingForResult = Boolean(turn.user_message) && !turn.final_text && !turn.assistant_message;
+  return Boolean((turn.reasoning_steps || []).length) || isActive || isWaitingForResult;
 }
 
 function stepItem(turn, step) {
@@ -816,7 +824,26 @@ function normalizeTurn(turn) {
       if (step && step.step_id) turn.stepMap.set(step.step_id, step);
     }
   }
+  // 历史加载与实时 step_patch 都使用同一排序，切换会话不会改变步骤位置。
+  turn.reasoning_steps = [...turn.stepMap.values()].sort(compareSteps);
   return turn;
+}
+
+function sortTurns() {
+  state.turns.sort(compareTurns);
+}
+
+function compareTurns(a, b) {
+  const as = Number(a.sequence);
+  const bs = Number(b.sequence);
+  const aHasSequence = Number.isFinite(as);
+  const bHasSequence = Number.isFinite(bs);
+  if (aHasSequence && bHasSequence && as !== bs) return as - bs;
+  if (aHasSequence !== bHasSequence) return aHasSequence ? -1 : 1;
+  const at = String(a.created_at || "");
+  const bt = String(b.created_at || "");
+  if (at !== bt) return at < bt ? -1 : 1;
+  return String(a.local_id || a.web_run_id || a.run_id || "").localeCompare(String(b.local_id || b.web_run_id || b.run_id || ""));
 }
 
 function upsertStep(turn, step) {
@@ -965,6 +992,7 @@ function activeTurn(payload = {}) {
     stepMap: new Map(),
   });
   state.turns.push(turn);
+  sortTurns();
   return turn;
 }
 
@@ -1052,6 +1080,8 @@ els.composer.addEventListener("submit", async (event) => {
       final_text: "",
       assistant_message: "",
       status: "running",
+      created_at: new Date().toISOString(),
+      sequence: state.turns.length,
       events: [],
       pending_approval: false,
       stepMap: new Map(),

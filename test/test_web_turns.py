@@ -6,6 +6,7 @@ from pathlib import Path
 
 from src.app.web_runs import WebRun, WebRunManager
 from src.app.web_steps import build_reasoning_steps
+from src.app.web_turns import build_session_turns
 
 
 def test_steps_show_process_content_without_reasoning():
@@ -108,3 +109,23 @@ def test_abort_returns_aborting_without_waiting_for_run_thread():
     assert result.status == "aborting"
     assert agent.aborted is True
     assert run.events[-1]["event"] == "run_abort_requested"
+
+
+def test_session_turns_keep_history_order_when_run_ids_are_reversed():
+    """会话刷新必须按消息原始顺序显示，不能按 run_ids 的偶然顺序重排。"""
+    session = {
+        "id": "session-1",
+        "run_ids": ["run-later", "run-first"],
+        "history": [
+            {"kind": "user", "content": "第一轮", "run_id": "run-first"},
+            {"kind": "assistant", "content": "第一轮完成", "run_id": "run-first"},
+            {"kind": "user", "content": "未绑定运行"},
+            {"kind": "user", "content": "第二轮", "run_id": "run-later"},
+        ],
+    }
+
+    # 本用例不读取运行产物，传入不存在的路径即可避免依赖系统临时目录权限。
+    turns = build_session_turns("project-1", Path("history-order-root"), session)["turns"]
+
+    assert [turn["run_id"] for turn in turns] == ["run-first", "history-2", "run-later"]
+    assert [turn["sequence"] for turn in turns] == [0, 1, 2]
