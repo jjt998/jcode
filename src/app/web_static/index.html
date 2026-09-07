@@ -11,40 +11,45 @@
       <aside class="sessions" aria-label="Sessions">
         <div class="brand">
           <div>
-            <p class="eyebrow">local projects</p>
             <h1>JCode</h1>
+            <p class="brand-subtitle">本地编程工作台</p>
           </div>
           <button class="icon-button" id="refreshAll" title="刷新" aria-label="刷新">↻</button>
         </div>
         <form class="project-form" id="projectForm">
-          <input id="projectPath" placeholder="仓库路径" />
-          <input id="projectName" placeholder="项目名，可选" />
+          <label for="projectPath">添加项目</label>
+          <input id="projectPath" placeholder="仓库路径" aria-label="仓库路径" />
+          <input id="projectName" placeholder="项目名，可选" aria-label="项目名，可选" />
           <button type="submit">创建项目</button>
         </form>
         <div class="project-list" id="projectList"></div>
         <div class="divider"></div>
         <button class="new-session" id="newSession">在项目中新建会话</button>
-        <button class="session-toggle" id="sessionToggle" type="button" aria-expanded="false">会话</button>
+        <button class="session-toggle" id="sessionToggle" type="button" aria-expanded="false" aria-controls="sessionPanel">历史会话 <span class="toggle-mark" aria-hidden="true">+</span></button>
         <div class="session-panel" id="sessionPanel" hidden>
           <div class="session-list" id="sessionList"></div>
-          <button class="session-scroll-down" id="sessionScrollDown" type="button" title="向下滚动" aria-label="向下滚动">⌄</button>
         </div>
       </aside>
+      <div class="sidebar-resizer" id="sidebarResizer" role="separator" tabindex="0" aria-label="调整侧栏宽度" aria-orientation="vertical"></div>
 
       <main class="conversation" aria-label="Conversation">
         <header class="topbar">
           <div>
-            <p class="eyebrow">workspace</p>
             <h2 id="sessionTitle">选择会话</h2>
+            <span class="context-label">当前工作区</span>
             <span id="projectRoot"></span>
           </div>
-          <div class="run-state" id="runState">idle</div>
+          <div class="run-state" id="runState" role="status" aria-live="polite">空闲</div>
         </header>
+        <div class="horizontal-resizer" id="topbarResizer" role="separator" tabindex="0" aria-label="调整标题区高度" aria-orientation="horizontal"></div>
 
         <section class="messages" id="turnList" aria-live="polite"></section>
 
+        <div class="horizontal-resizer" id="composerResizer" role="separator" tabindex="0" aria-label="调整输入区高度" aria-orientation="horizontal"></div>
+
         <form class="composer" id="composer">
-          <textarea id="messageInput" rows="3" placeholder="给 JCode 一个任务"></textarea>
+          <label class="composer-label" for="messageInput">下一项任务</label>
+          <textarea id="messageInput" rows="3" placeholder="描述你想完成的工作…"></textarea>
           <div class="composer-actions">
             <div class="model-controls" aria-label="模型设置">
               <label class="control-field">

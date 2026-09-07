@@ -22,7 +22,9 @@ const els = {
   sessionList: document.querySelector("#sessionList"),
   sessionPanel: document.querySelector("#sessionPanel"),
   sessionToggle: document.querySelector("#sessionToggle"),
-  sessionScrollDown: document.querySelector("#sessionScrollDown"),
+  sidebarResizer: document.querySelector("#sidebarResizer"),
+  topbarResizer: document.querySelector("#topbarResizer"),
+  composerResizer: document.querySelector("#composerResizer"),
   newSession: document.querySelector("#newSession"),
   refreshAll: document.querySelector("#refreshAll"),
   sessionTitle: document.querySelector("#sessionTitle"),
@@ -40,23 +42,89 @@ const els = {
   reasoningSupport: document.querySelector("#reasoningSupport"),
 };
 
+// 侧栏宽度只影响布局，不改变项目、会话或运行状态。
+const SIDEBAR_MIN_WIDTH = 240;
+const SIDEBAR_MAX_WIDTH = 520;
+let resizingSidebar = false;
+
+function setSidebarWidth(width) {
+  const nextWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, width));
+  document.querySelector(".shell").style.setProperty("--sidebar-width", `${Math.round(nextWidth)}px`);
+  els.sidebarResizer.setAttribute("aria-valuenow", String(Math.round(nextWidth)));
+}
+
+els.sidebarResizer.setAttribute("aria-valuemin", String(SIDEBAR_MIN_WIDTH));
+els.sidebarResizer.setAttribute("aria-valuemax", String(SIDEBAR_MAX_WIDTH));
+
+els.sidebarResizer.addEventListener("pointerdown", (event) => {
+  resizingSidebar = true;
+  els.sidebarResizer.setPointerCapture(event.pointerId);
+  els.sidebarResizer.classList.add("dragging");
+  document.body.classList.add("resizing-sidebar");
+});
+els.sidebarResizer.addEventListener("pointermove", (event) => {
+  if (!resizingSidebar) return;
+  setSidebarWidth(event.clientX);
+});
+els.sidebarResizer.addEventListener("pointerup", () => {
+  resizingSidebar = false;
+  els.sidebarResizer.classList.remove("dragging");
+  document.body.classList.remove("resizing-sidebar");
+});
+els.sidebarResizer.addEventListener("keydown", (event) => {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  event.preventDefault();
+  const current = parseInt(getComputedStyle(document.querySelector(".shell")).getPropertyValue("--sidebar-width"), 10) || 280;
+  setSidebarWidth(current + (event.key === "ArrowRight" ? 16 : -16));
+});
+
+// 标题区和输入区的高度独立调整，中间消息区自动占据剩余空间。
+function bindHorizontalResizer(element, variableName, minHeight, maxHeight, direction) {
+  let resizing = false;
+  const shell = document.querySelector(".conversation");
+  const getCurrent = () => parseInt(getComputedStyle(shell).getPropertyValue(variableName), 10) || minHeight;
+  const setHeight = (height) => {
+    const nextHeight = Math.max(minHeight, Math.min(maxHeight, height));
+    shell.style.setProperty(variableName, `${Math.round(nextHeight)}px`);
+    element.setAttribute("aria-valuenow", String(Math.round(nextHeight)));
+  };
+  element.setAttribute("aria-valuemin", String(minHeight));
+  element.setAttribute("aria-valuemax", String(maxHeight));
+  element.addEventListener("pointerdown", (event) => {
+    resizing = true;
+    element.setPointerCapture(event.pointerId);
+    element.classList.add("dragging");
+    document.body.classList.add("resizing-horizontal");
+  });
+  element.addEventListener("pointermove", (event) => {
+    if (!resizing) return;
+    const box = shell.getBoundingClientRect();
+    const height = direction === "top" ? event.clientY - box.top : box.bottom - event.clientY;
+    setHeight(height);
+  });
+  element.addEventListener("pointerup", () => {
+    resizing = false;
+    element.classList.remove("dragging");
+    document.body.classList.remove("resizing-horizontal");
+  });
+  element.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowUp" ? -16 : 16;
+    setHeight(getCurrent() + (direction === "top" ? delta : -delta));
+  });
+}
+
+bindHorizontalResizer(els.topbarResizer, "--topbar-height", 76, 220, "top");
+bindHorizontalResizer(els.composerResizer, "--composer-height", 150, 360, "bottom");
+
 // 会话区默认收起，展开后会话列表在固定区域内滚动。
 els.sessionToggle.addEventListener("click", () => {
   const expanded = els.sessionToggle.getAttribute("aria-expanded") === "true";
   els.sessionToggle.setAttribute("aria-expanded", String(!expanded));
   els.sessionPanel.hidden = expanded;
-  if (!expanded) requestAnimationFrame(updateSessionScrollDownVisibility);
+  els.sessionToggle.querySelector(".toggle-mark").textContent = expanded ? "+" : "−";
 });
-els.sessionScrollDown.addEventListener("click", () => {
-  els.sessionList.scrollTo({ top: els.sessionList.scrollHeight, behavior: "smooth" });
-});
-window.addEventListener("resize", updateSessionScrollDownVisibility);
-
-// 仅在会话列表超过侧栏可用高度时显示向下滚动按钮。
-function updateSessionScrollDownVisibility() {
-  if (els.sessionPanel.hidden) return;
-  els.sessionScrollDown.hidden = els.sessionList.scrollHeight <= els.sessionList.clientHeight + 1;
-}
 
 // Web 只订阅明确允许展示的事件；新增后端事件不会自动进入前端。
 const STREAM_EVENTS = Object.freeze([
@@ -154,7 +222,18 @@ function formatDuration(value) {
 }
 
 function setRunStatus(status) {
-  els.runState.textContent = status === "aborting" ? "正在终止工具，请稍等。" : (status || "idle");
+  const labels = {
+    idle: "空闲",
+    running: "运行中",
+    waiting_approval: "等待确认",
+    aborting: "正在停止",
+    completed: "已完成",
+    finished: "已完成",
+    failed: "已失败",
+    aborted: "已中止",
+    error: "连接错误",
+  };
+  els.runState.textContent = labels[status] || status || "空闲";
   els.runState.dataset.status = status || "idle";
   els.modelProfile.disabled = ["running", "waiting_approval", "aborting"].includes(status);
   const running = els.modelProfile.disabled;
@@ -236,7 +315,6 @@ function renderSessions() {
   els.sessionList.innerHTML = "";
   if (!state.sessions.length) {
     els.sessionList.append(emptyNode(state.projectId ? "这个项目还没有会话" : "先选择项目"));
-    requestAnimationFrame(updateSessionScrollDownVisibility);
     return;
   }
   for (const session of state.sessions) {
@@ -251,7 +329,6 @@ function renderSessions() {
     button.addEventListener("click", () => selectSession(session.id));
     els.sessionList.append(button);
   }
-  requestAnimationFrame(updateSessionScrollDownVisibility);
 }
 
 async function selectSession(sessionId) {

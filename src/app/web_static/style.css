@@ -269,6 +269,27 @@ h3 {
   min-width: 0;
 }
 
+/* 标题区默认使用最小高度时，收紧内部排版以保留完整上下文信息。 */
+.topbar {
+  min-height: 0;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  overflow: hidden;
+}
+
+.topbar h2 {
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.context-label {
+  margin-top: 2px;
+}
+
+#projectRoot {
+  margin-top: 2px;
+}
+
 .topbar {
   padding: 22px 26px;
   background: rgba(252, 251, 246, 0.9);
@@ -912,5 +933,505 @@ summary:focus-visible {
       opacity: 1;
       transform: translateY(0);
     }
+  }
+}
+
+/* 美化层：用冷静的工具色和清晰层级强化开发工作台，不改变业务结构。 */
+:root {
+  --ink: #17201d;
+  --muted: #687670;
+  --paper: #f1f4f2;
+  --panel: #ffffff;
+  --line: #d9e2dd;
+  --rail: #172a26;
+  --rail-ink: #edf5f0;
+  --copper: #c4713b;
+  --signal: #16836f;
+  --violet: #65706b;
+  --danger: #c24c52;
+  --code: #17201d;
+  --shadow: 0 12px 34px rgba(23, 42, 38, 0.08);
+}
+
+body {
+  background: var(--paper);
+}
+
+.shell {
+  grid-template-columns: 280px minmax(0, 1fr);
+}
+
+.sessions {
+  padding: 20px 18px;
+  gap: 14px;
+  background: var(--rail);
+}
+
+.brand {
+  align-items: flex-start;
+}
+
+.brand h1 {
+  font-size: 30px;
+  letter-spacing: -0.02em;
+}
+
+.brand-subtitle,
+.context-label {
+  display: block;
+  margin: 4px 0 0;
+  color: rgba(237, 245, 240, 0.62);
+  font-size: 11px;
+}
+
+.context-label {
+  margin-top: 5px;
+  color: var(--muted);
+}
+
+.icon-button,
+.session-toggle,
+.new-session,
+.project-item,
+.session-item,
+.project-form input,
+.project-form button,
+.composer button,
+.approval-actions button,
+.choices button {
+  border-radius: 8px;
+}
+
+.icon-button {
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+}
+
+.project-form {
+  gap: 7px;
+}
+
+.project-form label,
+.composer-label {
+  color: rgba(237, 245, 240, 0.78);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.project-form input {
+  padding: 11px 12px;
+}
+
+.project-form button,
+.session-toggle {
+  min-height: 42px;
+}
+
+.new-session {
+  min-height: 44px;
+  box-shadow: 0 8px 18px rgba(196, 113, 59, 0.18);
+}
+
+.session-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toggle-mark {
+  color: rgba(237, 245, 240, 0.65);
+  font-size: 18px;
+  font-weight: 400;
+}
+
+.topbar {
+  padding: 20px 28px;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.topbar h2 {
+  font-size: 20px;
+}
+
+.run-state {
+  min-width: 112px;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-weight: 700;
+}
+
+.run-state::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.messages {
+  padding: 30px clamp(18px, 5vw, 72px);
+  gap: 26px;
+}
+
+.message,
+.step,
+.final-answer,
+.approval {
+  box-shadow: var(--shadow);
+}
+
+.message {
+  border-radius: 10px;
+}
+
+.message.user {
+  background: #edf8f4;
+}
+
+.step {
+  border-left-width: 3px;
+  border-radius: 10px;
+}
+
+.step > summary,
+.tool-call > summary,
+.mini-detail > summary {
+  min-height: 44px;
+}
+
+.final-answer {
+  border-left-width: 3px;
+  border-radius: 10px;
+}
+
+.composer {
+  padding: 16px 28px 20px;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.composer-label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--ink);
+}
+
+.composer textarea {
+  min-height: 82px;
+  border-radius: 10px;
+}
+
+.composer textarea:focus {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 3px rgba(22, 131, 111, 0.12);
+}
+
+.composer button {
+  min-height: 44px;
+}
+
+button,
+summary {
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+button:hover {
+  filter: brightness(1.04);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+@media (max-width: 880px) {
+  .shell {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sessions {
+    max-height: 52vh;
+    overflow: auto;
+    padding: 16px;
+  }
+
+  .project-list {
+    max-height: 180px;
+  }
+
+  .conversation {
+    min-height: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .topbar,
+  .composer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+  }
+
+  .topbar > div:first-child {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .topbar h2 {
+    overflow-wrap: anywhere;
+  }
+
+  #projectRoot {
+    max-width: 100%;
+  }
+
+  .messages {
+    padding: 22px 16px;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .turn,
+  .step-timeline,
+  .final-answer,
+  .approval {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .composer-actions,
+  .model-controls {
+    width: 100%;
+  }
+
+  .composer-actions {
+    gap: 8px;
+  }
+
+  .model-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .model-controls .control-field:first-child,
+  .model-controls .reasoning-support {
+    grid-column: 1 / -1;
+  }
+
+  .model-controls .control-field select {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .composer-actions > button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .brand h1 {
+    font-size: 28px;
+  }
+
+  .topbar h2 {
+    max-width: 72vw;
+    overflow-wrap: anywhere;
+  }
+
+  .run-state {
+    min-width: 92px;
+    font-size: 11px;
+  }
+
+  .message {
+    max-width: 100%;
+  }
+}
+
+/* 侧栏固定项目区，历史会话只在独立区域内滚动。 */
+.sessions {
+  overflow: hidden;
+}
+
+.shell {
+  --sidebar-width: 280px;
+  grid-template-columns: var(--sidebar-width) 8px minmax(0, 1fr);
+}
+
+.sidebar-resizer {
+  position: relative;
+  z-index: 2;
+  cursor: col-resize;
+  background: var(--line);
+  touch-action: none;
+}
+
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 44px;
+  border-radius: 99px;
+  background: #b5c5bd;
+  transform: translate(-50%, -50%);
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer:focus-visible,
+.sidebar-resizer.dragging {
+  background: rgba(22, 131, 111, 0.18);
+  outline: none;
+}
+
+.sidebar-resizer:hover::after,
+.sidebar-resizer:focus-visible::after,
+.sidebar-resizer.dragging::after {
+  background: var(--signal);
+}
+
+.resizing-sidebar,
+.resizing-sidebar * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+.resizing-horizontal,
+.resizing-horizontal * {
+  cursor: row-resize !important;
+  user-select: none;
+}
+
+.sessions > .brand,
+.sessions > .project-form,
+.sessions > .project-list,
+.sessions > .divider,
+.sessions > .new-session,
+.sessions > .session-toggle {
+  flex: 0 0 auto;
+}
+
+.project-list {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.session-panel {
+  display: block;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.session-list {
+  height: 100%;
+  overflow: auto;
+}
+
+/* 主工作区严格占满视口，长对话由消息区内部滚动。 */
+.conversation {
+  --topbar-height: 76px;
+  --composer-height: 150px;
+  grid-template-rows: var(--topbar-height) 8px minmax(0, 1fr) 8px var(--composer-height);
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.horizontal-resizer {
+  position: relative;
+  z-index: 2;
+  cursor: row-resize;
+  background: var(--line);
+  touch-action: none;
+}
+
+.horizontal-resizer::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 3px;
+  border-radius: 99px;
+  background: #b5c5bd;
+  transform: translate(-50%, -50%);
+}
+
+.horizontal-resizer:hover,
+.horizontal-resizer:focus-visible,
+.horizontal-resizer.dragging {
+  background: rgba(22, 131, 111, 0.18);
+  outline: none;
+}
+
+.horizontal-resizer:hover::after,
+.horizontal-resizer:focus-visible::after,
+.horizontal-resizer.dragging::after {
+  background: var(--signal);
+}
+
+/* 输入区固定控制栏，拖拽时仅压缩任务输入框。 */
+.composer {
+  display: grid;
+  grid-template-rows: auto minmax(44px, 1fr) auto;
+  gap: 7px;
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.composer-label,
+.composer-actions {
+  min-height: 0;
+  margin: 0;
+}
+
+.composer-label {
+  margin-bottom: 0;
+}
+
+.composer textarea {
+  height: 100%;
+  min-height: 44px;
+  max-height: none;
+  resize: none;
+}
+
+.composer-actions {
+  flex: 0 0 auto;
+}
+
+.messages {
+  min-height: 0;
+}
+
+@media (max-width: 880px) {
+  .sessions {
+    height: 52vh;
+    max-height: 52vh;
+    flex: 0 0 52vh;
+  }
+
+  .sidebar-resizer {
+    display: none;
+  }
+
+  .conversation {
+    height: calc(100dvh - 52vh);
+    max-height: calc(100dvh - 52vh);
+    grid-template-rows: var(--topbar-height) 8px minmax(0, 1fr) 8px var(--composer-height);
   }
 }
