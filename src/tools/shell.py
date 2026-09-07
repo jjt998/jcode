@@ -47,6 +47,7 @@ def run_shell(workspace, args, *, abort_requested=None) -> ToolResult:
 def _terminate_process_tree(proc: subprocess.Popen) -> None:
     """终止 shell 及其子进程，防止 cmd 或脚本在 abort 后继续占用工作区。"""
     if os.name == "nt":
-        subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, text=True, check=False)
+        # taskkill 输出只用于清理，统一按 UTF-8 容错解码，避免 Windows 默认 GBK 警告。
+        subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     else:
         os.killpg(proc.pid, signal.SIGTERM)
