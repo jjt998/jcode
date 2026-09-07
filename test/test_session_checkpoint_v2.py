@@ -1,7 +1,8 @@
 from pathlib import Path
 
 from src.memory.working import WorkingMemory
-from src.state.checkpoint import SCHEMA_VERSION, evaluate_checkpoint_data
+from src.state.checkpoint import CheckpointManager, SCHEMA_VERSION, evaluate_checkpoint_data
+from src.state.task import TaskState
 from src.state.session import SessionStore
 from src.state.workspace import Workspace
 
@@ -21,3 +22,17 @@ def test_checkpoint_schema2_reads_hot_file_freshness(tmp_path):
     workspace = Workspace.build(tmp_path)
     data = {"schema_version": SCHEMA_VERSION, "resumable": True, "workspace_fingerprint": workspace.fingerprint(), "working_memory": {"files": {"hot": [], "freshness": {}}}}
     assert evaluate_checkpoint_data(data, workspace)[0] == "full_valid"
+
+
+def test_checkpoint_persists_final_gate_dual_quality_snapshot(tmp_path):
+    workspace = Workspace.build(tmp_path)
+    task = TaskState.create("answer")
+    task.agent_quality = {"level": "yellow", "reasons": [{"code": "unresolved_todo"}]}
+    task.harness_quality = {"level": "green", "reasons": []}
+    task.assurance = {"final_text": "verified", "execution_evidence": "verified", "runtime_state": "verified"}
+    task.finalization = {"status": "committed"}
+    checkpoint = CheckpointManager(tmp_path, workspace).create({"id": "session-1"}, task, WorkingMemory(tmp_path))
+
+    assert checkpoint["agent_quality"]["level"] == "yellow"
+    assert checkpoint["harness_quality"]["level"] == "green"
+    assert checkpoint["finalization"]["status"] == "committed"

@@ -6,7 +6,7 @@ from pathlib import Path
 from src.state.workspace import Workspace, now_iso
 from src.tools.workspace import freshness
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class CheckpointManager:
@@ -35,6 +35,16 @@ class CheckpointManager:
             "resolved_tool_failures": list(task_state.resolved_tool_failures),
             "verification": dict(task_state.verification),
             "final_readiness_summary": dict(task_state.final_readiness_summary),
+            "agent_events": list(task_state.agent_events),
+            "harness_events": list(task_state.harness_events),
+            "interventions": list(task_state.interventions),
+            "agent_rerun_count": task_state.agent_rerun_count,
+            "agent_rerun_budget": task_state.agent_rerun_budget,
+            "agent_quality": dict(task_state.agent_quality),
+            "harness_quality": dict(task_state.harness_quality),
+            "assurance": dict(task_state.assurance),
+            "finalization": dict(task_state.finalization),
+            "requirement_ledger": list(task_state.requirement_ledger),
             "provider_continuation": dict(task_state.provider_continuation),
             "output_continuation_count": task_state.output_continuation_count,
             "partial_response_parts": list(task_state.partial_response_parts),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 import hashlib
+import re
 from dataclasses import dataclass, field
 
 from src.state.workspace import now_iso
@@ -28,6 +29,16 @@ class TaskState:
     resolved_tool_failures: list[dict] = field(default_factory=list)  # 已由后续证据解决的工具失败
     verification: dict = field(default_factory=dict)  # 最近验证命令及状态
     final_readiness_summary: dict = field(default_factory=dict)  # Final Gate 最近决策摘要
+    agent_events: list[dict] = field(default_factory=list)  # Agent 运行质量事件
+    harness_events: list[dict] = field(default_factory=list)  # Harness 处置事件
+    interventions: list[dict] = field(default_factory=list)  # Final Gate 干预记录
+    agent_rerun_count: int = 0  # Agent 重跑次数
+    agent_rerun_budget: int = 2  # Agent 本次运行最大重跑次数
+    agent_quality: dict = field(default_factory=lambda: {"level": "green", "reasons": []})  # Agent 运行评分
+    harness_quality: dict = field(default_factory=lambda: {"level": "green", "reasons": []})  # Harness 处置评分
+    assurance: dict = field(default_factory=lambda: {"final_text": "unverified", "execution_evidence": "unverified", "runtime_state": "unverified"})  # 收口可信度
+    finalization: dict = field(default_factory=dict)  # 最终收口状态
+    requirement_ledger: list[dict] = field(default_factory=list)  # 用户明确需求台账
     native_tool_calls: dict[str, dict] = field(default_factory=dict)  # 原生工具调用的生命周期状态
     provider_continuation: dict = field(default_factory=dict)  # 当前 run 的 Provider 原生续接项
     output_continuation_count: int = 0  # 模型输出被截断后的续写次数
@@ -38,7 +49,7 @@ class TaskState:
 
     @classmethod
     def create(cls, user_request: str, model_profile: dict | None = None) -> "TaskState":
-        return cls(run_id=f"run-{uuid.uuid4().hex[:10]}", task_id=f"task-{uuid.uuid4().hex[:10]}", user_request=user_request, model_profile=dict(model_profile or {}))
+        return cls(run_id=f"run-{uuid.uuid4().hex[:10]}", task_id=f"task-{uuid.uuid4().hex[:10]}", user_request=user_request, model_profile=dict(model_profile or {}), requirement_ledger=_extract_requirement_ledger(user_request))
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)
@@ -81,12 +92,15 @@ class TaskState:
                 "error_type": result.error_type or "tool_failed",
                 "path": path,
                 "status": "unresolved",
+                "severity": "soft" if name == "run_shell" else "hard",
+                "classification": "noncritical_tool_failure" if name == "run_shell" else "delivery_action_failure",
                 "created_step": self.step_index,
                 "resolved_by": "",
                 "resolution_evidence": "",
             }
             self.failed_tools.append({"name": name, "status": result.status, "error_type": result.error_type, "path": path, "failure_id": failure["failure_id"]})
             self.unresolved_tool_failures.append(failure)
+            self.agent_events.append({"event_id": failure["failure_id"], "event_type": "tool_failure", "cause": "agent", "owner": "agent", "status": "observed", "evidence": dict(failure)})
         elif result.status in {"success", "ok"} and name == "write_file" and path:
             # 同一路径的成功整文件写入可关闭 patch 匹配失败，但不关闭验证或权限失败。
             remaining = []
@@ -99,6 +113,17 @@ class TaskState:
             self.unresolved_tool_failures = remaining
         if name == "run_shell":
             self.record_verification(arguments or {}, result)
+        self.updated_at = now_iso()
+
+    def record_harness_event(self, event_type: str, *, cause: str = "harness", status: str = "observed", evidence: dict | None = None) -> None:
+        """记录 Harness 或外部故障，避免把执行层故障归责给 Agent。"""
+        event_id = f"harness-event-{len(self.harness_events) + 1}"
+        self.harness_events.append({"event_id": event_id, "event_type": event_type, "cause": cause, "owner": "harness", "status": status, "evidence": dict(evidence or {}), "step_index": self.step_index, "created_at": now_iso()})
+        self.updated_at = now_iso()
+
+    def record_intervention(self, intervention: dict) -> None:
+        """保存重跑、恢复和最终收口动作，支持恢复后重新聚合评分。"""
+        self.interventions.append(dict(intervention))
         self.updated_at = now_iso()
 
     def record_verification(self, arguments: dict, result) -> None:
@@ -122,3 +147,15 @@ class TaskState:
         self.stop_reason = stop_reason
         self.final_answer = final_answer
         self.updated_at = now_iso()
+
+
+def _extract_requirement_ledger(user_request: str) -> list[dict]:
+    """只抽取用户明确要求创建或生成的代码格式文件，避免把背景路径误判成交付。"""
+    pattern = r"(?:创建|生成|写入|输出|create|generate|write)\s*(?:文件)?\s*`([^`]+)`"
+    ledger = []
+    for index, match in enumerate(re.finditer(pattern, str(user_request), flags=re.IGNORECASE), start=1):
+        path = match.group(1).replace("\\", "/").strip()
+        if not path or any(item["target"] == path for item in ledger):
+            continue
+        ledger.append({"requirement_id": f"requirement-{index}", "source": "user_explicit", "kind": "file_artifact", "requested_action": "create", "target": path, "acceptance_predicate": ["file_exists", "file_readable", "content_nonempty"], "evidence": [], "status": "pending"})
+    return ledger

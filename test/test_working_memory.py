@@ -97,13 +97,15 @@ def test_todo_list_renders_progress(tmp_path):
     assert rendered.splitlines()[0] == "Todo progress: 1/2 completed (50%), 1 in progress, 0 pending"
 
 
-def test_final_gate_notices_pending_todo_then_allows_explicit_acknowledgement(tmp_path):
+def test_final_gate_reruns_pending_todo_then_finalizes_when_budget_is_exhausted(tmp_path):
     task = TaskState.create("完成任务")
     session = {"todo_ledger": {"items": [{"todo_id": "todo_1", "status": "pending"}]}}
 
-    denied = FinalGate().check("任务处理完成。", task, WorkingMemory(tmp_path), session=session)
-    allowed = FinalGate().check("任务暂未完成，剩余 todo_1。", task, WorkingMemory(tmp_path), session=session)
+    rerun = FinalGate().check("任务处理完成。", task, WorkingMemory(tmp_path), session=session)
+    task.agent_rerun_count = task.agent_rerun_budget
+    finalized = FinalGate().check("任务暂未完成，剩余 todo_1。", task, WorkingMemory(tmp_path), session=session)
 
-    assert denied["reason"] == "unresolved_todo"
-    assert denied["action"] == "runtime_notice"
-    assert allowed["allowed"] is True
+    assert rerun["reason"] == "unresolved_todo"
+    assert rerun["action"] == "rerun_agent"
+    assert finalized["action"] == "safe_finalize"
+    assert finalized["agent_quality"]["level"] == "yellow"

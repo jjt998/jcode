@@ -289,23 +289,18 @@ class JCodeAgent:
                         continue
                     partial_text = self._combined_response_text(task_state, response.text)
                     return self._finish_run(task_state, run_dir, partial_text, MODEL_OUTPUT_INCOMPLETE)
-                if response.text:
-                    final_text = self._combined_response_text(task_state, response.text)
-                    gate = self.final_gate.check(final_text, task_state, self.working_memory, session=self.session, workspace=self.workspace, context=self.session.get("ctx_info", {}))
-                    self._record_trace(run_dir, "final_readiness_evaluated", task_state, action=gate.get("action", "allow"), reasons=gate.get("reasons", []), notice_count=gate.get("notice_count", 0))
-                    if gate["allowed"]:
-                        return self._finish_run(task_state, run_dir, final_text, VALID_FINAL)
-                    if gate.get("action") == "block":
-                        self._record_trace(run_dir, "final_gate_blocked", task_state, reasons=gate.get("reasons", []))
-                        return self._finish_run(task_state, run_dir, gate["message"], "final_gate_blocked")
-                    # Gate 拒绝后保留模型回答，并将缺失动作注入下一轮上下文。
+                final_text = self._combined_response_text(task_state, response.text)
+                gate = self.final_gate.check(final_text, task_state, self.working_memory, session=self.session, workspace=self.workspace, context=self.session.get("ctx_info", {}))
+                self._record_trace(run_dir, "final_readiness_evaluated", task_state, action=gate.get("action", "safe_finalize"), reasons=gate.get("reasons", []))
+                if gate.get("action") == "rerun_agent":
+                    # 仅向 Agent 注入当前可纠正事实，避免后台评分污染推理上下文。
                     self.working_memory.note_safety(gate["message"])
-                    self._record_trace(run_dir, "final_gate_denied", task_state, reason=gate["reason"], message=gate["message"])
-                    self._create_checkpoint(checkpoint, task_state, run_dir, "final_gate_denied")
+                    self._record_trace(run_dir, "final_gate_rerun_requested", task_state, reason=gate["reason"], correction_packet=gate.get("correction_packet", {}))
+                    self._create_checkpoint(checkpoint, task_state, run_dir, "final_gate_rerun_requested")
                     self.run_store.write_task_state(run_dir, task_state)
                     step += 1
                     continue
-                return self._finish_run(task_state, run_dir, "", "empty_model_content")
+                return self._finish_run(task_state, run_dir, final_text, VALID_FINAL)
             self._record_trace(
                 run_dir,
                 "native_tool_calls_received",

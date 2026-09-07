@@ -32,7 +32,7 @@ reasoning_effort_options = ["low", "high", "max"]
 [providers.minimax]
 name = "minimax"
 api_protocol = "openai_responses"
-base_url = "https://minnimax.chat/v1"
+base_url = "https://m.aiio.chat/v1"
 api_key = "gw-f84279c8-f1c8-48cd-9ab0-8135f2df7235"
 
 [models.minimax-m3]

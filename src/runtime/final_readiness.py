@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import re
 
 from src.runtime.plan import plan_artifact_ready, runtime_mode_name, runtime_mode_plan_path
 
@@ -22,10 +21,14 @@ def build_final_readiness(task_state, session: dict | None = None, workspace=Non
     unresolved = tuple(dict(item) for item in getattr(task_state, "unresolved_tool_failures", []) if item.get("status") == "unresolved")
     pending = tuple(_pending_todos(session))
     ctx = dict(context or {})
-    required_artifacts = tuple(_required_artifacts(task_state.user_request, workspace))
+    required_artifacts = tuple(_required_artifacts(task_state.requirement_ledger, workspace))
     reasons: list[dict] = []
-    if unresolved:
-        reasons.append(_reason("unresolved_tool_failure", "hard", "存在尚未解决的工具失败。", {"failure_ids": [item.get("failure_id") for item in unresolved]}))
+    hard_failures = [item for item in unresolved if item.get("severity") == "hard"]
+    soft_failures = [item for item in unresolved if item.get("severity") != "hard"]
+    if hard_failures:
+        reasons.append(_reason("unresolved_tool_failure", "hard", "存在影响交付的工具失败。", {"failure_ids": [item.get("failure_id") for item in hard_failures]}))
+    if soft_failures:
+        reasons.append(_reason("noncritical_tool_failure", "soft", "存在不影响核心交付的辅助工具失败。", {"failure_ids": [item.get("failure_id") for item in soft_failures]}))
     verification = dict(getattr(task_state, "verification", {}) or {})
     if verification.get("state") == "failed":
         reasons.append(_reason("failed_verification", "hard", "最近一次验证命令失败。", {"verification": verification}))
@@ -39,7 +42,7 @@ def build_final_readiness(task_state, session: dict | None = None, workspace=Non
     if session is not None and workspace is not None and runtime_mode_name(session) == "plan" and not plan_artifact_ready(session, workspace, runtime_mode_plan_path(session)):
         reasons.append(_reason("plan_artifact_not_ready", "hard", "plan artifact 尚未准备完成。", {"path": runtime_mode_plan_path(session)}))
     if ctx.get("final_capacity_status", {}).get("can_send") is False:
-        reasons.append(_reason("final_context_exceeds_window", "hard", "最终上下文超出有效窗口。", ctx.get("final_capacity_status", {})))
+        reasons.append(_reason("final_context_exceeds_window", "hard", "最终上下文超出有效窗口。", ctx.get("final_capacity_status", {}), owner="harness"))
     pressure = dict(ctx.get("pressure", {}) or {})
     compact = dict(ctx.get("compact", {}) or {})
     if int(pressure.get("level", 0) or 0) >= 4 and compact.get("status") not in {"applied", "idle"}:
@@ -55,25 +58,28 @@ def _pending_todos(session: dict | None) -> list[str]:
     return [str(item.get("todo_id")) for item in items if isinstance(item, dict) and item.get("todo_id") and str(item.get("status", "pending")) != "completed"]
 
 
-def _reason(code: str, severity: str, message: str, evidence: dict) -> dict:
-    return {"code": code, "severity": severity, "message": message, "evidence": evidence}
+def _reason(code: str, severity: str, message: str, evidence: dict, *, owner: str = "agent") -> dict:
+    return {"code": code, "severity": severity, "message": message, "evidence": evidence, "owner": owner}
 
 
-def _required_artifacts(user_request: str, workspace) -> list[dict]:
-    """只识别用户以代码格式明确指定的输出文件，避免从自然语言猜测路径。"""
+def _required_artifacts(requirement_ledger: list[dict], workspace) -> list[dict]:
+    """根据需求台账验证明确文件产物，不从最终文本或背景路径猜测。"""
     if workspace is None:
         return []
-    action_pattern = r"(?:创建|生成|写入|输出|create|generate|write)\s*(?:文件)?\s*`([^`]+)`"
-    paths = []
-    for match in re.finditer(action_pattern, str(user_request), flags=re.IGNORECASE):
-        path = match.group(1).replace("\\", "/").strip()
-        if path and path not in paths:
-            paths.append(path)
     artifacts = []
-    for path in paths:
+    for requirement in requirement_ledger:
+        if requirement.get("source") != "user_explicit" or requirement.get("kind") != "file_artifact":
+            continue
+        path = str(requirement.get("target") or "")
+        if not path:
+            continue
         try:
-            exists = workspace.resolve_path(path).is_file()
+            target = workspace.resolve_path(path)
+            exists = target.is_file()
+            readable = exists and bool(target.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             exists = False
-        artifacts.append({"path": path, "exists": exists})
+            readable = False
+        requirement["status"] = "satisfied" if readable else "pending"
+        artifacts.append({"path": path, "exists": exists, "readable": readable, "requirement_id": requirement.get("requirement_id", "")})
     return artifacts
