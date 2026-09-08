@@ -13,3 +13,11 @@ def tool_todo_update(workspace, args) -> ToolResult:
 
 def tool_todo_list(workspace, args) -> ToolResult:
     return ToolResult("error", "todo_list requires runtime execution", error_type="runtime_tool")
+
+
+def tool_todo_delete(workspace, args) -> ToolResult:
+    return ToolResult("error", "todo_delete requires runtime execution", error_type="runtime_tool")
+
+
+def tool_todo_archive(workspace, args) -> ToolResult:
+    return ToolResult("error", "todo_archive requires runtime execution", error_type="runtime_tool")

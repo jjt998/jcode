@@ -95,7 +95,7 @@ class WorkingMemory:
         """从 session ledger 刷新当前回合的 todo 投影。"""
         payload = ledger if isinstance(ledger, dict) else {}
         raw_items = payload.get("items", [])
-        self.todo_items = [dict(item) for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
+        self.todo_items = [dict(item) for item in raw_items if isinstance(item, dict) and not bool(item.get("archived", False))] if isinstance(raw_items, list) else []
 
     def note_file_read(self, relpath: str, args: dict, freshness: str, metadata: dict) -> None:
         if relpath not in self.recent_files:

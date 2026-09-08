@@ -197,6 +197,22 @@ class JCodeAgent:
     def todo_list(self, args: dict | None = None) -> str:
         return self.todo_ledger.render_list()
 
+    def todo_delete(self, args: dict) -> str:
+        item = self.todo_ledger.delete(args["todo_id"])
+        self.session["todo_ledger"] = self.todo_ledger.to_dict()
+        self.working_memory.sync_todos(self.session["todo_ledger"])
+        self.session_store.save(self.session)
+        self.session_events.emit("todo_deleted", todo_id=item.todo_id)
+        return f"deleted {item.todo_id} - {item.content}"
+
+    def todo_archive(self, args: dict) -> str:
+        item = self.todo_ledger.archive(args["todo_id"])
+        self.session["todo_ledger"] = self.todo_ledger.to_dict()
+        self.working_memory.sync_todos(self.session["todo_ledger"])
+        self.session_store.save(self.session)
+        self.session_events.emit("todo_archived", todo_id=item.todo_id, status=item.status)
+        return f"archived {item.todo_id} [{item.status}] - {item.content}"
+
     def ask_user(self, question: str, choices: list[str] | None = None) -> str:
         choices = list(choices or [])
         self.session_events.emit("ask_user_requested", question=str(question)[:500], choices=choices)
