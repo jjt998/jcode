@@ -55,7 +55,7 @@ def _pending_todos(session: dict | None) -> list[str]:
         return []
     ledger = session.get("todo_ledger", {})
     items = ledger.get("items", []) if isinstance(ledger, dict) else []
-    return [str(item.get("todo_id")) for item in items if isinstance(item, dict) and item.get("todo_id") and str(item.get("status", "pending")) != "completed"]
+    return [str(item.get("todo_id")) for item in items if isinstance(item, dict) and item.get("todo_id") and not bool(item.get("archived", False)) and str(item.get("status", "pending")) != "completed"]
 
 
 def _reason(code: str, severity: str, message: str, evidence: dict, *, owner: str = "agent") -> dict:

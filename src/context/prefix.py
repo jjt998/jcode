@@ -29,7 +29,7 @@ STABLE_SAFETY_RULES = """Stable safety rules:
 - When reading a large artifact under .jcode/runs/.../artifacts/, use read_file with start and end to inspect it in segments. Artifact reads are returned directly and must not be externalized again.
 - A read_file result marked stale describes an older file version. Treat it as historical evidence only and read the current file before relying on its content.
 - A stale artifact from read_file must not be treated as the current file contents.
-- Before finalizing, update completed todo items. If todos remain unfinished, explicitly identify them in the final response.
+- Before finalizing, update completed todo items. Archive work items that should no longer be active and delete only mistaken entries. If active todos remain unfinished, explicitly identify them in the final response.
 """
 
 

@@ -9,8 +9,8 @@ from src.policy.decisions import PolicyDecision
 from src.tools.base import ToolCallRequest, ToolInvocation, ToolResult
 from src.tools.workspace import freshness
 
-RUNTIME_TOOL_NAMES = {"todo_add", "todo_update", "todo_list", "ask_user", "enter_plan_mode", "exit_plan_mode"}
-TODO_TOOL_NAMES = {"todo_add", "todo_update", "todo_list"}
+RUNTIME_TOOL_NAMES = {"todo_add", "todo_update", "todo_list", "todo_delete", "todo_archive", "ask_user", "enter_plan_mode", "exit_plan_mode"}
+TODO_TOOL_NAMES = {"todo_add", "todo_update", "todo_list", "todo_delete", "todo_archive"}
 
 if TYPE_CHECKING:
     from src.memory.working import WorkingMemory
@@ -208,6 +208,10 @@ class ToolExecutor:
                 text = runtime.todo_update(parsed_args)
             elif invocation.tool.name == "todo_list":
                 text = runtime.todo_list(parsed_args)
+            elif invocation.tool.name == "todo_delete":
+                text = runtime.todo_delete(parsed_args)
+            elif invocation.tool.name == "todo_archive":
+                text = runtime.todo_archive(parsed_args)
             elif invocation.tool.name == "ask_user":
                 text = runtime.ask_user(str(parsed_args.get("question", "")), choices=list(parsed_args.get("choices", []) or []))
             elif invocation.tool.name == "enter_plan_mode":
