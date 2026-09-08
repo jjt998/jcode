@@ -4,9 +4,34 @@ import threading
 import time
 from pathlib import Path
 
+from src.app.config import AppConfig
 from src.app.web_runs import WebRun, WebRunManager
 from src.app.web_steps import build_reasoning_steps
 from src.app.web_turns import build_session_turns
+
+
+def test_web_session_config_does_not_mark_new_session_as_resume(tmp_path):
+    """新会话的 Web Agent 不应因配置 resume 而注入恢复上下文。"""
+    manager = WebRunManager.__new__(WebRunManager)
+    manager.config = AppConfig(
+        cwd=tmp_path,
+        provider_name="test",
+        api_protocol="test",
+        model_profiles={},
+        default_model_profile="default",
+        approval="never",
+        sandbox="workspace",
+        max_steps=1,
+        max_new_tokens=1,
+        temperature=0.0,
+    )
+    manager._session_model_profile = lambda project, session_id: "default"
+    project = type("Project", (), {"root": tmp_path})()
+
+    config = manager._config_for_session(project, "new-session")
+
+    assert config.session_id == "new-session"
+    assert config.resume is None
 
 
 def test_steps_show_process_content_without_reasoning():

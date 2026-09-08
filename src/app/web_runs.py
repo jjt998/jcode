@@ -342,12 +342,14 @@ class WebRunManager:
         return run.status if run else ""
 
     def _config_for_session(self, project: WebProject, session_id: str) -> AppConfig:
+        # Web 每次发送都会创建新的 Agent；是否续跑由 Agent 的 _begin_run 统一判断。
+        # 这里不能把普通会话标记为显式 resume，否则新会话也会注入恢复上下文。
         return replace(
             self.config,
             cwd=project.root,
             default_model_profile=self._session_model_profile(project, session_id),
             session_id=session_id,
-            resume=session_id,
+            resume=None,
         )
 
     def _session_model_profile(self, project: WebProject, session_id: str) -> str:

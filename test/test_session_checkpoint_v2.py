@@ -59,3 +59,4 @@ def test_resume_context_reports_external_workspace_changes(tmp_path):
 
     assert any(path.endswith("src/a.py") for path in context["changed_paths"])
     assert context["workspace_mismatch"] is True
+    assert "workspace_baseline" not in context
