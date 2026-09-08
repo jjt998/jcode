@@ -17,8 +17,8 @@ class WriteFileArgs(BaseModel):
 
 class ApplyPatchArgs(BaseModel):
     path: str
-    old_text: str = Field(min_length=1)
-    new_text: str
+    old_text: str = Field(min_length=1, description="必须逐字取自最近一次 read_file 返回内容，保留原始换行符。")
+    new_text: str = Field(description="替换 old_text 的新文本，按原样写入。")
 
 
 class ListFilesArgs(BaseModel):

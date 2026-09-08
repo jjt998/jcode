@@ -10,9 +10,25 @@ def freshness(path: Path) -> str:
     return f"{int(stat.st_mtime_ns)}:{stat.st_size}"
 
 
+def _newline_style(text: str) -> str:
+    """识别文本的原始换行格式，供读取和补丁诊断共同使用。"""
+    has_crlf = "\r\n" in text
+    without_crlf = text.replace("\r\n", "")
+    has_lf = "\n" in without_crlf
+    if has_crlf and has_lf:
+        return "mixed"
+    if has_crlf:
+        return "crlf"
+    if has_lf:
+        return "lf"
+    return "none"
+
+
 def read_file(workspace, args, working_memory) -> ToolResult:
     path = workspace.resolve_path(args.path)
-    source_text = path.read_text(encoding="utf-8", errors="replace")
+    raw = path.read_bytes()
+    has_bom = raw.startswith(b"\xef\xbb\xbf")
+    source_text = raw.decode("utf-8-sig", errors="replace")
     # 先按 start/end 截取，再交给 max_chars 控制返回长度，避免读取范围和结果长度混在一起。
     selected_text = source_text[args.start : args.end]
     missing_chars = max(0, len(selected_text) - args.max_chars)
@@ -27,6 +43,8 @@ def read_file(workspace, args, working_memory) -> ToolResult:
         "missing_chars": missing_chars,
         "file_size": file_size,
         "freshness": current_freshness,
+        "newline": _newline_style(source_text),
+        "utf8_bom": has_bom,
     }
     # 这里是把读过文件的新鲜度写到工作记忆的！注释掉会导致agent在恢复时无法判断文件是否被修改过，以及读后写等下游功能的异常！
     working_memory.note_file_read(rel, args.model_dump(), current_freshness, read_metadata)
@@ -61,8 +79,14 @@ def apply_text_patch(workspace, args) -> ToolResult:
     text = raw.decode("utf-8-sig", errors="replace")
     count = text.count(args.old_text)
     if count != 1:
-        newline = "crlf" if "\r\n" in text else "lf"
-        return ToolResult("error", f"old_text matched {count} times; expected exactly 1", error_type="patch_nonunique", metadata={"path": workspace.relpath(path), "match_count": count, "freshness": freshness(path), "newline": newline, "utf8_bom": has_bom})
+        newline = _newline_style(text)
+        has_line_break = "\n" in args.old_text or "\r" in args.old_text
+        message = (
+            f"old_text matched {count} times; expected exactly 1; "
+            f"file_newline={newline}; old_text_contains_newline={str(has_line_break).lower()}; "
+            f"utf8_bom={str(has_bom).lower()}; reread the complete file before retrying"
+        )
+        return ToolResult("error", message, error_type="patch_nonunique", metadata={"path": workspace.relpath(path), "match_count": count, "freshness": freshness(path), "newline": newline, "utf8_bom": has_bom, "old_text_contains_newline": has_line_break})
     path.write_bytes((b"\xef\xbb\xbf" if has_bom else b"") + text.replace(args.old_text, args.new_text, 1).encode("utf-8"))
     return ToolResult("success", f"patched {workspace.relpath(path)}", changed_files=[workspace.relpath(path)])
 

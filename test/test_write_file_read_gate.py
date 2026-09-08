@@ -97,6 +97,46 @@ def test_apply_patch_allows_absolute_path_after_relative_read(tmp_path):
     assert target.read_text(encoding="utf-8") == "new"
 
 
+def test_read_file_and_apply_patch_preserve_crlf_for_multiline_old_text(tmp_path):
+    """read_file 返回原始 CRLF 后，跨行 old_text 可以被精确替换。"""
+    target = tmp_path / "crlf.txt"
+    target.write_bytes(b"first\r\nsecond\r\nthird")
+    executor, working_memory, _ = build_executor(tmp_path)
+
+    read_result = executor.execute("read_file", {"path": "crlf.txt"}, working_memory=working_memory)
+    assert read_result.metadata["newline"] == "crlf"
+    assert "first\r\nsecond" in read_result.text
+
+    result = executor.execute(
+        "apply_patch",
+        {"path": "crlf.txt", "old_text": "first\r\nsecond", "new_text": "first\r\nupdated"},
+        working_memory=working_memory,
+    )
+
+    assert result.status == "success"
+    assert target.read_bytes() == b"first\r\nupdated\r\nthird"
+
+
+def test_apply_patch_mismatch_reports_newline_diagnostics(tmp_path):
+    """old_text 未命中时返回文件换行和读取建议，便于定位协议不一致。"""
+    target = tmp_path / "crlf.txt"
+    target.write_bytes(b"first\r\nsecond")
+    executor, working_memory, _ = build_executor(tmp_path)
+    executor.execute("read_file", {"path": "crlf.txt"}, working_memory=working_memory)
+
+    result = executor.execute(
+        "apply_patch",
+        {"path": "crlf.txt", "old_text": "first\nsecond", "new_text": "updated"},
+        working_memory=working_memory,
+    )
+
+    assert result.status == "error"
+    assert result.error_type == "patch_nonunique"
+    assert "file_newline=crlf" in result.text
+    assert "old_text_contains_newline=true" in result.text
+    assert "reread the complete file" in result.text
+
+
 def test_write_file_allows_absolute_path_after_relative_read(tmp_path):
     target = tmp_path / "existing.txt"
     target.write_text("old", encoding="utf-8")
