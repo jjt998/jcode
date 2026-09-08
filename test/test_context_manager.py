@@ -5,7 +5,7 @@ import pytest
 from src.context.budget import TokenizerAdapter, calculate_pressure
 from src.context.manager import ContextManager
 from src.memory.working import WorkingMemory
-from src.runtime.errors import MandatoryContextExceedsWindowError
+from src.runtime.errors import FinalContextExceedsWindowError, MandatoryContextExceedsWindowError
 from src.state.workspace import Workspace
 from src.tools.registry import build_default_registry
 
@@ -69,6 +69,20 @@ def test_provider_snapshot_is_audited_exactly(tmp_path):
 def test_mandatory_capacity_failure(tmp_path):
     with pytest.raises(MandatoryContextExceedsWindowError):
         manager(tmp_path, window=100, output=80).build({"history": []}, WorkingMemory(tmp_path), "x" * 100, allowed_tools=frozenset())
+
+
+def test_final_capacity_failure_does_not_delete_old_history(tmp_path):
+    """最终超限只报错，不再通过删除旧 turn 逃避容量校验。"""
+    history = [
+        {"kind": "user", "event_id": "old", "turn_id": "run-1", "content": "old context " * 3000},
+        {"kind": "user", "event_id": "current", "turn_id": "run-2", "content": "current task"},
+    ]
+    session = {"history": history}
+
+    with pytest.raises(FinalContextExceedsWindowError):
+        manager(tmp_path, window=10000, output=100).build(session, WorkingMemory(tmp_path), "current task", allowed_tools=frozenset())
+
+    assert session["history"] == history
 
 
 def test_level_windows():

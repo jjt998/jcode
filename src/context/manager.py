@@ -9,7 +9,6 @@ from src.context.budget import (
     SAFETY_MARGIN,
     TokenizerAdapter,
     calculate_pressure,
-    ContextBudgetCandidate,
     effective_window,
     validate_final_capacity,
     BudgetOccupancy,
@@ -163,8 +162,6 @@ class ContextManager:
         skill = render_skill_section(select_skill_entries(level))
         if level >= 3:
             self._reduce_memory(memory_candidate)
-        candidate_decisions: list[dict] = []
-        history = self._fit_optional_history(history, prefix, skill, memory_candidate, tools, continuation, window, candidate_decisions)
         result = ContextResult(prefix, skill, history, memory_candidate, tools, {}, provider_continuation=continuation, internal_continuation_instruction=internal_instruction)
         snapshot = compile_provider_input_snapshot(result, self.tokenizer)
         result.provider_input = snapshot
@@ -191,7 +188,6 @@ class ContextManager:
             "selected_section_tokens": dict(section_demands),
             "raw_pressure": dict(pressure),
             "final_pressure": calculate_pressure(0, max(1, capacity.remaining_tokens)),
-            "candidate_decisions": candidate_decisions,
             "compression_records": [],
             "pressure": {**pressure, "level": pressure_level, "range": pressure_range, "final_ratio": calculate_pressure(0, max(1, capacity.remaining_tokens)).get("ratio", 0)},
             "final_capacity_status": {"can_send": capacity.can_send, "remaining_tokens": capacity.remaining_tokens},
@@ -297,30 +293,6 @@ class ContextManager:
             return self.workspace.relpath(self.workspace.resolve_path(raw)).replace("\\", "/") or "."
         except Exception:
             return raw.replace("\\", "/") or "."
-
-    def _fit_optional_history(self, history, prefix, skill, memory, tools, continuation, window, decisions=None):
-        """容量不足时按完整事件组淘汰最旧可变历史，绝不拆分工具调用闭环。"""
-        current_turn = history[-1].turn_id if history else ""
-        working = list(history)
-        while working:
-            probe = ContextResult(prefix, skill, working, memory, tools, {}, provider_continuation=continuation)
-            snapshot = compile_provider_input_snapshot(probe, self.tokenizer)
-            if snapshot.serialized_input_tokens + self.actual_max_new_tokens + SAFETY_MARGIN <= window:
-                return working
-            removable_turns = []
-            for event in working:
-                if event.kind == "compact_summary" or event.turn_id == current_turn:
-                    continue
-                if event.turn_id not in removable_turns:
-                    removable_turns.append(event.turn_id)
-            if not removable_turns:
-                return working
-            candidates = [ContextBudgetCandidate("history", str(turn), turn, index) for index, turn in enumerate(removable_turns)]
-            remove_turn = sorted(candidates, key=lambda candidate: candidate.sort_key())[0].stable_name
-            if decisions is not None:
-                decisions.append({"action": "drop", "section": "history", "turn_id": remove_turn, "reason": "capacity"})
-            working = [event for event in working if event.turn_id != remove_turn]
-        return working
 
     @staticmethod
     def _reduce_memory(memory) -> None:
