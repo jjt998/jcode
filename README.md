@@ -243,7 +243,7 @@ JCode 对外统一使用三层记忆认知：
 
 Dream 子 Agent 可以通过内部入口 `agent.run_dream()` 手动触发。Dream 使用受限工具 Profile，只能在 `.jcode/memory/` 内整理 Daily Log、topic 和 `MEMORY.md`，不会修改普通源码文件。
 
-Session 使用 schema v5，Working Memory 使用 `jcode.layered_memory.v2`，Checkpoint 使用 schema v2。旧协议不做迁移兼容。Checkpoint 保存在每次运行的 `checkpoint.json` 中，记录 session、run、step、last action、changed files、working memory、workspace fingerprint 和 worker refs，用于后续恢复判断。
+Session 使用 schema v5，Working Memory 使用 `jcode.layered_memory.v2`，Checkpoint 使用 schema v3。旧协议不做迁移兼容。Checkpoint 保存在每次运行的 `checkpoint.json` 中，记录 session、run、step、last action、changed files、working memory、workspace fingerprint 和 worker refs，用于后续恢复判断。
 
 ## 子 Agent
 
@@ -278,6 +278,7 @@ JCode 的每次运行都可以审计：
 
 完整链路说明见：
 
+- [JCode 项目完整链路（Mermaid 总图与分支图）](docs/JCode项目完整链路.md)
 - [上下文治理完整链路](docs/上下文治理完整链路.md)
 - [工具治理完整链路](docs/工具治理完整链路.md)
 - [上下文治理改进策略 9.5](docs/上下文治理改进策略9.5/总策略.md)
