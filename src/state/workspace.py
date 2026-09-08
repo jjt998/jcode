@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import subprocess
 import textwrap
@@ -74,17 +75,29 @@ class Workspace:
         return str(Path(path).resolve().relative_to(self.root)).replace("\\", "/")
 
     def fingerprint(self) -> str:
-        h = hashlib.sha256()
-        h.update(str(self.root).encode("utf-8"))
-        for path in sorted(self.root.glob("*"))[:200]:
+        payload = self.baseline()
+        return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()[:16]
+
+    def baseline(self) -> dict:
+        """生成递归工作区基线，供会话延续比较使用。"""
+        files = {}
+        for path in sorted(self.root.rglob("*")):
             if path.name == ".jcode":
                 continue
             try:
                 stat = path.stat()
             except OSError:
                 continue
-            h.update(f"{path.name}:{int(stat.st_mtime)}:{stat.st_size}".encode("utf-8"))
-        return h.hexdigest()[:16]
+            if path.is_file() and ".jcode" not in path.parts:
+                files[self.relpath(path)] = {"size": int(stat.st_size), "mtime_ns": int(stat.st_mtime_ns)}
+        return {"root": str(self.root), "git_head": self._git_value(["rev-parse", "HEAD"]), "git_branch": self._git_value(["branch", "--show-current"]), "git_status": self._git_value(["status", "--short"]), "files": files}
+
+    def _git_value(self, args: list[str]) -> str:
+        try:
+            result = subprocess.run(["git", *args], cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True, timeout=5)
+            return result.stdout.strip()
+        except Exception:
+            return ""
 
     def snapshot(self) -> dict[str, tuple[int, int]]:
         items: dict[str, tuple[int, int]] = {}

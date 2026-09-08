@@ -6,7 +6,7 @@ from pathlib import Path
 from src.state.workspace import Workspace, now_iso
 from src.tools.workspace import freshness
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class CheckpointManager:
@@ -51,6 +51,8 @@ class CheckpointManager:
             "working_memory": working_memory.to_dict(),
             "todo_ledger": dict(session.get("todo_ledger", {})),
             "workspace_fingerprint": self.workspace.fingerprint(),
+            "workspace_baseline": self.workspace.baseline(),
+            "execution_fingerprint": dict(task_state.model_profile),
             "worker_refs": list(worker_refs or []),
             "resumable": bool(resumable),
             "created_at": now_iso(),

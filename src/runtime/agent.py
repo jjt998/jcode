@@ -21,7 +21,7 @@ from src.runtime.transitions import ABORTED, MODEL_ERROR, MODEL_OUTPUT_INCOMPLET
 from src.runtime.errors import JCodeRuntimeStopError
 from src.state.checkpoint import CheckpointManager
 from src.state.history import append_history
-from src.state.resume import build_resume_context
+from src.state.resume import build_execution_fingerprint, build_resume_context
 from src.state.task import TaskState
 from src.state.model_selection import resolve_model_snapshot
 from src.state.todo import TodoLedger
@@ -344,7 +344,25 @@ class JCodeAgent:
     def _begin_run(self, user_message: str):
         profile_id = str(self.session.get("active_model_profile") or self.config.default_model_profile)
         profile = self.model_router.registry.profile(profile_id)
-        task_state = TaskState.create(user_message, resolve_model_snapshot(self.session, profile))
+        execution_fingerprint = build_execution_fingerprint(
+            resolve_model_snapshot(self.session, profile),
+            [{"name": item.name, "description": item.description, "parameters": item.parameters} for item in self.context_manager.registry.definitions(self.active_tool_profile.allowed_tools)],
+        )
+        continuation_context = {}
+        if self.session.get("run_ids"):
+            continuation_context = build_resume_context(
+                session=self.session,
+                session_store=self.session_store,
+                run_store=self.run_store,
+                workspace=self.workspace,
+                resume_requested=None,
+                execution_fingerprint=execution_fingerprint,
+            )
+            changed_paths = sorted(set(continuation_context.get("changed_paths", [])))
+            if changed_paths:
+                self._mark_stale_file_evidence(changed_paths)
+            self.working_memory.resume_context = continuation_context
+        task_state = TaskState.create(user_message, execution_fingerprint)
         run_dir = self.run_store.start_run(task_state)
         checkpoint = CheckpointManager(run_dir, self.workspace)
         self.working_memory.task_goal = str(user_message)
@@ -357,9 +375,20 @@ class JCodeAgent:
             model_profile=task_state.model_profile,
         )
         self._record_trace(run_dir, "run_started", task_state, task_id=task_state.task_id, user_request=user_message[:500], model_profile=task_state.model_profile)
+        if continuation_context:
+            self._emit_session_continuation_events(run_dir, task_state, continuation_context)
         if self.working_memory.resume_context:
             self._record_trace(run_dir, "resume_evaluated", task_state, **self.working_memory.resume_context)
         return task_state, run_dir, checkpoint
+
+    def _emit_session_continuation_events(self, run_dir, task_state, context: dict) -> None:
+        """把统一延续评估写入 session event 与 run trace。"""
+        event_names = ["session_continuation_evaluated", "workspace_baseline_evaluated", "execution_fingerprint_evaluated", "continuation_compatibility_evaluated"]
+        if context.get("changed_paths"):
+            event_names.append("workspace_changed_detected")
+        for event_name in event_names:
+            self.session_events.emit(event_name, run_id=task_state.run_id, **context)
+            self._record_trace(run_dir, event_name, task_state, **context)
 
     def _build_context(self, user_message: str, task_state, run_dir):
         context_result = self.context_manager.build(
@@ -853,9 +882,9 @@ class JCodeAgent:
                 return [dict(source) for source in source_files if isinstance(source, dict)]
         return []
 
-    def _mark_stale_file_evidence(self, changed_files: list[str]) -> None:
+    def mark_stale_file_evidence(self, changed_paths: list[str]) -> None:
         """文件成功变更后，标记历史中依赖旧文件内容的 read_file 结果。"""
-        changed = {str(path).replace("\\", "/") for path in changed_files if str(path).strip()}
+        changed = {str(path).replace("\\", "/") for path in changed_paths if str(path).strip()}
         if not changed:
             return
         for item in self.session.get("history", []):
@@ -876,6 +905,10 @@ class JCodeAgent:
                 metadata["stale"] = True
                 metadata["stale_reason"] = "source_file_changed"
                 metadata["stale_paths"] = sorted(stale_paths)
+
+    def _mark_stale_file_evidence(self, changed_files: list[str]) -> None:
+        """保留内部调用别名，所有标记统一落到公共 changed_paths 入口。"""
+        self.mark_stale_file_evidence(changed_files)
 
     def _create_checkpoint(self, checkpoint, task_state, run_dir, trigger: str) -> None:
         checkpoint.create(self.session, task_state, self.working_memory, self.worker_manager.worker_refs())

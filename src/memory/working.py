@@ -155,11 +155,11 @@ class WorkingMemory:
         self.safety_notes.append(text[:1000])
 
     def render(self) -> str:
-        if self.resume_context:
-            lines = ["Checkpoint:"]
-            lines.append(str(self.resume_context))
-
+        """渲染当前记忆，并保留会话延续评估结果。"""
         lines = ["Working_Memory:"]
+        if self.resume_context:
+            lines.append("- session_continuation:")
+            lines.append(str(self.resume_context))
         if self.task_goal:
             lines.append(f"- goal: {self.task_goal}")
         if self.constraints:

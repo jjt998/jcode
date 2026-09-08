@@ -21,7 +21,7 @@ from src.providers.minimax import MiniMaxClient
 from src.providers.registry import ModelRegistry
 from src.providers.router import ModelRouter
 from src.runtime.agent import JCodeAgent
-from src.state.resume import build_resume_context
+from src.state.resume import build_execution_fingerprint, build_resume_context
 from src.state.session import SessionStore
 from src.state.workspace import Workspace
 from src.tools.executor import ToolExecutor
@@ -37,14 +37,6 @@ def build_agent(config: AppConfig) -> JCodeAgent:
     memory_store = DurableMemoryStore(state_dir / "memory")
     session = session_store.load_requested(config.session_id, config.resume, workspace.root)
     working_memory = WorkingMemory.from_dict(session.get("working_memory", {}), workspace.root)
-    if config.resume:
-        working_memory.resume_context = build_resume_context(
-            session=session,
-            session_store=session_store,
-            run_store=run_store,
-            workspace=workspace,
-            resume_requested=config.resume,
-        )
     redactor = SecretRedactor.from_environment(extra_names=("JCODE_API_KEY",))
     registry = build_default_registry()
     tool_profiles = build_tool_profiles(registry)
@@ -69,6 +61,19 @@ def build_agent(config: AppConfig) -> JCodeAgent:
     selected_profile = model_registry.profile(selected_profile_id)
     runtime_mode = session.get("runtime_mode", {}) if isinstance(session.get("runtime_mode", {}), dict) else {}
     active_tool_profile_name = "plan" if str(runtime_mode.get("mode", "default")) == "plan" else "default"
+    execution_fingerprint = build_execution_fingerprint(
+        selected_profile.snapshot(),
+        [{"name": item.name, "description": item.description, "parameters": item.parameters} for item in registry.definitions(tool_profiles[active_tool_profile_name].allowed_tools)],
+    )
+    if config.resume:
+        working_memory.resume_context = build_resume_context(
+            session=session,
+            session_store=session_store,
+            run_store=run_store,
+            workspace=workspace,
+            resume_requested=config.resume,
+            execution_fingerprint=execution_fingerprint,
+        )
     static_tools = [
         {"type": "function", "name": item.name, "description": item.description, "parameters": item.parameters}
         for item in registry.definitions(tool_profiles[active_tool_profile_name].allowed_tools)

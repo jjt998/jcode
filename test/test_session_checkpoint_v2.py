@@ -5,6 +5,7 @@ from src.state.checkpoint import CheckpointManager, SCHEMA_VERSION, evaluate_che
 from src.state.task import TaskState
 from src.state.session import SessionStore
 from src.state.workspace import Workspace
+from src.state.resume import build_resume_context
 
 
 def test_session_schema5_atomic_save_and_working_memory_v2(tmp_path):
@@ -36,3 +37,25 @@ def test_checkpoint_persists_final_gate_dual_quality_snapshot(tmp_path):
     assert checkpoint["agent_quality"]["level"] == "yellow"
     assert checkpoint["harness_quality"]["level"] == "green"
     assert checkpoint["finalization"]["status"] == "committed"
+
+
+def test_resume_context_reports_external_workspace_changes(tmp_path):
+    """会话延续评估发现外部修改时输出 changed_paths。"""
+    workspace = Workspace.build(tmp_path)
+    target = tmp_path / "src" / "a.py"
+    target.parent.mkdir()
+    target.write_text("old", encoding="utf-8")
+    baseline = workspace.baseline()
+    target.write_text("new", encoding="utf-8")
+    store = SessionStore(tmp_path / "sessions")
+    session = store.load_requested(None, None, tmp_path)
+    session["run_ids"] = ["run-1"]
+    run_store = type("Runs", (), {"run_dir": lambda self, run_id: tmp_path / "missing"})()
+    checkpoint = {"schema_version": SCHEMA_VERSION, "resumable": True, "workspace_baseline": baseline, "workspace_fingerprint": "old", "working_memory": {"files": {"hot": [], "freshness": {}}}}
+    (tmp_path / "missing").mkdir()
+    (tmp_path / "missing" / "checkpoint.json").write_text(__import__("json").dumps(checkpoint), encoding="utf-8")
+
+    context = build_resume_context(session=session, session_store=store, run_store=run_store, workspace=workspace, resume_requested=None, execution_fingerprint={})
+
+    assert any(path.endswith("src/a.py") for path in context["changed_paths"])
+    assert context["workspace_mismatch"] is True
