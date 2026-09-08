@@ -25,6 +25,7 @@ class StepTimelineBuilder:
         self.pending_context_text = ""
         self.pending_compression_before = None
         self.pending_compression = None
+        self.pending_step_id = ""
         self.final_text = ""
         self._tool_seq = 0
         self._last_event_at = ""
@@ -38,6 +39,7 @@ class StepTimelineBuilder:
         if name == "context_built":
             self.pending_context_text = str(event.get("context_audit_ref") or "")
             self.pending_compression_before = deepcopy(event.get("compression_before")) if event.get("compression_before") else None
+            self.pending_step_id = str(event.get("step_id") or "")
             if self.current_step is not None and not self.current_step.get("context_audit_ref"):
                 self.current_step["context_audit_ref"] = self.pending_context_text
                 self.current_step["compression_before"] = self.pending_compression_before
@@ -46,19 +48,21 @@ class StepTimelineBuilder:
             return patches
 
         if name == "context_compression_compared":
-            # 压缩事件先于模型响应到达，暂存后挂到即将创建的模型步骤。
+            # 压缩事件先于模型响应到达，按稳定 step_id 暂存。
             self.pending_compression = deepcopy(event)
             return patches
 
         if name == "model_responded":
             self._finalize_current_step(success_if_open=True, end_at=created_at or self._last_event_at)
-            step = self._new_step(created_at)
+            step = self._new_step(created_at, step_id=str(event.get("step_id") or self.pending_step_id or ""))
             step["context_audit_ref"] = self.pending_context_text
             step["compression_before"] = self.pending_compression_before
             step["response_text"] = str(event.get("response_text") or "")
             step["parsed_action"] = {"tool_calls": list(event.get("native_tool_calls") or [])}
             if self.pending_compression is not None:
-                step["compression_comparison"] = deepcopy(self.pending_compression)
+                comparison_step_id = str(self.pending_compression.get("step_id") or "")
+                if not comparison_step_id or comparison_step_id == step["step_id"]:
+                    step["compression_comparison"] = deepcopy(self.pending_compression)
                 self.pending_compression = None
             if step["parsed_action"]["tool_calls"]:
                 step["process_content"] = step["response_text"]
@@ -69,6 +73,7 @@ class StepTimelineBuilder:
             self.current_step = step
             self.pending_context_text = ""
             self.pending_compression_before = None
+            self.pending_step_id = ""
             self.steps.append(step)
             patches.append(self._snapshot_step(step))
             return patches
@@ -132,6 +137,24 @@ class StepTimelineBuilder:
             return patches
 
         if name == "runtime_stopped":
+            if self.current_step is None:
+                step = self._new_step(created_at, step_id=self.pending_step_id)
+                step["context_audit_ref"] = self.pending_context_text
+                step["compression_before"] = self.pending_compression_before
+                if self.pending_compression is not None:
+                    step["compression_comparison"] = deepcopy(self.pending_compression)
+                step["status"] = "pending"
+                self.steps.append(step)
+                self.current_step = step
+                self.pending_compression = None
+                self.pending_context_text = ""
+                self.pending_compression_before = None
+                self.pending_step_id = ""
+            audit = event.get("audit") if isinstance(event.get("audit"), dict) else {}
+            if audit.get("compression_comparison") and not step.get("compression_comparison"):
+                comparison = deepcopy(audit["compression_comparison"])
+                comparison["result"] = {**comparison.get("result", {}), "status": "failed", "label": "压缩后仍超出上下文窗口"}
+                step["compression_comparison"] = comparison
             step["status"] = "error"
             step["error_text"] = str(event.get("stop_reason") or "runtime_stopped")
             self._push_detail(step, name, "系统停止", _event_content(name, event), event)
@@ -168,9 +191,9 @@ class StepTimelineBuilder:
             return self.current_step
         return None
 
-    def _new_step(self, created_at: str) -> dict:
+    def _new_step(self, created_at: str, step_id: str = "") -> dict:
         index = len(self.steps) + 1
-        step_id = f"{self.run_id}:{index}" if self.run_id else f"step-{index}"
+        step_id = step_id or (f"{self.run_id}:{index}" if self.run_id else f"step-{index}")
         return {
             "step_id": step_id,
             "index": index,

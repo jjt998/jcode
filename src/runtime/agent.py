@@ -415,6 +415,7 @@ class JCodeAgent:
         )
         audit_sha256 = hashlib.sha256(json.dumps(audit_data, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
         event_payload = self._context_event_payload(context_result, audit_ref, audit_sha256)
+        event_payload["step_id"] = self._context_step_id(task_state)
         self.session_events.emit("context_built", run_id=task_state.run_id, **event_payload)
         self._record_trace(run_dir, "context_built", task_state, **event_payload)
         return context_result
@@ -462,6 +463,7 @@ class JCodeAgent:
             audit = dict(context_result.compact_audit or {})
             comparison_payload = {
                 **comparison,
+                "step_id": self._context_step_id(task_state),
                 "pressure_level": int(event_payload.get("pressure_level", 0) or 0),
                 "result": {
                     "status": "fallback" if audit.get("status") == "fallback" else "applied",
@@ -541,6 +543,7 @@ class JCodeAgent:
             run_dir,
             "model_responded",
             task_state,
+            step_id=self._context_step_id(task_state),
             estimated_input_tokens=response.input_tokens,
             estimated_output_tokens=response.output_tokens,
             response_text=self.redactor.redact(response.text),
@@ -554,6 +557,11 @@ class JCodeAgent:
             model_profile=task_state.model_profile,
         )
         return response
+
+    @staticmethod
+    def _context_step_id(task_state) -> str:
+        """用步骤和请求尝试号稳定关联 Context、压缩事件与模型响应。"""
+        return f"{task_state.run_id}:{task_state.step_index}:{task_state.attempts}"
 
     @staticmethod
     def _combined_response_text(task_state, response_text: str) -> str:

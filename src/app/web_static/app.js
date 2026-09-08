@@ -798,7 +798,7 @@ function renderStandardCompressionCard(turn, step, comparison, before) {
     const delta = comparison.delta || {};
     body.append(compressionDeltaBlock(delta));
     const changes = comparison.content_changes || [];
-    body.append(detailBlock("内容差值", changes.length ? changes.map((item) => `${item.change || "变化"}｜第 ${item.turn || ""} 轮｜${item.tool_name || item.category || ""}\n${item.summary || item.file_ref || ""}`).join("\n\n") : "本次没有移出内容", `compression-content:${turnKey(turn)}:${step.step_id}`));
+    body.append(detailBlock("内容差值", changes.length ? changes.map((item) => [`变化：${item.change ?? "变化"}`, `类别：${item.category ?? "未提供"}`, `回合：${item.turn ?? "未提供"}`, `工具：${item.tool_name ?? "未提供"}`, `摘要：${item.summary ?? "未提供"}`, `文件引用：${item.file_ref ?? "未提供"}`].join("\n")).join("\n\n") : "本次没有移出内容", `compression-content:${turnKey(turn)}:${step.step_id}`));
     body.append(detailBlock("压缩结果", JSON.stringify(result, null, 2), `compression-result:${turnKey(turn)}:${step.step_id}`));
   }
   details.append(body);
@@ -844,15 +844,23 @@ function renderFourthLevelCompressionCard(turn, step, comparison, before) {
 }
 
 function formatRatio(value) {
-  const ratio = Number(value || 0);
+  if (value === null || value === undefined || value === "") return "未提供";
+  const ratio = Number(value);
+  if (!Number.isFinite(ratio) || ratio < 0) return "未提供";
   return `${(ratio <= 1 ? ratio * 100 : ratio).toFixed(1)}%`;
+}
+
+function formatMetric(value, suffix = "") {
+  if (value === null || value === undefined || value === "") return "未提供";
+  const number = Number(value);
+  return Number.isFinite(number) ? `${number}${suffix}` : "未提供";
 }
 
 function compressionMetricBlock(title, data) {
   const section = document.createElement("section");
   section.className = "compression-metrics";
   const fixed = Object.entries(data.fixed_items || {}).map(([name, tokens]) => `${name}: ${tokens}`).join("，");
-  section.innerHTML = `<strong>${escapeHtml(title)}</strong><div>固定项：${escapeHtml(fixed || "无")}</div><div>总输入：${escapeHtml(String(data.total_input_tokens || 0))} tokens；输出预留：${escapeHtml(String(data.output_reserved_tokens || 0))}；安全余量：${escapeHtml(String(data.safety_margin_tokens || 0))}</div><div>剩余容量：${escapeHtml(String(data.remaining_capacity_tokens || 0))}；压力：${escapeHtml(formatRatio(data.pressure_ratio))}（${escapeHtml(String(data.pressure_level || 0))} 档）</div>`;
+  section.innerHTML = `<strong>${escapeHtml(title)}</strong><div>固定项：${escapeHtml(fixed || "无")}</div><div>总输入：${escapeHtml(formatMetric(data.total_input_tokens, " tokens"))}；输出预留：${escapeHtml(formatMetric(data.output_reserved_tokens))}；安全余量：${escapeHtml(formatMetric(data.safety_margin_tokens))}</div><div>剩余容量：${escapeHtml(formatMetric(data.remaining_capacity_tokens))}；压力：${escapeHtml(formatRatio(data.pressure_ratio))}（${escapeHtml(formatMetric(data.pressure_level))} 档）</div>`;
   return section;
 }
 
@@ -860,7 +868,7 @@ function compressionDeltaBlock(delta) {
   const section = document.createElement("section");
   section.className = "compression-delta";
   const fixed = Object.entries(delta.fixed_items || {}).map(([name, value]) => `${name}: ${value > 0 ? "+" : ""}${value}`).join("，");
-  section.innerHTML = `<strong>Token 差值</strong><div>${escapeHtml(fixed || "无")}</div><div>总释放：${escapeHtml(String(delta.total_released_tokens || 0))} tokens</div>`;
+  section.innerHTML = `<strong>Token 差值</strong><div>${escapeHtml(fixed || "无")}</div><div>总释放：${escapeHtml(formatMetric(delta.total_released_tokens, " tokens"))}</div>`;
   return section;
 }
 

@@ -20,7 +20,7 @@ def test_context_compression_event_does_not_pass_run_id_twice():
     event_recorder = EventRecorder()
     agent.session_events = event_recorder
     agent._record_trace = lambda *args, **kwargs: None
-    task_state = SimpleNamespace(run_id="run-1")
+    task_state = SimpleNamespace(run_id="run-1", step_index=1, attempts=1)
     context_result = SimpleNamespace(
         ctx_info={
             "pressure": {"level": 1, "range": "high"},
