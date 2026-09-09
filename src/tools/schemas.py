@@ -19,7 +19,7 @@ class WriteFileArgs(BaseModel):
 
 class ApplyPatchArgs(BaseModel):
     path: str
-    old_text: str = Field(min_length=1, description="必须逐字取自最近一次 read_file 返回内容，保留原始换行符。")
+    old_text: str = Field(min_length=1, description="内容和空白必须逐字取自最近一次 read_file 返回内容；LF 与 CRLF 仅作为传输换行差异等价处理。")
     new_text: str = Field(description="替换 old_text 的新文本，按原样写入。")
 
 

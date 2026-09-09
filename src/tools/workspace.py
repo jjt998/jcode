@@ -24,6 +24,12 @@ def _newline_style(text: str) -> str:
     return "none"
 
 
+def _normalize_newlines(text: str, style: str) -> str:
+    """只规范换行表示，不改变其它字符。"""
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return normalized.replace("\n", "\r\n") if style == "crlf" else normalized
+
+
 def read_file(workspace, args, working_memory) -> ToolResult:
     path = workspace.resolve_path(args.path)
     raw = path.read_bytes()
@@ -57,6 +63,8 @@ def read_file(workspace, args, working_memory) -> ToolResult:
         f"missing_chars: {missing_chars}\n"
         f"file_size: {file_size} bytes\n"
         f"freshness: {current_freshness}\n\n"
+        f"newline: {read_metadata['newline']}\n"
+        f"utf8_bom: {str(has_bom).lower()}\n\n"
     )
     return ToolResult(
         "success",
@@ -77,17 +85,26 @@ def apply_text_patch(workspace, args) -> ToolResult:
     raw = path.read_bytes()
     has_bom = raw.startswith(b"\xef\xbb\xbf")
     text = raw.decode("utf-8-sig", errors="replace")
-    count = text.count(args.old_text)
+    newline = _newline_style(text)
+    match_text = args.old_text
+    match_mode = "exact"
+    count = text.count(match_text)
+    # 模型常把 CRLF 规范化成 LF；仅在纯换行文件且原样未命中时允许等价匹配。
+    if count == 0 and newline in {"crlf", "lf"} and ("\n" in match_text or "\r" in match_text):
+        match_text = _normalize_newlines(match_text, newline)
+        count = text.count(match_text)
+        match_mode = "newline_normalized"
     if count != 1:
-        newline = _newline_style(text)
         has_line_break = "\n" in args.old_text or "\r" in args.old_text
         message = (
             f"old_text matched {count} times; expected exactly 1; "
             f"file_newline={newline}; old_text_contains_newline={str(has_line_break).lower()}; "
             f"utf8_bom={str(has_bom).lower()}; reread the complete file before retrying"
         )
-        return ToolResult("error", message, error_type="patch_nonunique", metadata={"path": workspace.relpath(path), "match_count": count, "freshness": freshness(path), "newline": newline, "utf8_bom": has_bom, "old_text_contains_newline": has_line_break})
-    path.write_bytes((b"\xef\xbb\xbf" if has_bom else b"") + text.replace(args.old_text, args.new_text, 1).encode("utf-8"))
+        return ToolResult("error", message, error_type="patch_nonunique", metadata={"path": workspace.relpath(path), "match_count": count, "freshness": freshness(path), "newline": newline, "utf8_bom": has_bom, "old_text_contains_newline": has_line_break, "match_mode": match_mode})
+    replacement = _normalize_newlines(args.new_text, newline) if newline in {"crlf", "lf"} else args.new_text
+    patched_text = text.replace(match_text, replacement, 1)
+    path.write_bytes((b"\xef\xbb\xbf" if has_bom else b"") + patched_text.encode("utf-8"))
     return ToolResult("success", f"patched {workspace.relpath(path)}", changed_files=[workspace.relpath(path)])
 
 
