@@ -18,6 +18,9 @@ class CheckpointManager:
         self.path = run_dir / "checkpoint.json"
 
     def create(self, session: dict, task_state, working_memory, worker_refs=None, resumable=True) -> dict:
+        # 基线同时用于恢复比较和指纹计算，只扫描一次工作区。
+        workspace_baseline = self.workspace.baseline()
+        workspace_fingerprint = self.workspace.fingerprint_from_baseline(workspace_baseline)
         data = {
             "schema_version": SCHEMA_VERSION,
             "session_id": session.get("id", ""),
@@ -50,8 +53,8 @@ class CheckpointManager:
             "partial_response_parts": list(task_state.partial_response_parts),
             "working_memory": working_memory.to_dict(),
             "todo_ledger": dict(session.get("todo_ledger", {})),
-            "workspace_fingerprint": self.workspace.fingerprint(),
-            "workspace_baseline": self.workspace.baseline(),
+            "workspace_fingerprint": workspace_fingerprint,
+            "workspace_baseline": workspace_baseline,
             "execution_fingerprint": dict(task_state.model_profile),
             "worker_refs": list(worker_refs or []),
             "resumable": bool(resumable),
@@ -67,21 +70,21 @@ class CheckpointManager:
         return evaluate_checkpoint_data(data, self.workspace)
 
 
-def evaluate_checkpoint_path(path: Path, workspace: Workspace) -> tuple[str, dict]:
+def evaluate_checkpoint_path(path: Path, workspace: Workspace, *, workspace_baseline: dict | None = None) -> tuple[str, dict]:
     if not path.exists():
         return "no_checkpoint", {}
     data = json.loads(path.read_text(encoding="utf-8"))
-    return evaluate_checkpoint_data(data, workspace)
+    return evaluate_checkpoint_data(data, workspace, workspace_baseline=workspace_baseline)
 
 
-def evaluate_checkpoint_data(data: dict, workspace: Workspace) -> tuple[str, dict]:
+def evaluate_checkpoint_data(data: dict, workspace: Workspace, *, workspace_baseline: dict | None = None) -> tuple[str, dict]:
     """检查 checkpoint 格式、可恢复性、工作区指纹和文件 freshness。"""
     if data.get("schema_version") != SCHEMA_VERSION:
         return "schema_mismatch", data
     if not data.get("resumable", False):
         return "checkpoint_not_resumable", data
 
-    current_fingerprint = workspace.fingerprint()
+    current_fingerprint = workspace.fingerprint_from_baseline(workspace_baseline) if workspace_baseline is not None else workspace.fingerprint()
     checkpoint_fingerprint = str(data.get("workspace_fingerprint", "") or "")
     if checkpoint_fingerprint != current_fingerprint:
         return "workspace_mismatch", data

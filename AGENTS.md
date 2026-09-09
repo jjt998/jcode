@@ -77,3 +77,7 @@ YYYY-MM-DD-中文问题简述.md
 3. 等待用户确认后再修改设计或实现。
 
 代码审查时，任何无法在已确认文档、协议或用户要求中找到依据的兜底逻辑，都应视为设计偏差并删除，而不是默认保留。
+
+在你要编码前，先和我询问，未得到我的“开始编码”指令则不要动代码。
+
+对于设计文档，放到D:\1technical_stack_study\agent_study\agent_projects\jcode\docs\改进方案中，而不是D:\1technical_stack_study\agent_study\agent_projects\jcode\docs\superpowers\specs。

@@ -1,14 +1,68 @@
-provider = "openai"
+default_model = "minimax-m3"
 
-[providers.openai]
-base_url = "https://api.openai.com/v1"
-api_key = ""
-model = "gpt-5"
-
-[security]
-approval = "ask"
-sandbox = "best_effort"
+[providers.deepseek]
+name = "deepseek"
+api_protocol = "openai_responses"
+base_url = "https://api.deepseek.com"
+api_key = "your_api_key"
 
 [runtime]
-max_steps = 50
-max_new_tokens = 8192
+max_new_tokens = 32768
+
+[models.deepseek-flash]
+provider = "deepseek"
+model = "deepseek-v4-flash"
+context_window_tokens = 1048576
+max_output_tokens = 393216
+reasoning_mode = "native"
+thinking_enabled = true
+reasoning_effort = "high"
+reasoning_effort_options = ["low", "high", "max"]
+
+[models.deepseek-pro]
+provider = "deepseek"
+model = "deepseek-v4-pro"
+context_window_tokens = 1048576
+max_output_tokens = 393216
+reasoning_mode = "native"
+thinking_enabled = true
+reasoning_effort = "high"
+reasoning_effort_options = ["low", "high", "max"]
+
+[providers.minimax]
+name = "minimax"
+api_protocol = "openai_responses"
+base_url = "https://api.minimaxi.com/v1"
+api_key = "your_api_key"
+
+[models.minimax-m3]
+provider = "minimax"
+model = "MiniMax-M3"
+context_window_tokens = 1000000
+max_output_tokens = 524288
+reasoning_mode = "optional"
+thinking_enabled = true
+reasoning_effort = "minimal"
+reasoning_effort_options = ["minimal", "low", "medium", "high"]
+
+[models."minimax-m2.7"]
+provider = "minimax"
+model = "MiniMax-M2.7"
+context_window_tokens = 204800
+max_output_tokens = 32768
+reasoning_mode = "native"
+thinking_enabled = true
+reasoning_effort = "minimal"
+reasoning_effort_options = ["minimal", "low", "medium", "high"]
+reasoning_always_on = true
+
+[models."minimax-m2.7-speed"]
+provider = "minimax"
+model = "MiniMax-M2.7-speed"
+context_window_tokens = 204800
+max_output_tokens = 131100
+reasoning_mode = "native"
+thinking_enabled = true
+reasoning_effort = "minimal"
+reasoning_effort_options = ["minimal", "low", "medium", "high"]
+reasoning_always_on = true

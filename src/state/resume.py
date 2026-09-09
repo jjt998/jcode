@@ -4,7 +4,7 @@ from pathlib import Path
 import hashlib
 import json
 
-from src.state.checkpoint import evaluate_checkpoint_path
+from src.state.checkpoint import evaluate_checkpoint_data
 from src.runtime.plan import runtime_mode_name, runtime_mode_plan_path, runtime_mode_state
 
 
@@ -25,10 +25,15 @@ def build_resume_context(*, session: dict, session_store, run_store, workspace, 
     run_id = session_store.latest_run_id(session)
     run_dir = run_store.run_dir(run_id) if run_id else Path()
     checkpoint_path = run_dir / "checkpoint.json" if run_id else Path()
-    status, checkpoint = evaluate_checkpoint_path(checkpoint_path, workspace) if run_id else ("no_checkpoint", {})
     current_baseline = workspace.baseline()
+    current_fingerprint = workspace.fingerprint_from_baseline(current_baseline)
+    if run_id and checkpoint_path.exists():
+        checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+        status, checkpoint = evaluate_checkpoint_data(checkpoint, workspace, workspace_baseline=current_baseline)
+    else:
+        status, checkpoint = ("no_checkpoint", {})
     saved_baseline = checkpoint.get("workspace_baseline", {}) if isinstance(checkpoint, dict) else {}
-    changed_paths = _changed_paths(saved_baseline, current_baseline) if saved_baseline else ([] if str(checkpoint.get("workspace_fingerprint", "")) == workspace.fingerprint() else ["."])
+    changed_paths = _changed_paths(saved_baseline, current_baseline) if saved_baseline else ([] if str(checkpoint.get("workspace_fingerprint", "")) == current_fingerprint else ["."])
     saved_execution = dict(checkpoint.get("execution_fingerprint", {}) or {}) if isinstance(checkpoint, dict) else {}
     current_execution = dict(execution_fingerprint or {})
     execution_changes = {key: {"checkpoint": saved_execution.get(key), "current": current_execution.get(key)} for key in set(saved_execution) | set(current_execution) if saved_execution.get(key) != current_execution.get(key)}
@@ -47,7 +52,7 @@ def build_resume_context(*, session: dict, session_store, run_store, workspace, 
         "checkpoint_step_index": int(checkpoint.get("step_index", 0) or 0),
         "checkpoint_stop_reason": str(checkpoint.get("stop_reason", "")),
         "changed_files": list(checkpoint.get("changed_files", []) or []),
-        "workspace_fingerprint": workspace.fingerprint(),
+        "workspace_fingerprint": current_fingerprint,
         "checkpoint_workspace_fingerprint": str(checkpoint.get("workspace_fingerprint", "")),
         "workspace_mismatch": bool(changed_paths),
         "changed_paths": changed_paths,

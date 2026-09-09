@@ -5,12 +5,14 @@ import json
 import sys
 import time
 import traceback
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from src.evidence.summaries import build_report
 from src.evidence.tool_artifacts import prepare_tool_result_observation
 from src.evidence.session_log import SessionEventBus
+from src.evidence.timing import HarnessTiming
 from src.memory.consolidation import maintain_after_turn
 from src.policy.decisions import PolicyDecision
 from src.providers.base import ModelResponse, ProviderRequestError
@@ -224,10 +226,14 @@ class JCodeAgent:
 
     def ask(self, user_message: str) -> str:
         """统一收口整个运行链，确保构建、工具和持久化异常都有终态。"""
+        self._harness_timing = HarnessTiming()
+        self._harness_run_started_ns = time.perf_counter_ns()
         self._active_run_context = None
+        final_status = "completed"
         try:
             return self._ask_loop(user_message)
         except JCodeRuntimeStopError as exc:
+            final_status = "stopped"
             context = self._active_run_context
             if context is not None:
                 try:
@@ -237,6 +243,7 @@ class JCodeAgent:
                     return exc.user_message
             return exc.user_message
         except Exception as exc:
+            final_status = "error"
             self._print_runtime_error(exc)
             context = self._active_run_context
             if context is not None:
@@ -246,6 +253,38 @@ class JCodeAgent:
                     self._print_runtime_error(finish_exc)
                     pass
             return f"运行时错误: {exc}"
+        finally:
+            self._finish_harness_run_timing(final_status)
+
+    @contextmanager
+    def _timed_component(self, run_dir, task_state, component: str, operation: str, *, level: str = "phase", parent_span_id: str = "", metadata: dict | None = None):
+        """组件结束时同时写 trace 和控制台耗时日志。"""
+        span = self._harness_timing.start(component, operation, level=level, parent_span_id=parent_span_id, metadata=metadata)
+        status = "success"
+        try:
+            yield span
+        except Exception:
+            status = "error"
+            raise
+        finally:
+            record = self._harness_timing.finish(span, status=status)
+            if run_dir is not None and task_state is not None:
+                self._record_trace(run_dir, "harness_component_finished", task_state, **{key: value for key, value in record.items() if key not in {"event", "run_id"}})
+
+    def _finish_harness_run_timing(self, status: str) -> None:
+        """在 ask 真正退出时结算总耗时，并回写最终 report。"""
+        duration_ms = max(0, int((time.perf_counter_ns() - self._harness_run_started_ns) / 1_000_000))
+        summary = self._harness_timing.summary(duration_ms, status=status, print_total=True)
+        context = self._active_run_context
+        if context is None:
+            return
+        _, run_dir = context
+        report_path = run_dir / "report.json"
+        if not report_path.exists():
+            return
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        report["timing"] = summary
+        self.run_store.write_report(run_dir, report)
 
     def _print_runtime_error(self, exc: Exception) -> None:
         """将脱敏后的异常堆栈输出到控制台，便于定位后台运行失败。"""
@@ -254,7 +293,14 @@ class JCodeAgent:
 
     def _ask_loop(self, user_message: str) -> str:
         self.abort_requested = False
-        task_state, run_dir, checkpoint = self._begin_run(user_message)
+        initialize_span = self._harness_timing.start("run_initialize", "begin_run")
+        try:
+            task_state, run_dir, checkpoint = self._begin_run(user_message)
+        except Exception:
+            self._harness_timing.finish(initialize_span, status="error")
+            raise
+        initialize_record = self._harness_timing.finish(initialize_span)
+        self._record_trace(run_dir, "harness_component_finished", task_state, **{key: value for key, value in initialize_record.items() if key not in {"event", "run_id"}})
         self._active_run_context = (task_state, run_dir)
         final_text = ""
 
@@ -267,8 +313,10 @@ class JCodeAgent:
 
             try:
                 request_text = CONTINUATION_REQUEST if task_state.partial_response_parts else user_message
-                context_result = self._build_context(request_text, task_state, run_dir)
-                response = self._call_model(context_result, task_state, run_dir)
+                with self._timed_component(run_dir, task_state, "context_build", "build"):
+                    context_result = self._build_context(request_text, task_state, run_dir)
+                with self._timed_component(run_dir, task_state, "provider_request", "complete"):
+                    response = self._call_model(context_result, task_state, run_dir)
 
             except JCodeRuntimeStopError as exc:
                 self._record_trace(run_dir, "runtime_stopped", task_state, stop_reason=exc.code, audit=exc.audit)
@@ -284,8 +332,9 @@ class JCodeAgent:
                 )
                 return self._finish_run(task_state, run_dir, f"运行时错误: {exc}", UNEXPECTED_RUNTIME_ERROR)
 
-            tool_calls = list(response.tool_calls or [])
-            self._record_model_history(response, task_state)
+            with self._timed_component(run_dir, task_state, "model_response_processing", "persist_history"):
+                tool_calls = list(response.tool_calls or [])
+                self._record_model_history(response, task_state)
             if not tool_calls:
                 self._create_checkpoint(checkpoint, task_state, run_dir, "model_completed")
                 if not self._is_completed_response(response.finish_reason):
@@ -306,7 +355,8 @@ class JCodeAgent:
                     partial_text = self._combined_response_text(task_state, response.text)
                     return self._finish_run(task_state, run_dir, partial_text, MODEL_OUTPUT_INCOMPLETE)
                 final_text = self._combined_response_text(task_state, response.text)
-                gate = self.final_gate.check(final_text, task_state, self.working_memory, session=self.session, workspace=self.workspace, context=self.session.get("ctx_info", {}))
+                with self._timed_component(run_dir, task_state, "final_gate", "check"):
+                    gate = self.final_gate.check(final_text, task_state, self.working_memory, session=self.session, workspace=self.workspace, context=self.session.get("ctx_info", {}))
                 self._record_trace(run_dir, "final_readiness_evaluated", task_state, action=gate.get("action", "safe_finalize"), reasons=gate.get("reasons", []))
                 if gate.get("action") == "rerun_agent":
                     # 仅向 Agent 注入当前可纠正事实，避免后台评分污染推理上下文。
@@ -327,7 +377,8 @@ class JCodeAgent:
                 if self.abort_requested:
                     self._record_cancelled_tool_call(call, task_state, run_dir, checkpoint)
                     continue
-                self._execute_tool_call(call.name, call.arguments, task_state, run_dir, checkpoint, call_id=call.call_id)
+                with self._timed_component(run_dir, task_state, "tool_call", call.name, metadata={"call_id": call.call_id}):
+                    self._execute_tool_call(call.name, call.arguments, task_state, run_dir, checkpoint, call_id=call.call_id)
             step += 1
 
         return self._finish_run(task_state, run_dir, final_text or "Stopped after reaching max steps.", STEP_LIMIT_REACHED)
@@ -379,6 +430,7 @@ class JCodeAgent:
                 self._mark_stale_file_evidence(changed_paths)
             self.working_memory.resume_context = continuation_context
         task_state = TaskState.create(user_message, execution_fingerprint)
+        self._harness_timing.run_id = task_state.run_id
         run_dir = self.run_store.start_run(task_state)
         checkpoint = CheckpointManager(run_dir, self.workspace)
         self.working_memory.task_goal = str(user_message)
@@ -549,13 +601,14 @@ class JCodeAgent:
         """复用同一上下文处理临时 Provider 故障，禁止重复构建审计与历史。"""
         for retry_index in range(MAX_TRANSPORT_RETRIES + 1):
             try:
-                response = self.model_router.complete(
-                    context_result,
-                    max_tokens=self.config.max_new_tokens,
-                    temperature=self.config.temperature,
-                    profile_id=str(task_state.model_profile.get("id") or ""),
-                    model_profile=task_state.model_profile,
-                )
+                with self._timed_component(run_dir, task_state, "provider_attempt", "complete", level="detail", metadata={"retry_index": retry_index}):
+                    response = self.model_router.complete(
+                        context_result,
+                        max_tokens=self.config.max_new_tokens,
+                        temperature=self.config.temperature,
+                        profile_id=str(task_state.model_profile.get("id") or ""),
+                        model_profile=task_state.model_profile,
+                    )
             except Exception as exc:
                 if not self._is_retryable_provider_error(exc) or retry_index >= MAX_TRANSPORT_RETRIES:
                     if retry_index:
@@ -563,7 +616,8 @@ class JCodeAgent:
                     raise
                 delay_seconds = self._retry_delay_seconds(exc, retry_index)
                 self._record_recovery_event(run_dir, task_state, "model_retry_scheduled", retry_count=retry_index + 1, delay_seconds=delay_seconds, error_type=type(exc).__name__, message=str(exc)[:500])
-                time.sleep(delay_seconds)
+                with self._timed_component(run_dir, task_state, "provider_retry_backoff", "sleep", level="detail", metadata={"retry_index": retry_index + 1}):
+                    time.sleep(delay_seconds)
                 self._record_recovery_event(run_dir, task_state, "model_retry_attempted", retry_count=retry_index + 1)
                 continue
             if response.finish_reason == "failed":
@@ -578,7 +632,8 @@ class JCodeAgent:
                         raise error
                     delay_seconds = self._retry_delay_seconds(error, retry_index)
                     self._record_recovery_event(run_dir, task_state, "model_retry_scheduled", retry_count=retry_index + 1, delay_seconds=delay_seconds, provider_error_code=response.provider_error_code, message=response.provider_error_message[:500])
-                    time.sleep(delay_seconds)
+                    with self._timed_component(run_dir, task_state, "provider_retry_backoff", "sleep", level="detail", metadata={"retry_index": retry_index + 1}):
+                        time.sleep(delay_seconds)
                     self._record_recovery_event(run_dir, task_state, "model_retry_attempted", retry_count=retry_index + 1)
                     continue
                 raise error
@@ -712,21 +767,22 @@ class JCodeAgent:
                 subagent_snapshot_before = self.workspace.snapshot()
             except Exception:
                 subagent_snapshot_uncertain = True
-        if tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"}:
-            result = self._handle_subagent_tool(tool_name, tool_args, task_state)
-        else:
-            result = self.tool_executor.execute(
-                tool_name,
-                tool_args,
-                working_memory=self.working_memory,
-                tool_profile=self.active_tool_profile,
-                write_scope=self.write_scope,
-                runtime_mode=runtime_mode_name(self.session),
-                plan_path=runtime_mode_plan_path(self.session),
-                run_id=task_state.run_id,
-                runtime=self,
-                abort_requested=lambda: self.abort_requested,
-            )
+        with self._timed_component(run_dir, task_state, "tool_execution", tool_name, level="detail", metadata={"call_id": call_id}):
+            if tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"}:
+                result = self._handle_subagent_tool(tool_name, tool_args, task_state)
+            else:
+                result = self.tool_executor.execute(
+                    tool_name,
+                    tool_args,
+                    working_memory=self.working_memory,
+                    tool_profile=self.active_tool_profile,
+                    write_scope=self.write_scope,
+                    runtime_mode=runtime_mode_name(self.session),
+                    plan_path=runtime_mode_plan_path(self.session),
+                    run_id=task_state.run_id,
+                    runtime=self,
+                    abort_requested=lambda: self.abort_requested,
+                )
 
         if tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"} and result.status not in {"success", "ok"}:
             try:
@@ -927,12 +983,14 @@ class JCodeAgent:
         self.mark_stale_file_evidence(changed_files)
 
     def _create_checkpoint(self, checkpoint, task_state, run_dir, trigger: str) -> None:
-        checkpoint.create(self.session, task_state, self.working_memory, self.worker_manager.worker_refs())
+        with self._timed_component(run_dir, task_state, "checkpoint", "create", metadata={"trigger": trigger}):
+            checkpoint.create(self.session, task_state, self.working_memory, self.worker_manager.worker_refs())
         self._record_trace(run_dir, "checkpoint_created", task_state, trigger=trigger)
 
     def _finish_run(self, task_state, run_dir, final_text: str, stop_reason: str = VALID_FINAL) -> str:
         task_state.finish("completed" if stop_reason == VALID_FINAL else "stopped", stop_reason, final_text)
-        memory_audit = maintain_after_turn(self.memory_store, self.working_memory, task_state.user_request, final_text, agent=self)
+        with self._timed_component(run_dir, task_state, "memory_maintenance", "maintain"):
+            memory_audit = maintain_after_turn(self.memory_store, self.working_memory, task_state.user_request, final_text, agent=self)
         self._record_trace(run_dir, "memory_maintained", task_state, **memory_audit)
         self._record_trace(
             run_dir,
@@ -943,10 +1001,9 @@ class JCodeAgent:
             final_text=self.redactor.redact(final_text),
         )
         self.session_events.emit("turn_finished", run_id=task_state.run_id, status=task_state.status, stop_reason=stop_reason)
-        trace = self.run_store.read_trace(run_dir)
-        self.run_store.write_report(
-            run_dir,
-            build_report(
+        with self._timed_component(run_dir, task_state, "trace_read", "read", level="detail"):
+            trace = self.run_store.read_trace(run_dir)
+        report = build_report(
                 task_state,
                 stop_reason,
                 final_text,
@@ -956,14 +1013,18 @@ class JCodeAgent:
                 memory=memory_audit,
                 resume=self.working_memory.resume_context,
                 ctx_info=self.session.get("ctx_info", {}),
-            ),
-        )
+                timing=self._harness_timing.summary(),
+            )
+        with self._timed_component(run_dir, task_state, "report_persist", "write"):
+            self.run_store.write_report(run_dir, report)
         self.session["working_memory"] = self.working_memory.to_dict()
         self.session["todo_ledger"] = self.todo_ledger.to_dict()
         self.session.setdefault("runtime_mode", {"mode": "default"})
         self.session.setdefault("run_ids", []).append(task_state.run_id)
-        self.session_store.save(self.session)
-        self.run_store.write_task_state(run_dir, task_state)
+        with self._timed_component(run_dir, task_state, "session_persist", "save"):
+            self.session_store.save(self.session)
+        with self._timed_component(run_dir, task_state, "task_state_persist", "write"):
+            self.run_store.write_task_state(run_dir, task_state)
         return final_text
 
     def _handle_subagent_tool(self, tool_name: str, args: dict, task_state) -> ToolResult:

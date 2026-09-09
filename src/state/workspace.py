@@ -76,6 +76,11 @@ class Workspace:
 
     def fingerprint(self) -> str:
         payload = self.baseline()
+        return self.fingerprint_from_baseline(payload)
+
+    @staticmethod
+    def fingerprint_from_baseline(payload: dict) -> str:
+        """基于已生成的基线计算指纹，避免重复扫描工作区。"""
         return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()[:16]
 
     def baseline(self) -> dict:

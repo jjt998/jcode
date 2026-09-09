@@ -8,3 +8,4 @@ dist/
 *.egg-info/
 .tmp-tests/pytest/test_long_non_read_file_result0/artifacts/run_shell-output-fc53d3263baa.txt
 .tmp-tests/pytest/test_long_read_file_result_is_0/artifacts/read_file-output-8fbd4bf13116.txt
+.jcode.toml
