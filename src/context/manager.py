@@ -66,7 +66,8 @@ class ContextManager:
         if fixed_demand > window:
             raise MandatoryContextExceedsWindowError(audit={"effective_context_window_tokens": window, "fixed_demand": fixed_demand})
         flexible = max(0, window - fixed_demand)
-        raw_flexible = self.tokenizer.count(render_skill_section()) + self.tokenizer.count(json.dumps([event.to_dict() for event in history], ensure_ascii=False)) + self.tokenizer.count(memory_candidate.render())
+        # 压力必须基于 Provider 实际序列化输入，不能把 History 元数据等未发送内容计入需求。
+        raw_flexible = max(0, full_snapshot.serialized_input_tokens - fixed_tokens)
         pressure = calculate_pressure(raw_flexible, flexible)
         level = int(pressure["level"])
         minimum_targets = {

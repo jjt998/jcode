@@ -66,6 +66,27 @@ def test_provider_snapshot_is_audited_exactly(tmp_path):
     assert snapshot.tools == []
 
 
+def test_pressure_uses_provider_input_not_unsent_history_metadata(tmp_path):
+    """未发送的 History 元数据很大时，不应把实际输入误判为高压。"""
+    session = {
+        "history": [
+            {
+                "kind": "tool_result",
+                "event_id": "event-1",
+                "turn_id": "run-1",
+                "call_id": "call-1",
+                "content": "ok",
+                "metadata": {"audit_blob": "x" * 800000},
+            }
+        ]
+    }
+
+    outcome = manager(tmp_path, window=100000, output=1000).build(session, WorkingMemory(tmp_path), "task", allowed_tools=frozenset())
+
+    assert outcome.ctx_info["serialized_input_tokens"] < 1000
+    assert outcome.ctx_info["pressure"]["level"] == 0
+
+
 def test_mandatory_capacity_failure(tmp_path):
     with pytest.raises(MandatoryContextExceedsWindowError):
         manager(tmp_path, window=100, output=80).build({"history": []}, WorkingMemory(tmp_path), "x" * 100, allowed_tools=frozenset())
