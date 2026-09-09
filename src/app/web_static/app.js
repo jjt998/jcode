@@ -789,7 +789,7 @@ function renderStandardCompressionCard(turn, step, comparison, before) {
   const details = document.createElement("details");
   details.className = "mini-detail compression-card";
   rememberOpenState(details, `compression:${turnKey(turn)}:${step.step_id}`, false);
-  details.innerHTML = `<summary><span>上下文压缩：${escapeHtml(status)} · ${escapeHtml(String(level))} 档 · 压力 ${escapeHtml(formatRatio(before.pressure_ratio))} · ${escapeHtml(String(before.total_input_tokens || 0))} tokens</span></summary>`;
+  details.innerHTML = `<summary><span>上下文压缩：${escapeHtml(status)} · ${escapeHtml(String(level))} 档 · 可治理压力 ${escapeHtml(formatRatio(before.pressure_ratio))} · ${escapeHtml(String(before.total_input_tokens || 0))} tokens</span></summary>`;
   const body = document.createElement("div");
   body.className = "compression-body";
   body.append(compressionMetricBlock("压缩前", before));
@@ -815,7 +815,7 @@ function renderFourthLevelCompressionCard(turn, step, comparison, before) {
   details.className = "mini-detail compression-card compression-card-fourth-level";
   // 第四档默认折叠，避免完整摘要在消息区抢占首屏空间。
   rememberOpenState(details, `compression:${turnKey(turn)}:${step.step_id}`, false);
-  details.innerHTML = `<summary><span>上下文压缩：${escapeHtml(status)} · 4 档 · 压力 ${escapeHtml(formatRatio(before.pressure_ratio))} · ${escapeHtml(String(before.total_input_tokens || 0))} tokens</span></summary>`;
+  details.innerHTML = `<summary><span>上下文压缩：${escapeHtml(status)} · 4 档 · 可治理压力 ${escapeHtml(formatRatio(before.pressure_ratio))} · ${escapeHtml(String(before.total_input_tokens || 0))} tokens</span></summary>`;
 
   const body = document.createElement("div");
   body.className = "compression-body";
@@ -860,7 +860,10 @@ function compressionMetricBlock(title, data) {
   const section = document.createElement("section");
   section.className = "compression-metrics";
   const fixed = Object.entries(data.fixed_items || {}).map(([name, tokens]) => `${name}: ${tokens}`).join("，");
-  section.innerHTML = `<strong>${escapeHtml(title)}</strong><div>固定项：${escapeHtml(fixed || "无")}</div><div>总输入：${escapeHtml(formatMetric(data.total_input_tokens, " tokens"))}；输出预留：${escapeHtml(formatMetric(data.output_reserved_tokens))}；安全余量：${escapeHtml(formatMetric(data.safety_margin_tokens))}</div><div>剩余容量：${escapeHtml(formatMetric(data.remaining_capacity_tokens))}；压力：${escapeHtml(formatRatio(data.pressure_ratio))}（${escapeHtml(formatMetric(data.pressure_level))} 档）</div>`;
+  const windowTokens = formatMetric(data.effective_context_window_tokens, " tokens");
+  const inputRatio = formatRatio(data.window_input_ratio);
+  const reservedRatio = formatRatio(data.window_reserved_ratio);
+  section.innerHTML = `<strong>${escapeHtml(title)}</strong><div>固定项：${escapeHtml(fixed || "无")}</div><div>总输入：${escapeHtml(formatMetric(data.total_input_tokens, " tokens"))}；输出预留：${escapeHtml(formatMetric(data.output_reserved_tokens))}；安全余量：${escapeHtml(formatMetric(data.safety_margin_tokens))}</div><div>剩余容量：${escapeHtml(formatMetric(data.remaining_capacity_tokens))}；可治理压力：${escapeHtml(formatRatio(data.pressure_ratio))}（${escapeHtml(formatMetric(data.pressure_level))} 档）</div><div>有效上下文窗口：${escapeHtml(windowTokens)}；输入占窗口：${escapeHtml(inputRatio)}；含预留占窗口：${escapeHtml(reservedRatio)}</div>`;
   return section;
 }
 

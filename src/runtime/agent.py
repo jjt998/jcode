@@ -30,6 +30,11 @@ from src.state.todo import TodoLedger
 from src.tools.base import ToolResult
 
 
+def _safe_ratio(numerator: int, denominator: int) -> float:
+    """计算窗口占用比例，窗口为零时返回零。"""
+    return numerator / denominator if denominator > 0 else 0.0
+
+
 # 临时服务故障可在不改变上下文的前提下重试；参数和鉴权错误必须直接暴露。
 RETRYABLE_HTTP_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
 RETRYABLE_PROVIDER_ERROR_CODES = frozenset({"internal_error", "rate_limit_exceeded", "server_error", "service_unavailable", "temporarily_unavailable", "timeout"})
@@ -539,6 +544,9 @@ class JCodeAgent:
                 "remaining_capacity_tokens": int(info.get("final_capacity_status", {}).get("remaining_tokens", 0) or 0),
                 "pressure_ratio": info.get("pressure", {}).get("ratio", 0),
                 "pressure_level": int(info.get("pressure", {}).get("level", 0) or 0),
+                "effective_context_window_tokens": int(info.get("effective_context_window_tokens", 0) or 0),
+                "window_input_ratio": _safe_ratio(int(info.get("serialized_input_tokens", 0) or 0), int(info.get("effective_context_window_tokens", 0) or 0)),
+                "window_reserved_ratio": _safe_ratio(int(info.get("serialized_input_tokens", 0) or 0) + int(info.get("actual_max_new_tokens", 0) or 0) + int(info.get("safety_margin_tokens", 0) or 0), int(info.get("effective_context_window_tokens", 0) or 0)),
             },
         }
 
