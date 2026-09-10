@@ -21,13 +21,14 @@ def test_pressure_boundaries():
     assert calculate_pressure(1, 0)["level"] == 4
 
 
-def test_task_goal_is_full_request_and_history(tmp_path):
+def test_current_request_is_only_sent_through_history(tmp_path):
+    """当前请求只通过用户历史进入 Provider，不在 Working Memory 中复制。"""
     m = manager(tmp_path)
     memory = WorkingMemory(tmp_path)
     session = {"history": [{"kind": "user", "event_id": "e", "turn_id": "t", "content": "new task"}]}
     outcome = m.build(session, memory, "new task", allowed_tools=frozenset())
-    assert outcome.working_memory_candidate.task_goal == "new task"
-    assert any(item.get("content") == "new task" for item in outcome.context_result.provider_input.input)
+    assert [item.get("content") for item in outcome.context_result.provider_input.input].count("new task") == 1
+    assert "new task" not in outcome.working_memory_candidate.render()
     assert session["history"][0]["content"] == "new task"
 
 

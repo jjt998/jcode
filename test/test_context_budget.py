@@ -59,12 +59,13 @@ def test_list_files_window_merges_last_pair_and_removes_orphan(tmp_path):
     assert "orphan" not in ids
 
 
-def test_internal_continuation_instruction_is_sent_without_replacing_goal(tmp_path):
+def test_internal_continuation_instruction_is_sent_after_history(tmp_path):
+    """内部续写指令单独发送，不向 Working Memory 写入任务副本。"""
     profile = SimpleNamespace(context_window_tokens=375000, max_output_tokens=16384, snapshot=lambda: {})
     manager = ContextManager(Workspace.build(tmp_path), object(), build_default_registry(), model_profile=profile)
     memory = WorkingMemory(tmp_path)
-    memory.task_goal = "original task"
-    outcome = manager.build({"history": []}, memory, "[Continuation Required]\nContinue", allowed_tools=frozenset())
+    session = {"history": [{"kind": "user", "event_id": "e1", "turn_id": "run-1", "content": "original task"}]}
+    outcome = manager.build(session, memory, "[Continuation Required]\nContinue", allowed_tools=frozenset())
     contents = [item.get("content", "") for item in outcome.context_result.provider_input.input]
-    assert "original task" in outcome.working_memory_candidate.task_goal
+    assert contents.count("original task") == 1
     assert any("[Continuation Required]" in str(content) for content in contents)

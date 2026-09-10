@@ -12,8 +12,7 @@ from src.context.budget import SAFETY_MARGIN, TokenizerAdapter, effective_window
 class CompactSummaryPayload(BaseModel):
     """Level 4 摘要固定 JSON schema。"""
     model_config = ConfigDict(extra="forbid")
-    summary_version: str = "9.5"
-    task_goal: str = ""
+    summary_version: str = "9.6"
     decisions: list[dict] = Field(default_factory=list)
     files_read: list[dict] = Field(default_factory=list)
     files_modified: list[dict] = Field(default_factory=list)
@@ -34,6 +33,9 @@ def validate_summary_payload(value: Any) -> CompactSummaryPayload:
     if isinstance(value, str):
         value = json.loads(value)
     payload = CompactSummaryPayload.model_validate(value)
+    # 摘要协议不做旧版本兼容，避免旧字段重新进入压缩历史。
+    if payload.summary_version != "9.6":
+        raise ValueError("compact summary schema mismatch")
     for field_name in ("decisions", "files_read", "files_modified", "key_findings", "tool_failures", "freshness_events", "unresolved_blockers", "next_steps"):
         values = getattr(payload, field_name)
         if any(not isinstance(item, dict) or len(json.dumps(item, ensure_ascii=False)) > 1000 for item in values):
@@ -44,11 +46,11 @@ def validate_summary_payload(value: Any) -> CompactSummaryPayload:
     return payload
 
 
-def build_deterministic_summary(old_summary: dict | None, evicted_turns: list[dict], *, task_goal: str = "") -> CompactSummaryPayload:
+def build_deterministic_summary(old_summary: dict | None, evicted_turns: list[dict]) -> CompactSummaryPayload:
     """仅聚合结构化事件，不读取 assistant 正文推断事实。"""
     base = dict(old_summary or {})
     data = {key: base.get(key, []) for key in ("decisions", "files_read", "files_modified", "key_findings", "tool_failures", "freshness_events", "unresolved_blockers", "next_steps")}
-    data.update({"summary_version": str(base.get("summary_version", "9.5")), "task_goal": task_goal or str(base.get("task_goal", "")), "artifact_paths": list(base.get("artifact_paths", []))})
+    data.update({"summary_version": "9.6", "artifact_paths": list(base.get("artifact_paths", []))})
     for event in evicted_turns:
         if not isinstance(event, dict):
             continue

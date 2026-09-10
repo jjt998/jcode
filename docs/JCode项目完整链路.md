@@ -191,7 +191,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    Run[当前 run] --> WM[WorkingMemory v2]
+    Run[当前 run] --> WM[WorkingMemory v3]
     Read[文件读取] --> Freshness[文件 freshness 与读取范围]
     Tool[工具结果] --> Observe[工具观察与 artifact 引用]
     Todo[Todo 和子 Agent] --> Projection[进度与结果投影]

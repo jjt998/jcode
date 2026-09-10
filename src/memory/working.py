@@ -8,7 +8,6 @@ from pathlib import Path
 @dataclass
 class WorkingMemory:
     workspace_root: Path
-    task_goal: str = ""
     constraints: list[str] = field(default_factory=list)
     recent_files: list[str] = field(default_factory=list)
     file_freshness: dict[str, str] = field(default_factory=dict)
@@ -29,7 +28,7 @@ class WorkingMemory:
     def from_dict(cls, data: dict, workspace_root: Path) -> "WorkingMemory":
         if not isinstance(data, dict):
             data = {}
-        if data and data.get("schema") not in {None, "jcode.layered_memory.v2"}:
+        if data and data.get("schema") != "jcode.layered_memory.v3":
             raise ValueError("working memory schema mismatch")
         task = data.get("core", {}) if isinstance(data.get("core"), dict) else {}
         files = data.get("files", {}) if isinstance(data.get("files"), dict) else {}
@@ -40,7 +39,6 @@ class WorkingMemory:
         file_reads = _file_reads_from_dict(files.get("reads", {}))
         return cls(
             workspace_root=workspace_root,
-            task_goal=str(task.get("task_goal", "")),
             constraints=list(task.get("constraints", [])),
             recent_files=list(files.get("hot", [])),
             file_freshness=dict(files.get("freshness", {})),
@@ -60,9 +58,8 @@ class WorkingMemory:
 
     def to_dict(self) -> dict:
         return {
-            "schema": "jcode.layered_memory.v2",
+            "schema": "jcode.layered_memory.v3",
             "core": {
-                "task_goal": self.task_goal,
                 "constraints": self.constraints,
                 "resume_context": self.resume_context,
             },
@@ -160,8 +157,6 @@ class WorkingMemory:
         if self.resume_context:
             lines.append("- session_continuation:")
             lines.append(str(self.resume_context))
-        if self.task_goal:
-            lines.append(f"- goal: {self.task_goal}")
         if self.constraints:
             lines.append("- constraints: " + "; ".join(self.constraints))
         if self.recent_files:

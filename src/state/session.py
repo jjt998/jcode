@@ -35,11 +35,11 @@ class SessionStore:
             path = self.root / f"{selected}.json"
             if path.exists():
                 session = json.loads(path.read_text(encoding="utf-8"))
-                if int(session.get("schema_version", 0) or 0) != 5:
-                    raise ValueError("session schema is incompatible with native tool calling; start a new session")
+                if int(session.get("schema_version", 0) or 0) != 6:
+                    raise ValueError("session schema is incompatible with the current protocol; start a new session")
                 return session
         return {
-            "schema_version": 5,
+            "schema_version": 6,
             "id": session_id or f"{now_iso().replace(':', '').replace('-', '')}-{uuid.uuid4().hex[:6]}",
             "created_at": now_iso(),
             "updated_at": now_iso(),
@@ -54,8 +54,8 @@ class SessionStore:
         }
 
     def save(self, session: dict) -> Path:
-        if int(session.get("schema_version", 0) or 0) != 5:
-            raise ValueError("session schema must be 5")
+        if int(session.get("schema_version", 0) or 0) != 6:
+            raise ValueError("session schema must be 6")
         candidate = dict(session)
         candidate["updated_at"] = now_iso()
         path = self.root / f"{candidate['id']}.json"

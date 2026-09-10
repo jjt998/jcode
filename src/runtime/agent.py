@@ -438,7 +438,6 @@ class JCodeAgent:
         self._harness_timing.run_id = task_state.run_id
         run_dir = self.run_store.start_run(task_state)
         checkpoint = CheckpointManager(run_dir, self.workspace)
-        self.working_memory.task_goal = str(user_message)
         self._append_history("user", user_message, task_state)
         self.session_events.emit(
             "run_started",

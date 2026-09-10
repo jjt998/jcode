@@ -6,7 +6,7 @@ from pathlib import Path
 from src.state.workspace import Workspace, now_iso
 from src.tools.workspace import freshness
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 class CheckpointManager:
@@ -26,7 +26,6 @@ class CheckpointManager:
             "session_id": session.get("id", ""),
             "run_id": task_state.run_id,
             "task_id": task_state.task_id,
-            "task_goal": working_memory.task_goal,
             "step_index": task_state.step_index,
             "last_action": task_state.last_action,
             "completed_steps": list(task_state.completed_steps),

@@ -10,14 +10,15 @@ def profile():
 
 
 def test_summary_schema_and_deterministic_metadata_only():
-    payload = build_deterministic_summary({}, [{"tool_name": "read_file", "arguments": {"path": "src/a.py"}, "content": "assistant prose ignored"}], task_goal="goal")
-    assert payload.task_goal == "goal"
+    payload = build_deterministic_summary({}, [{"tool_name": "read_file", "arguments": {"path": "src/a.py"}, "content": "assistant prose ignored"}])
+    assert payload.summary_version == "9.6"
+    assert "task_goal" not in payload.model_dump()
     assert payload.files_read == [{"path": "src/a.py", "tool": "read_file"}]
     assert payload.key_findings == []
 
 
 def test_summary_request_has_no_tools_or_working_memory():
-    request = build_summary_request("summary instructions", {"summary_version": "9.5"}, [{"event_id": "e"}])
+    request = build_summary_request("summary instructions", {"summary_version": "9.6"}, [{"event_id": "e"}])
     assert request["tools"] == []
     assert set(request) == {"instructions", "input", "tools"}
 
@@ -43,3 +44,13 @@ def test_invalid_summary_json_is_rejected():
         pass
     else:
         raise AssertionError("invalid summary must fail")
+
+
+def test_old_summary_schema_is_rejected():
+    """旧摘要不得绕过版本校验重新进入压缩历史。"""
+    try:
+        validate_summary_payload({"summary_version": "9.5"})
+    except ValueError as exc:
+        assert "schema mismatch" in str(exc)
+    else:
+        raise AssertionError("old compact summary schema must fail")

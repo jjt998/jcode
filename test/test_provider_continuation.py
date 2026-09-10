@@ -47,7 +47,7 @@ def test_checkpoint_persists_provider_continuation(tmp_path):
     task_state.provider_continuation = {"run_id": task_state.run_id, "items": [{"type": "reasoning"}]}
     checkpoint = CheckpointManager(tmp_path, workspace)
 
-    checkpoint.create({"id": "session-1"}, task_state, type("Memory", (), {"task_goal": "test", "recent_files": [], "file_freshness": {}, "to_dict": lambda self: {}})())
+    checkpoint.create({"id": "session-1"}, task_state, type("Memory", (), {"recent_files": [], "file_freshness": {}, "to_dict": lambda self: {}})())
 
     saved = json.loads((tmp_path / "checkpoint.json").read_text(encoding="utf-8"))
     assert saved["provider_continuation"] == task_state.provider_continuation

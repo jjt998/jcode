@@ -39,9 +39,7 @@ class ContextManager:
         """纯构建候选，不修改传入的活动 session 和 Working Memory。"""
         session_candidate = copy.deepcopy(session)
         memory_candidate = type(working_memory).from_dict(working_memory.to_dict(), self.workspace.root)
-        original_goal = str(getattr(working_memory, "task_goal", "") or "")
         internal_instruction = str(user_message) if str(user_message).startswith("[Continuation Required]") else ""
-        memory_candidate.task_goal = original_goal if internal_instruction else str(user_message)
         memory_candidate.sync_todos(session_candidate.get("todo_ledger", {}))
         runtime_text = getattr(self.workspace, "runtime_text", lambda: "")()
         memory_candidate.runtime_context = "\n".join(part for part in (render_runtime_mode_text(session_candidate), runtime_text) if part)
@@ -57,7 +55,6 @@ class ContextManager:
         current_turn = turn_ids[-1] if turn_ids else ""
         fixed_history = [event for event in history if event.turn_id == current_turn] if current_turn else []
         fixed_memory = type(memory_candidate).from_dict({}, self.workspace.root)
-        fixed_memory.task_goal = memory_candidate.task_goal
         fixed_context = ContextResult(prefix, "", fixed_history, fixed_memory, tools, {}, provider_continuation=continuation, internal_continuation_instruction=internal_instruction)
         fixed_snapshot = compile_provider_input_snapshot(fixed_context, self.tokenizer)
         fixed_tokens = fixed_snapshot.serialized_input_tokens
@@ -130,7 +127,7 @@ class ContextManager:
             summary = None
             summary_model_audit = None
             if self.summary_router is not None and evicted:
-                summary_request = build_summary_request("Generate the fixed 9.5 compact summary JSON.", old_summary, evicted)
+                summary_request = build_summary_request("Generate the fixed 9.6 compact summary JSON.", old_summary, evicted)
                 summary, summary_model_audit = call_summary_model(
                     self.summary_router,
                     summary_request,
@@ -144,7 +141,7 @@ class ContextManager:
                     retry_multiplier=int(self.summary_config.compact_summary_retry_multiplier),
                 )
             if summary is None:
-                summary = build_deterministic_summary(old_summary, evicted, task_goal=memory_candidate.task_goal)
+                summary = build_deterministic_summary(old_summary, evicted)
             artifact_chain = []
             if old_summary_event and isinstance(old_summary_event.metadata, dict):
                 artifact_chain = [dict(ref) for ref in old_summary_event.metadata.get("artifact_chain", []) if isinstance(ref, dict)]

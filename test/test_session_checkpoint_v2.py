@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from src.memory.working import WorkingMemory
 from src.state.checkpoint import CheckpointManager, SCHEMA_VERSION, evaluate_checkpoint_data
 from src.state.task import TaskState
@@ -8,15 +10,28 @@ from src.state.workspace import Workspace
 from src.state.resume import build_resume_context
 
 
-def test_session_schema5_atomic_save_and_working_memory_v2(tmp_path):
+def test_session_schema6_atomic_save_and_working_memory_v3(tmp_path):
     store = SessionStore(tmp_path / "sessions")
     session = store.load_requested(None, None, tmp_path)
-    memory = WorkingMemory(tmp_path, task_goal="goal")
+    memory = WorkingMemory(tmp_path)
     session["working_memory"] = memory.to_dict()
     store.save(session)
     loaded = store.load_requested(session["id"], None, tmp_path)
-    assert loaded["schema_version"] == 5
-    assert loaded["working_memory"]["schema"] == "jcode.layered_memory.v2"
+    assert loaded["schema_version"] == 6
+    assert loaded["working_memory"]["schema"] == "jcode.layered_memory.v3"
+    assert "task_goal" not in loaded["working_memory"]["core"]
+
+
+def test_old_session_and_working_memory_schemas_are_rejected(tmp_path):
+    """当前协议不迁移旧会话，也不从旧 Working Memory 过滤字段。"""
+    store = SessionStore(tmp_path / "sessions")
+    old_session = store.load_requested(None, None, tmp_path)
+    old_session["schema_version"] = 5
+    with pytest.raises(ValueError, match="session schema must be 6"):
+        store.save(old_session)
+
+    with pytest.raises(ValueError, match="working memory schema mismatch"):
+        WorkingMemory.from_dict({"schema": "jcode.layered_memory.v2", "core": {}}, tmp_path)
 
 
 def test_checkpoint_schema2_reads_hot_file_freshness(tmp_path):
@@ -37,6 +52,7 @@ def test_checkpoint_persists_final_gate_dual_quality_snapshot(tmp_path):
     assert checkpoint["agent_quality"]["level"] == "yellow"
     assert checkpoint["harness_quality"]["level"] == "green"
     assert checkpoint["finalization"]["status"] == "committed"
+    assert "task_goal" not in checkpoint
 
 
 def test_resume_context_reports_external_workspace_changes(tmp_path):

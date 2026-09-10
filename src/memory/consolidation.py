@@ -140,7 +140,6 @@ def run_dream(agent, quiet: bool = False, session_ids: list[str] | None = None) 
 def _build_dream_agent(agent):
     session = agent.session_store.load_requested(None, None, agent.workspace.root)
     working_memory = WorkingMemory.from_dict({}, agent.workspace.root)
-    working_memory.task_goal = "Dream memory consolidation"
     session_events = SessionEventBus(agent.session_events.path.parent / f"{session['id']}.events.jsonl")
     dream_config = replace(
         agent.config,

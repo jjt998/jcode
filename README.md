@@ -196,8 +196,8 @@ tools / tools
 - `prefix` 放稳定系统提示词，包括系统规则、工作区 `JCODE.md` 项目规则和安全规则；DeepSeek Adapter 将其发送至顶层 `instructions`。
 - `skill` 放技能相关提示。
 - `history` 放当前 session 的结构化历史事件，包括用户、助手、原生工具调用和工具结果。
-- `working_memory` 放 `Working_Memory` 渲染结果，包括当前任务目标、最近文件、文件 freshness、恢复上下文、检索到的长期记忆、子 Agent 结果和工具观察。
-- 当前用户请求同时写入当前 turn History 和 `working_memory.core.task_goal`，不再单独发送 `current_request` section。
+- `working_memory` 放 `Working_Memory` 渲染结果，包括执行约束、最近文件、文件 freshness、恢复上下文、检索到的长期记忆、子 Agent 结果和工具观察。
+- 当前用户请求只写入当前 turn 的 user HistoryEvent，不在 Working Memory 中保存重复副本，也不单独发送 `current_request` section。
 
 Responses 请求由统一 `ProviderInputSnapshot` 编译：`prefix -> instructions`，结构化 skill/history/working memory -> `input`，工具 schema -> `tools`。Provider、preview 和 audit 使用同一快照，并统一记录 `serialized_input_tokens`。
 
@@ -243,7 +243,7 @@ JCode 对外统一使用三层记忆认知：
 
 Dream 子 Agent 可以通过内部入口 `agent.run_dream()` 手动触发。Dream 使用受限工具 Profile，只能在 `.jcode/memory/` 内整理 Daily Log、topic 和 `MEMORY.md`，不会修改普通源码文件。
 
-Session 使用 schema v5，Working Memory 使用 `jcode.layered_memory.v2`，Checkpoint 使用 schema v3。旧协议不做迁移兼容。Checkpoint 保存在每次运行的 `checkpoint.json` 中，记录 session、run、step、last action、changed files、working memory、workspace fingerprint 和 worker refs，用于后续恢复判断。
+Session 使用 schema v6，Working Memory 使用 `jcode.layered_memory.v3`，Checkpoint 使用 schema v5。旧协议不做迁移兼容。Checkpoint 保存在每次运行的 `checkpoint.json` 中，记录 session、run、step、last action、changed files、working memory、workspace fingerprint 和 worker refs，用于后续恢复判断。
 
 ## 子 Agent
 
