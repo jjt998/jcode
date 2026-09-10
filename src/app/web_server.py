@@ -41,6 +41,11 @@ def create_app(manager: WebRunManager) -> FastAPI:
     def index():
         return FileResponse(static_dir / "index.html")
 
+    @app.get("/api/model-configuration")
+    def get_model_configuration():
+        """为尚未创建 session 的前端返回全局模型配置。"""
+        return manager.model_configuration()
+
     @app.get("/api/projects")
     def list_projects():
         return manager.list_projects()

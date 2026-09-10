@@ -12,6 +12,7 @@ const state = {
   selectionEpoch: 0,
   openDetails: new Map(),
   modelProfiles: [],
+  defaultModelProfile: "",
   followLatest: true,
   programmaticScroll: false,
   newContentPending: false,
@@ -288,7 +289,13 @@ function previewText(text, limit = 60) {
 }
 
 async function loadProjects(selectLatest = false) {
-  state.projects = await api("/api/projects");
+  const [projects, modelConfiguration] = await Promise.all([
+    api("/api/projects"),
+    api("/api/model-configuration"),
+  ]);
+  state.projects = projects;
+  state.modelProfiles = modelConfiguration.model_profiles || [];
+  state.defaultModelProfile = modelConfiguration.default_model_profile || "";
   renderProjects();
   if (!state.projectId && state.projects.length && selectLatest) {
     await selectProject(state.projects[0].id);
@@ -331,6 +338,7 @@ async function selectProject(projectId) {
   els.projectRoot.textContent = project.root;
   els.sessionTitle.textContent = project.name;
   setRunStatus("idle");
+  renderModelProfiles(state.modelProfiles, state.defaultModelProfile);
   renderProjects();
   renderTurns({ initial: true });
   await loadSessions(true);
@@ -1310,7 +1318,21 @@ els.composer.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!state.projectId) return;
   if (!state.sessionId) {
+    // 空会话区允许先选模型；创建 session 后按当前选择写入现有模型协议。
+    const selectedModelProfile = els.modelProfile.value;
+    const selectedThinkingEnabled = els.thinkingEnabled.checked;
+    const selectedReasoningEffort = els.reasoningEffort.value;
     const session = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions`, { method: "POST" });
+    if (selectedModelProfile) {
+      await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions/${encodeURIComponent(session.id)}/model`, {
+        method: "POST",
+        body: JSON.stringify({
+          model_profile: selectedModelProfile,
+          thinking_enabled: selectedThinkingEnabled,
+          reasoning_effort: selectedReasoningEffort,
+        }),
+      });
+    }
     await loadSessions(false);
     await selectSession(session.id);
   }
@@ -1384,8 +1406,8 @@ els.stopRun.addEventListener("click", async () => {
 });
 
 els.modelProfile.addEventListener("change", async () => {
-  if (!state.projectId || !state.sessionId) return;
   updateReasoningControls(state.modelProfiles, els.modelProfile.value);
+  if (!state.projectId || !state.sessionId) return;
   const session = await api(`/api/projects/${encodeURIComponent(state.projectId)}/sessions/${encodeURIComponent(state.sessionId)}/model`, {
     method: "POST",
     body: JSON.stringify({ model_profile: els.modelProfile.value, thinking_enabled: els.thinkingEnabled.checked, reasoning_effort: els.reasoningEffort.value }),
@@ -1406,7 +1428,10 @@ async function saveReasoningOptions() {
 }
 
 els.reasoningEffort.addEventListener("change", saveReasoningOptions);
-els.thinkingEnabled.addEventListener("change", saveReasoningOptions);
+els.thinkingEnabled.addEventListener("change", () => {
+  setRunStatus(els.runState.dataset.status || "idle");
+  saveReasoningOptions();
+});
 
 loadProjects(true).catch((error) => {
   state.turns = [

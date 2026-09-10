@@ -172,6 +172,13 @@ class WebRunManager:
     def model_profiles(self, session: dict | None = None) -> list[dict]:
         return [resolve_model_snapshot(session or {}, profile) for profile in self.config.model_profiles.values()]
 
+    def model_configuration(self) -> dict:
+        """返回新会话区初始化所需的全局模型配置。"""
+        return {
+            "default_model_profile": self.config.default_model_profile,
+            "model_profiles": self.model_profiles(),
+        }
+
     def switch_model(self, session_id: str, profile_id: str, reasoning_effort: str = "", project_id: str = "default", thinking_enabled: bool | None = None) -> dict:
         project = self.project_store.get(project_id)
         if profile_id not in self.config.model_profiles:

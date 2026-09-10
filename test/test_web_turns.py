@@ -8,6 +8,45 @@ from src.app.config import AppConfig
 from src.app.web_runs import WebRun, WebRunManager
 from src.app.web_steps import build_reasoning_steps
 from src.app.web_turns import build_session_turns
+from src.providers.profiles import ModelProfile
+
+
+def test_model_configuration_exposes_global_defaults_for_empty_session_area(tmp_path):
+    """没有 session 时，前端也应取得全局默认模型及推理选项。"""
+    manager = WebRunManager.__new__(WebRunManager)
+    profile = ModelProfile(
+        "minimax-m3",
+        "minimax",
+        "openai_responses",
+        "MiniMax-M3",
+        "",
+        "https://example.test/v1",
+        1_000_000,
+        524_288,
+        reasoning_mode="optional",
+        thinking_enabled=True,
+        reasoning_effort="high",
+        reasoning_effort_options=("minimal", "low", "medium", "high"),
+    )
+    manager.config = AppConfig(
+        cwd=tmp_path,
+        provider_name="minimax",
+        api_protocol="openai_responses",
+        model_profiles={profile.id: profile},
+        default_model_profile=profile.id,
+        approval="never",
+        sandbox="workspace",
+        max_steps=1,
+        max_new_tokens=1,
+        temperature=0.0,
+    )
+
+    configuration = manager.model_configuration()
+
+    assert configuration["default_model_profile"] == "minimax-m3"
+    assert configuration["model_profiles"][0]["model"] == "MiniMax-M3"
+    assert configuration["model_profiles"][0]["thinking_enabled"] is True
+    assert configuration["model_profiles"][0]["reasoning_effort"] == "high"
 
 
 def test_web_session_config_does_not_mark_new_session_as_resume(tmp_path):
