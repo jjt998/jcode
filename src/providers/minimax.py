@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 
 from src.context.result import ContextResult
+from src.context.summary import COMPACT_SUMMARY_RESPONSE_FORMAT
 from src.providers.base import ModelResponse, ProviderRequestError
 from src.providers.deepseek import DeepSeekClient
 from src.providers.profiles import ModelProfile
@@ -66,4 +67,18 @@ class MiniMaxClient(DeepSeekClient):
                 raise ValueError("MiniMax temperature must be in (0, 1]")
             payload["temperature"] = temperature
         payload.update({key: value for key, value in self.profile.extra.items() if key in self._EXTRA_FIELDS})
+        return payload
+
+    def _compile_summary_request(self, summary_provider_input: dict, *, max_output_tokens: int) -> dict:
+        """编译 MiniMax 摘要请求，保持推理开关与普通请求一致。"""
+        payload = {
+            "model": self.model,
+            "instructions": summary_provider_input.get("instructions", ""),
+            "input": summary_provider_input.get("input", []),
+            "tools": [],
+            "max_output_tokens": int(max_output_tokens),
+            "text": COMPACT_SUMMARY_RESPONSE_FORMAT,
+        }
+        if self.profile.thinking_enabled:
+            payload["reasoning"] = {"effort": self.profile.reasoning_effort}
         return payload

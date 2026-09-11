@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 
 from src.context.result import ContextResult
+from src.context.summary import COMPACT_SUMMARY_RESPONSE_FORMAT
 from src.providers.request import compile_provider_input_snapshot
 from src.providers.base import ModelResponse, ModelToolCall, ProviderRequestError
 from src.providers.profiles import ModelProfile
@@ -52,14 +53,32 @@ class DeepSeekClient:
         """调用最小摘要请求，不携带普通工具和 Working Memory。"""
         if not self.api_key:
             raise ProviderRequestError("missing API key")
-        payload = {"model": self.model, "instructions": summary_provider_input.get("instructions", ""), "input": summary_provider_input.get("input", []), "tools": [], "max_output_tokens": int(max_output_tokens)}
+        payload = self._compile_summary_request(summary_provider_input, max_output_tokens=max_output_tokens)
         request = urllib.request.Request(self.base_url + "/responses", data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}, method="POST")
         try:
             with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
                 data = json.loads(response.read().decode("utf-8"))
         except Exception as exc:
             raise ProviderRequestError(f"summary request failed: {exc}", transport_error=True) from exc
-        return str(data.get("output_text") or "")
+        return self._extract_response_text(data)
+
+    def _compile_summary_request(self, summary_provider_input: dict, *, max_output_tokens: int) -> dict:
+        """编译带 JSON Schema 约束的最小摘要请求。"""
+        return {
+            "model": self.model,
+            "instructions": summary_provider_input.get("instructions", ""),
+            "input": summary_provider_input.get("input", []),
+            "tools": [],
+            "max_output_tokens": int(max_output_tokens),
+            "text": COMPACT_SUMMARY_RESPONSE_FORMAT,
+        }
+
+    def _extract_response_text(self, data: dict) -> str:
+        """兼容 Responses 顶层文本和 message.content 两种合法返回形态。"""
+        output_text = data.get("output_text")
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text
+        return self._parse_response(data).text
 
     def request_preview(self, context: ContextResult, *, model: str, max_tokens: int, temperature: float, model_profile: dict | None = None) -> dict:
         """返回不含认证信息的实际请求编译结果，供 Context 审计展示。"""

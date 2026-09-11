@@ -29,3 +29,15 @@ def test_minimax_payload_uses_snapshot(monkeypatch, tmp_path):
     MiniMaxClient(profile()).complete(c, model=profile().model, max_tokens=100, temperature=0.2)
     assert captured["payload"]["input"] == c.provider_input.input
     assert captured["payload"]["tools"] == c.provider_input.tools
+
+
+def test_minimax_summary_request_preserves_reasoning_and_schema():
+    configured_profile = ModelProfile("minimax-m3", "minimax", "openai_responses", "MiniMax-M3", "key", "https://minnimax.chat/v1", 1000000, 524288, "optional", True, "minimal", ("minimal", "low", "medium", "high"))
+    client = MiniMaxClient(configured_profile)
+    payload = client._compile_summary_request(
+        {"instructions": "Return JSON", "input": [], "tools": []},
+        max_output_tokens=2048,
+    )
+
+    assert payload["reasoning"] == {"effort": "minimal"}
+    assert payload["text"]["format"]["type"] == "json_schema"

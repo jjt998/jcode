@@ -127,7 +127,11 @@ class ContextManager:
             summary = None
             summary_model_audit = None
             if self.summary_router is not None and evicted:
-                summary_request = build_summary_request("Generate the fixed 9.6 compact summary JSON.", old_summary, evicted)
+                summary_request = build_summary_request(
+                    "Return only one JSON object matching the fixed 9.6 compact summary schema. Do not use Markdown or explanatory text.",
+                    old_summary,
+                    evicted,
+                )
                 summary, summary_model_audit = call_summary_model(
                     self.summary_router,
                     summary_request,
@@ -155,7 +159,16 @@ class ContextManager:
             session_candidate["event_seq"] = int(session_candidate.get("event_seq", 0)) + 1
             session_commit_required = True
             summary_model_succeeded = bool(summary_model_audit and summary_model_audit.get("status") == "success")
-            compact_audit = {"mode": "model" if summary_model_succeeded else "deterministic", "source": "summary_model" if summary_model_succeeded else "rule", "status": "applied" if summary_model_succeeded else "fallback", "fallback_reason": (summary_model_audit or {}).get("fallback_reason", ""), "summary_text": summary.model_dump_json(exclude_none=True), "artifact_ref": history_artifact_ref, "summary_model": summary_model_audit or {}}
+            summary_model_skipped = self.summary_router is not None and not evicted
+            compact_audit = {
+                "mode": "model" if summary_model_succeeded else "deterministic",
+                "source": "summary_model" if summary_model_succeeded else "rule",
+                "status": "applied" if summary_model_succeeded or summary_model_skipped else "fallback",
+                "fallback_reason": (summary_model_audit or {}).get("fallback_reason", ""),
+                "summary_text": summary.model_dump_json(exclude_none=True),
+                "artifact_ref": history_artifact_ref,
+                "summary_model": summary_model_audit or {},
+            }
         history = self._build_structured_history(session_candidate, pressure_level=level)[0]
         skill = render_skill_section(select_skill_entries(level))
         if level >= 3:

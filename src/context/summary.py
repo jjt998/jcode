@@ -9,6 +9,44 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from src.context.budget import SAFETY_MARGIN, TokenizerAdapter, effective_window
 
 
+# Responses API 的 JSON 模式保证摘要输出可被本地 schema 严格校验。
+COMPACT_SUMMARY_RESPONSE_FORMAT = {
+    "format": {
+        "type": "json_schema",
+        "name": "compact_summary",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "summary_version": {"type": "string", "const": "9.6"},
+                "decisions": {"type": "array", "items": {"type": "object"}},
+                "files_read": {"type": "array", "items": {"type": "object"}},
+                "files_modified": {"type": "array", "items": {"type": "object"}},
+                "key_findings": {"type": "array", "items": {"type": "object"}},
+                "tool_failures": {"type": "array", "items": {"type": "object"}},
+                "freshness_events": {"type": "array", "items": {"type": "object"}},
+                "unresolved_blockers": {"type": "array", "items": {"type": "object"}},
+                "next_steps": {"type": "array", "items": {"type": "object"}},
+                "artifact_paths": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": [
+                "summary_version",
+                "decisions",
+                "files_read",
+                "files_modified",
+                "key_findings",
+                "tool_failures",
+                "freshness_events",
+                "unresolved_blockers",
+                "next_steps",
+                "artifact_paths",
+            ],
+            "additionalProperties": False,
+        },
+        "strict": False,
+    }
+}
+
+
 class CompactSummaryPayload(BaseModel):
     """Level 4 摘要固定 JSON schema。"""
     model_config = ConfigDict(extra="forbid")
