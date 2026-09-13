@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -17,17 +18,33 @@ DREAM_SESSION_CAP = 30
 DREAM_MIN_NEW_TOKENS = 4096
 
 
-def maintain_after_turn(store, working_memory, user_message: str, final_text: str, agent=None) -> dict:
-    promotion = store.promote_from_turn(user_message, final_text)
+def maintain_after_turn(store, working_memory, user_message: str, final_text: str, agent=None, *, task_state=None) -> dict:
+    """记录本轮过程，并只按用户明确表达准入三类长期记忆。"""
+    from src.memory.journal import append_structured_daily_log
+    session = getattr(agent, "session", {}) if agent is not None else {}
+    entry = {"session_id": str(session.get("id", "")), "run_id": str(getattr(task_state, "run_id", "")), "turn_id": str(getattr(task_state, "run_id", "")), "source": "turn_summary", "user_message": str(user_message), "final_text": str(final_text), "changed_files": list(getattr(task_state, "changed_files", []) or []), "verification": dict(getattr(task_state, "verification", {}) or {}), "tool_failures": list(getattr(task_state, "unresolved_tool_failures", []) or []), "candidate_signals": extract_memory_candidates(user_message)}
+    entry_id = append_structured_daily_log(store.root, entry)
+    promotions = [store.append_candidate(**candidate, source_entry_id=entry_id, session_id=entry["session_id"], run_id=entry["run_id"]) for candidate in entry["candidate_signals"]]
     consolidation = store.consolidate_daily_logs()
-    auto_dream = _maybe_run_auto_dream(store, agent)
-    durable_memory = dict(promotion.get("durable_memory", {}))
-    durable_memory["topic_consolidation"] = consolidation
+    durable_memory = {"promoted_count": sum(item.get("status") == "active" for item in promotions), "promotions": promotions, "topic_consolidation": consolidation, "legacy_notes_jsonl": str(store.path)}
     return {
-        "daily_log": dict(promotion.get("daily_log", {"enabled": True, "source": "turn_summary", "count": 0, "paths": []})),
+        "daily_log": {"enabled": True, "source": "turn_summary", "entry_id": entry_id, "count": 1},
         "durable_memory": durable_memory,
-        "auto_dream": auto_dream,
+        "auto_dream": {"enabled": False, "triggered": False, "skip_reason": "manual_only"},
     }
+
+
+def extract_memory_candidates(user_message: str) -> list[dict]:
+    """只识别用户明确的长期表达，不从模型回答反推记忆。"""
+    text = str(user_message or "").strip()
+    if text.startswith(("建议", "可以", "也许", "可能")):
+        return []
+    rules = [("user_preference", r"(?:以后都|请始终|我偏好|不要)\s*(.+)"), ("project_convention", r"(?:本项目规定|仓库约定|项目必须|测试统一使用)\s*(.+)"), ("key_decision", r"(?:决定采用|最终选择|架构确定为|不再支持)\s*(.+)")]
+    for memory_type, pattern in rules:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match and match.group(1).strip():
+            return [{"memory_type": memory_type, "text": match.group(1).strip(), "evidence_refs": []}]
+    return []
 
 
 def build_dream_prompt(memory_dir, session_ids: list[str] | None = None) -> str:
@@ -82,13 +99,13 @@ Return a brief final summary of what changed. If nothing changed, say so.
 """
 
 
-def run_dream(agent, quiet: bool = False, session_ids: list[str] | None = None) -> str:
+def run_dream(agent, quiet: bool = False, session_ids: list[str] | None = None, trigger: str = "manual") -> str:
     session_ids = list(session_ids or [])
     memory_dir = agent.memory_store.root
     memory_dir.mkdir(parents=True, exist_ok=True)
     before = _memory_snapshot(memory_dir)
     report_path = _dream_report_path(memory_dir)
-    agent.session_events.emit("dream_started", quiet=quiet, session_ids=session_ids, memory_dir=str(memory_dir))
+    agent.session_events.emit("dream_started", quiet=quiet, trigger=trigger, session_ids=session_ids, memory_dir=str(memory_dir))
     try:
         child = _build_dream_agent(agent)
         child.set_tool_profile("dream")
@@ -100,7 +117,10 @@ def run_dream(agent, quiet: bool = False, session_ids: list[str] | None = None) 
         report = {
             "status": "finished",
             "quiet": bool(quiet),
+            "trigger": trigger,
             "session_ids": session_ids,
+            "input": {"daily_log_entries": _daily_log_count(memory_dir), "candidate_count": _memory_status_count(agent.memory_store, "candidate"), "active_memory_count": _memory_status_count(agent.memory_store, "active")},
+            "changes": {"added": [], "updated": [], "superseded": [], "conflicts": [], "filtered_sensitive": 0},
             "dream_session_id": child.session.get("id", ""),
             "changed_files": changed_files,
             "result_preview": result[:1000],
@@ -120,6 +140,7 @@ def run_dream(agent, quiet: bool = False, session_ids: list[str] | None = None) 
         report = {
             "status": "failed",
             "quiet": bool(quiet),
+            "trigger": trigger,
             "session_ids": session_ids,
             "error_type": type(exc).__name__,
             "error": str(exc)[:1000],
@@ -221,6 +242,18 @@ def _memory_scope(agent) -> str:
         return agent.workspace.relpath(agent.memory_store.root)
     except Exception:
         return ".jcode/memory"
+
+
+def _daily_log_count(memory_dir: Path) -> int:
+    from src.memory.journal import iter_structured_daily_logs
+    return len(iter_structured_daily_logs(memory_dir))
+
+
+def _memory_status_count(store, status: str) -> int:
+    try:
+        return sum(record.status == status for record in store._records())
+    except (OSError, ValueError, TypeError):
+        return 0
 
 
 def _recent_session_ids(agent) -> list[str]:

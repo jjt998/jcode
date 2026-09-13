@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
+from dataclasses import dataclass, asdict
 from pathlib import Path
 
 from src.memory.journal import ENTRYPOINT_NAME, append_to_daily_log, ensure_memory_dir, iter_daily_log_entries
@@ -31,6 +33,39 @@ TOPIC_DEFAULTS = {
     },
 }
 
+MEMORY_TYPES = {"user_preference", "project_convention", "key_decision"}
+
+
+def _query_terms(query: str) -> list[str]:
+    """提取适合本地词法检索的中英文、路径和命令片段。"""
+    text = str(query or "").lower().replace("\\", "/")
+    terms = set(re.findall(r"[a-z0-9_./-]{2,}|[\u4e00-\u9fff]", text))
+    return sorted(terms, key=lambda value: (-len(value), value))
+
+
+@dataclass
+class MemoryRecord:
+    memory_id: str  # 长期记忆唯一标识
+    memory_type: str  # 用户偏好、项目约定或关键决策
+    text: str  # 可被后续任务复用的结论
+    status: str  # candidate、active、conflict、stale 或 superseded
+    source_entry_id: str  # 产生该记忆的 Daily Log 条目
+    source_session_id: str  # 来源会话
+    source_run_id: str  # 来源运行
+    evidence_refs: list[str]  # 关联的文件或审计证据
+    created_at: str  # 创建时间
+    updated_at: str  # 最后更新时间
+
+
+@dataclass
+class MemoryHit:
+    memory_id: str  # 命中的长期记忆 ID
+    memory_type: str  # 命中记忆类型
+    text: str  # 命中的记忆正文
+    score: int  # 词法匹配分数
+    matched_terms: list[str]  # 命中的查询词
+    source_entry_id: str  # 来源 Daily Log 条目
+
 
 class DurableMemoryStore:
     root: Path
@@ -47,9 +82,32 @@ class DurableMemoryStore:
     def add(self, text: str, source: str = "manual") -> bool:
         if not text.strip() or looks_sensitive(text):
             return False
+        record = MemoryRecord(f"mem-{uuid.uuid4().hex[:12]}", "project_convention", text.strip(), "active", "", "", "", [], now_iso(), now_iso())
         with self.path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"text": text, "source": source, "updated_at": now_iso()}, ensure_ascii=False) + "\n")
+            fh.write(json.dumps(asdict(record), ensure_ascii=False) + "\n")
         return True
+
+    def append_candidate(self, *, memory_type: str, text: str, source_entry_id: str, session_id: str = "", run_id: str = "", evidence_refs: list[str] | None = None) -> dict:
+        """按当前协议写入候选并根据重复、冲突规则决定最终状态。"""
+        if memory_type not in MEMORY_TYPES or not text.strip() or looks_sensitive(text):
+            return {"status": "rejected", "reason": "invalid_or_sensitive"}
+        records = self._records()
+        same = [item for item in records if item.text == text.strip() and item.status == "active"]
+        if same:
+            return {"status": "duplicate", "memory_id": same[0].memory_id}
+        candidate_terms = set(_query_terms(text))
+        conflict = [
+            item for item in records
+            if item.memory_type == memory_type
+            and item.status == "active"
+            and item.text != text.strip()
+            and candidate_terms.intersection(_query_terms(item.text))
+        ]
+        status = "conflict" if conflict else "active"
+        record = MemoryRecord(f"mem-{uuid.uuid4().hex[:12]}", memory_type, text.strip(), status, source_entry_id, session_id, run_id, list(evidence_refs or []), now_iso(), now_iso())
+        with self.path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(asdict(record), ensure_ascii=False) + "\n")
+        return {"status": status, "memory_id": record.memory_id, "conflict_ids": [item.memory_id for item in conflict]}
 
     def append_daily_log(self, text: str, source: str = "turn") -> str:
         if not text.strip() or looks_sensitive(text):
@@ -57,22 +115,37 @@ class DurableMemoryStore:
         path = append_to_daily_log(self.root, text, source=source)
         return str(path) if path else ""
 
-    def retrieve(self, query: str, limit: int = 5, max_chars: int = 2000) -> list[str]:
-        terms = {term.lower() for term in query.replace("/", " ").replace("\\", " ").split() if len(term) >= 2}
-        scored: list[tuple[int, str]] = []
-        for text in self._all_notes():
-            score = sum(1 for term in terms if term in text.lower())
-            if score or not terms:
-                scored.append((score, text))
-        scored.sort(key=lambda pair: pair[0], reverse=True)
-        result: list[str] = []
+    def retrieve(self, query: str, limit: int = 5, max_chars: int = 2000) -> list[dict]:
+        terms = _query_terms(query)
+        scored: list[MemoryHit] = []
+        for record in self._records():
+            if record.status != "active":
+                continue
+            matched = [term for term in terms if term in record.text.lower()]
+            if matched or not terms:
+                scored.append(MemoryHit(record.memory_id, record.memory_type, record.text, len(matched), matched, record.source_entry_id))
+        scored.sort(key=lambda item: (-item.score, item.memory_id))
+        result: list[dict] = []
         used = 0
-        for _, text in scored[:limit]:
-            if used + len(text) > max_chars:
+        for hit in scored[:limit]:
+            if used + len(hit.text) > max_chars:
                 break
-            result.append(text)
-            used += len(text)
+            result.append(asdict(hit))
+            used += len(hit.text)
         return result
+
+    def _records(self) -> list[MemoryRecord]:
+        records = []
+        if not self.path.exists():
+            return records
+        for line in self.path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            item = json.loads(line)
+            if not isinstance(item, dict):
+                raise ValueError("memory record must be an object")
+            records.append(MemoryRecord(**item))
+        return records
 
     def promote_from_turn(self, user_message: str, final_text: str) -> dict:
         candidates = []

@@ -14,6 +14,7 @@ from src.evidence.tool_artifacts import prepare_tool_result_observation
 from src.evidence.session_log import SessionEventBus
 from src.evidence.timing import HarnessTiming
 from src.memory.consolidation import maintain_after_turn
+from src.memory.retrieval import retrieve_into_working_memory
 from src.policy.decisions import PolicyDecision
 from src.providers.base import ModelResponse, ProviderRequestError
 from src.providers.continuation import ProviderContinuation
@@ -161,10 +162,10 @@ class JCodeAgent:
         self.context_manager.model_profile = profile
         self.session_events.emit("model_switched", previous_model_profile=previous, model_profile=profile.snapshot(), source=source)
 
-    def run_dream(self, quiet: bool = False, session_ids: list[str] | None = None) -> str:
+    def run_dream(self, quiet: bool = False, session_ids: list[str] | None = None, trigger: str = "manual") -> str:
         from src.memory.consolidation import run_dream
 
-        return run_dream(self, quiet=quiet, session_ids=session_ids)
+        return run_dream(self, quiet=quiet, session_ids=session_ids, trigger=trigger)
 
     def enter_plan_mode(self, topic: str, path: str | None = None) -> str:
         plan_path = self.plan_mode.enter(topic, path=path)
@@ -439,6 +440,12 @@ class JCodeAgent:
         run_dir = self.run_store.start_run(task_state)
         checkpoint = CheckpointManager(run_dir, self.workspace)
         self._append_history("user", user_message, task_state)
+        try:
+            hits = retrieve_into_working_memory(self.memory_store, self.working_memory, user_message)
+            self._record_trace(run_dir, "memory_retrieved", task_state, query=user_message[:500], hit_count=len(hits), hits=hits)
+        except Exception as exc:
+            self.working_memory.set_retrieval(user_message, [])
+            self._record_trace(run_dir, "memory_retrieval_failed", task_state, error_type=type(exc).__name__, message=str(exc)[:500])
         self.session_events.emit(
             "run_started",
             run_id=task_state.run_id,
@@ -997,7 +1004,7 @@ class JCodeAgent:
     def _finish_run(self, task_state, run_dir, final_text: str, stop_reason: str = VALID_FINAL) -> str:
         task_state.finish("completed" if stop_reason == VALID_FINAL else "stopped", stop_reason, final_text)
         with self._timed_component(run_dir, task_state, "memory_maintenance", "maintain"):
-            memory_audit = maintain_after_turn(self.memory_store, self.working_memory, task_state.user_request, final_text, agent=self)
+            memory_audit = maintain_after_turn(self.memory_store, self.working_memory, task_state.user_request, final_text, agent=self, task_state=task_state)
         self._record_trace(run_dir, "memory_maintained", task_state, **memory_audit)
         self._record_trace(
             run_dir,

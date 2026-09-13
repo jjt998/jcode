@@ -24,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--max-new-tokens", type=int, default=None)
     parser.add_argument("--temperature", type=float, default=0.2)
+    parser.add_argument("--dream", action="store_true", help="Manually consolidate project memory")
     return parser
 
 
@@ -33,6 +34,15 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config(args)
     agent = build_agent(config)
     prompt = " ".join(args.prompt).strip()
+    if args.dream:
+        if prompt:
+            parser.error("--dream cannot be combined with a prompt")
+        try:
+            print(agent.run_dream(quiet=False, trigger="manual_cli"))
+        except Exception as exc:
+            print(f"Dream failed: {exc}", file=__import__("sys").stderr)
+            return 1
+        return 0
     if not prompt:
         parser.print_help()
         return 0

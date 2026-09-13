@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+import json
+import uuid
 from pathlib import Path
 
 ENTRYPOINT_NAME = "MEMORY.md"
+DAILY_LOG_ENTRIES_NAME = "entries.jsonl"
 
 
 def ensure_memory_dir(root: Path) -> Path:
@@ -34,6 +37,34 @@ def append_to_daily_log(root: Path, text: str, *, source: str = "turn", today: d
     with path.open("a", encoding="utf-8") as fh:
         fh.write(f"- [{timestamp}] ({source}) {text}\n")
     return path
+
+
+def append_structured_daily_log(root: Path, entry: dict) -> str:
+    """追加结构化过程条目，保留每轮记忆整理所需的来源证据。"""
+    root = ensure_memory_dir(root)
+    payload = dict(entry)
+    payload.setdefault("entry_id", f"log-{uuid.uuid4().hex[:12]}")
+    payload.setdefault("created_at", datetime.now().astimezone().isoformat())
+    path = root / DAILY_LOG_ENTRIES_NAME
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
+    return str(payload["entry_id"])
+
+
+def iter_structured_daily_logs(root: Path) -> list[dict]:
+    """按写入顺序读取结构化 Daily Log，损坏行直接报告为格式错误。"""
+    path = Path(root) / DAILY_LOG_ENTRIES_NAME
+    if not path.exists():
+        return []
+    entries = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        item = json.loads(line)
+        if not isinstance(item, dict):
+            raise ValueError("daily log entry must be an object")
+        entries.append(item)
+    return entries
 
 
 def iter_daily_log_entries(root: Path) -> list[str]:

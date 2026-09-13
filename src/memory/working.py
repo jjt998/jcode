@@ -15,7 +15,7 @@ class WorkingMemory:
     file_reads: dict[str, dict[str, dict]] = field(default_factory=dict)  # 按文件版本累计的读取范围与状态
     tool_observations: list[dict] = field(default_factory=list)
     resume_context: dict = field(default_factory=dict)
-    retrieved_memory: list[str] = field(default_factory=list)
+    retrieved_memory: list[dict] = field(default_factory=list)  # 当前请求命中的长期记忆
     last_retrieval_query: str = ""
     subagent_results: list[str] = field(default_factory=list)
     safety_notes: list[str] = field(default_factory=list)
@@ -46,7 +46,7 @@ class WorkingMemory:
             file_reads=file_reads,
             tool_observations=[item for item in tools.get("observations", []) if isinstance(item, dict)],
             resume_context=dict(task.get("resume_context", {})),
-            retrieved_memory=list(retrieval.get("items", [])),
+            retrieved_memory=[dict(item) if isinstance(item, dict) else {"text": str(item)} for item in retrieval.get("items", [])],
             last_retrieval_query=str(retrieval.get("last_query", "")),
             subagent_results=list(tools.get("subagent_results", [])),
             safety_notes=list(safety.get("notes", [])),
@@ -144,7 +144,7 @@ class WorkingMemory:
             return
         self.tool_observations.append({"tool": tool_name, "status": status, "summary": _head_tail_summary(str(summary)), "artifact": artifact_ref})
 
-    def set_retrieval(self, query: str, items: list[str]) -> None:
+    def set_retrieval(self, query: str, items: list[dict]) -> None:
         self.last_retrieval_query = query
         self.retrieved_memory = list(items)
 
@@ -170,7 +170,10 @@ class WorkingMemory:
         if self.last_retrieval_query:
             lines.append("- last_query: " + self.last_retrieval_query[:200])
         if self.retrieved_memory:
-            lines.append("- retrieved_memory:\n" + "\n".join(f"  - {x}" for x in self.retrieved_memory[:5]))
+            lines.append("- retrieved_memory:\n" + "\n".join(
+                f"  - [{item.get('memory_type', 'unknown')}] {item.get('text', '')} (score={item.get('score', 0)}, source={item.get('source_entry_id', '')})"
+                for item in self.retrieved_memory[:5]
+            ))
         if self.subagent_results:
             lines.append("- subagent_results:\n" + "\n".join(f"  - {x}" for x in self.subagent_results[-5:]))
         if self.tool_observations:
