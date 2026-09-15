@@ -15,8 +15,8 @@ MVP2 选择方案 A：将事件流内嵌到对应 turn 的推理抽屉中，并�
 - 在用户消息和助手最终回答之间展示一个默认折叠的步骤时间线。
 - 每个步骤默认折叠，标题行展示步骤号、时间戳、状态、工具数量、耗时和推理摘要。
 - 步骤展开后展示推理全文、工具调用清单和工具结果。
-- 如果模型返回 `<reasoning>...</reasoning>`，只取第一个片段，作为一个步骤的推理正文。
-- 如果这次没有 reasoning，就完全不显示对应步骤块。
+- 步骤内容来自 `model_responded`、`tool_requested`、`tool_executed` 和压缩审计事件；不再从 XML 标签抽取 reasoning。
+- 如果本轮只有最终 content 且没有工具事件，仍保留 turn 的最终状态，不创建虚假的推理步骤。
 - 将完整 context、模型原始返回、工具请求和工具执行结果直接写入 `trace.jsonl`。
 - SSE 只做事件级流式更新，最终回答仍一次性出现。
 - 逐 token 输出明确留到 MVP3。
@@ -121,7 +121,7 @@ Turn 对齐规则：
 - 同一 `run_id` 的 assistant message 是 turn 终点。
 - 同一 `run_id` 的 tool history 和 trace events 归入该 turn。
 - 如果 `model_responded.response_text` 中包含首个 `<reasoning>...</reasoning>`，则提取成一个 step 的 `reasoning_text`。
-- 后端根据 `<reasoning>`、`<tool>`、`<tools>` 和 `<final>` 的相对顺序，构造 `reasoning_steps[]`。
+- 后端由 `src/app/web_steps.py` 根据原生事件顺序构造 `reasoning_steps[]`，并按 `step_id` 增量更新。
 - 若历史 session 没有完整 run_id，前端显示普通历史消息，不强行归入推理抽屉。
 - 若 run 中断且没有 assistant message，turn 状态显示 `stopped`、`failed` 或 `incomplete`。
 
@@ -458,8 +458,8 @@ context 和工具结果可能包含路径、环境信息或敏感输出。
 
 1. 增强 runtime trace：写入完整 context、模型原始返回和完整工具结果。
 2. 新增 `model_responded` 事件。
-3. 从 `model_responded.response_text` 提取首个 `<reasoning>`，生成首个 step。
-4. 解析 `<reasoning>`、`<tool>`、`<tools>` 和 `<final>`，生成 `reasoning_steps[]`。
+3. 消费 `model_responded`，将原生 `native_tool_calls` 和响应文本写入当前 step。
+4. 消费 `tool_requested`、`tool_executed`、`context_built` 和 `run_finished`，生成 `reasoning_steps[]`。
 5. 新增 turn 构造逻辑，从 session history、run_ids 和 trace files 生成 turn view model。
 6. 新增 `GET /api/projects/{project_id}/sessions/{session_id}/turns`。
 7. 前端移除右侧 timeline DOM 和 CSS。

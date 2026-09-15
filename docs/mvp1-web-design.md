@@ -416,12 +416,13 @@ agent.ask()
 run_started
 context_built
 model_requested
-model_parsed
+    model_responded
+    native_tool_calls_received
 tool_requested
 tool_executed
 subagent_completed
 checkpoint_created
-final_readiness_decision
+    final_readiness_evaluated
 memory_maintained
 run_finished
 approval_required

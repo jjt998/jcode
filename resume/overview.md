@@ -17,7 +17,7 @@
 ## 采信的真实数据
 
 - 10 个核心模块：`app / context / evidence / memory / policy / providers / runtime / state / tools / workers`
-- 83 个 Python 源文件，约 8,244 行代码
+- 最新图谱覆盖 240 个项目文件；评测体系位于 `eval/`，包含 24 个版本化 Case、运行器、评分器和回放入口
 - 17 个已注册内置工具（`src/tools/registry.py` 实测）
 - 106 个测试用例，分布于 19 个测试文件
 - 100 次 Git 提交（2026.08.23 起）

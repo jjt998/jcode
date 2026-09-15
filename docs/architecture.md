@@ -11,7 +11,7 @@ app
 ```
 
 - `app` 只负责 CLI、配置读取和默认对象装配，不承载运行逻辑。
-- `runtime` 由 `JCodeAgent` 持有主循环，负责 run 生命周期、动作解析、工具分发、终态收口和恢复后的运行衔接。
+- `runtime` 由 `JCodeAgent` 持有主循环，负责 run 生命周期、原生 `ModelToolCall` 分发、工具执行、终态收口和恢复后的运行衔接。
 - `runtime_mode` 是 session 级状态；当前支持 `default` 与 `plan`，并由 `JCodeAgent` 的 plan controller 驱动工具面和 final gate。
 - `context` 只负责模型上下文拼装、prefix 渲染、动态工具定义注入、项目规则注入、预算估算和上下文区块渲染。
 - `providers` 只负责模型协议适配、模型档案路由和模型响应包装；session 保存当前模型档案，run 固化不可变档案快照。
@@ -72,7 +72,7 @@ Stable safety rules
 ```
 
 - `System rules` 定义 JCode 的稳定身份和角色边界。
-- `Output protocol` 定义 `<tool ...>` 与 `<final>` 两种模型输出协议。
+- `Output protocol` 不再定义 XML 文本协议；Provider 通过 `ModelResponse.content` 和 `ModelResponse.tool_calls` 返回最终文本或原生工具调用。
 - `Tool definitions` 从 `ToolRegistry` 动态渲染，不允许手写复制工具列表。
 - `Project rules from JCODE.md` 读取当前 workspace 根目录的 `JCODE.md`；文件不存在时渲染为 `(none)`。
 - `Stable safety rules` 放路径、读写、重复调用、sandbox 和证据总结等稳定安全约束。
