@@ -11,3 +11,4 @@ dist/
 .jcode.toml
 eval/reports/
 eval/.pytest-tmp/
+/study/
