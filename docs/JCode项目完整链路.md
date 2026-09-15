@@ -228,20 +228,23 @@ WorkingMemory 是当前运行控制面，Daily Log 是过程层，Durable Memory
 ```mermaid
 flowchart TD
     Parent[JCodeAgent] --> Tool{子 Agent 工具}
-    Tool -->|spawn_subagent| Validate[校验 subagent_type 与 write_scope]
+    Tool -->|spawn_subagent| Validate[校验 role、acceptance_criteria 与 write_scope]
     Validate --> Mode{当前是否 plan mode}
-    Mode -->|是| ExploreOnly[只允许 Explore]
-    Mode -->|否| WorkerOrExplore[允许 worker 或 Explore]
-    ExploreOnly --> Manager[WorkerManager.spawn]
-    WorkerOrExplore --> Manager
-    Manager --> Runtime[创建 WorkerRuntime]
+    Mode -->|是| ReadOnlyRoles[只允许 explorer planner reviewer]
+    Mode -->|否| Roles[explorer planner worker tester reviewer]
+    ReadOnlyRoles --> Manager[WorkerManager.spawn]
+    Roles --> Manager
+    Manager --> Runtime[创建冻结角色的 WorkerRuntime]
     Manager --> TaskFile[写 workers ID task_state.json]
     Manager --> SpawnEvent[发送 subagent_spawned 事件]
 
-    Tool -->|send_subagent_message| Mailbox[WorkerRuntime mailbox]
+    Tool -->|send_subagent_message| Mailbox[created 状态 WorkerRuntime mailbox]
     Mailbox --> MessageEvent[subagent_message_sent]
-    Tool -->|wait_subagent| RunWorker[WorkerRuntime.run]
-    RunWorker --> Result[WorkerResult]
+    Tool -->|wait_subagent| RunWorker[SubagentRunner真实循环]
+    RunWorker --> Provider[ModelRouter + ContextManager]
+    Provider --> ToolExecutor[ToolExecutor按角色治理]
+    ToolExecutor --> RunWorker
+    RunWorker --> Result[结构化 WorkerResult]
     Result --> ResultFile[result.json 与 trace.jsonl]
     Result --> CompletedEvent[subagent_completed]
     Result --> ToolResult[返回父 Agent ToolResult]
@@ -249,7 +252,7 @@ flowchart TD
     ParentMemory --> Parent
 ```
 
-当前子任务类型只有 `worker` 和 `Explore`。写能力同时受 Tool Profile 和显式 `write_scope` 约束；plan mode 只允许创建 `Explore`。子 Agent 结果不会直接成为最终回答，而是作为工具结果和 WorkingMemory 信息返回主循环。
+当前子 Agent 角色固定为 `explorer`、`planner`、`worker`、`tester` 和 `reviewer`。角色由 RoleRegistry 冻结并映射到 Tool Profile；`worker` 必须提供显式 `write_scope`，`tester` 允许 `run_shell` 但禁止 `write_file` 与 `apply_patch`，shell 副作用沿用 workspace snapshot 和 `changed_files` 记录。plan mode 只允许三种只读角色。子 Agent 使用独立的 Context、History、TaskState 和 trace，结果通过结构化 `WorkerResult` 返回主 Agent，由主 Agent 再次验收后决定最终交付。
 
 ## 7. 恢复与 Checkpoint 分支
 

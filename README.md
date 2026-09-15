@@ -4,7 +4,7 @@ JCode 是一个本地 Coding Agent，保留更小的代码体量和更直接的�
 
 它覆盖本地代码代理最核心的一条链路：命令行入口、运行时装配、原生工具调用循环、结构化上下文、DeepSeek Responses API、工具执行、子 Agent、策略治理、工作记忆、运行证据、Checkpoint 和最终回答。
 
-JCode 已包含受限 Dream 子 Agent、会话级 plan mode、Explore 子 Agent 和工具 Profile，但还不包含 TUI、完整评测套件、复杂多 Provider 路由、大规模 benchmark、vision/media 工具等非核心能力。
+JCode 已包含受限 Dream 子 Agent、会话级 plan mode、固定角色多 Agent 和工具 Profile，但还不包含 TUI、完整评测套件、复杂多 Provider 路由、大规模 benchmark、vision/media 工具等非核心能力。
 
 ## 安装
 
@@ -124,13 +124,16 @@ JCode 现在提供这些正式入口：
 | `send_subagent_message` | 向子任务补充消息。 |
 | `wait_subagent` | 等待子任务完成。 |
 
-`worker` 和 `Explore` 都是子 agent 类型，但语义不同：
+子 Agent 通过固定角色注册表区分职责：
 
 | 类型 | 语义 | 工具面 | 写入能力 |
 | --- | --- | --- | --- |
-| `worker` | 普通子任务 | 可写 profile | 允许在显式 `write_scope` 内写入 |
-| `Explore` | 只读探索子任务 | readonly profile | 不允许写入 |
-| `plan mode` | 会话级规划模式 | plan profile | 只允许 `Explore`，并限制写入 active plan artifact |
+| `explorer` | 只读调查 | readonly profile | 不允许写入 |
+| `planner` | 只读计划拆解 | readonly profile | 不允许写入 |
+| `worker` | 普通实现子任务 | worker profile | 允许在显式 `write_scope` 内写入 |
+| `tester` | 测试、编译和验证 | tester profile | 允许 `run_shell`，禁止 `write_file/apply_patch` |
+| `reviewer` | 只读质量审查 | readonly profile | 不允许写入 |
+| `plan mode` | 会话级规划模式 | plan profile | 只允许三种只读角色 |
 
 每次运行都会写入 `.jcode/` 目录：
 
@@ -174,7 +177,7 @@ jcode.app.cli
 - `policy`：权限、工具规则、重复调用、sandbox 和敏感信息处理。
 - `state`：Session、TaskState、History、Checkpoint 和 Workspace。
 - `memory`：Working_Memory、Daily Log、Durable Memory、检索、安全过滤和轮次整理。
-- `workers`：子 Agent 的创建、消息、等待、结果和 trace；plan mode 下只允许 Explore 子 Agent。
+- `workers`：子 Agent 的创建、消息、等待、真实模型循环、结构化结果和 trace；plan mode 下只允许只读子 Agent。
 - `evidence`：运行 trace、session event、report、artifact 和审计数据。
 
 ## 代码约定
@@ -249,7 +252,7 @@ Session 使用 schema v6，Working Memory 使用 `jcode.layered_memory.v3`，Che
 
 JCode 支持子 Agent 工具：
 
-- `spawn_subagent`：创建子任务，默认是普通 worker；plan mode 只允许 Explore。
+- `spawn_subagent`：按固定 `role` 创建子任务，并要求 `acceptance_criteria`。
 - `send_subagent_message`：向已有子任务补充消息。
 - `wait_subagent`：等待子任务完成并收集结果。
 

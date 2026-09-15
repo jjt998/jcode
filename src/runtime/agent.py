@@ -20,6 +20,7 @@ from src.providers.base import ModelResponse, ProviderRequestError
 from src.providers.continuation import ProviderContinuation
 from src.context.budget import validate_static_model_capacity
 from src.runtime.plan import PlanModeController, runtime_mode_name, runtime_mode_plan_path
+from src.workers.roles import get_role_spec, plan_mode_allowed_roles
 from src.runtime.transitions import ABORTED, MODEL_ERROR, MODEL_OUTPUT_INCOMPLETE, STEP_LIMIT_REACHED, VALID_FINAL, UNEXPECTED_RUNTIME_ERROR
 from src.runtime.errors import JCodeRuntimeStopError
 from src.state.checkpoint import CheckpointManager
@@ -782,21 +783,19 @@ class JCodeAgent:
             except Exception:
                 subagent_snapshot_uncertain = True
         with self._timed_component(run_dir, task_state, "tool_execution", tool_name, level="detail", metadata={"call_id": call_id}):
-            if tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"}:
-                result = self._handle_subagent_tool(tool_name, tool_args, task_state)
-            else:
-                result = self.tool_executor.execute(
-                    tool_name,
-                    tool_args,
-                    working_memory=self.working_memory,
-                    tool_profile=self.active_tool_profile,
-                    write_scope=self.write_scope,
-                    runtime_mode=runtime_mode_name(self.session),
-                    plan_path=runtime_mode_plan_path(self.session),
-                    run_id=task_state.run_id,
-                    runtime=self,
-                    abort_requested=lambda: self.abort_requested,
-                )
+            self._current_task_state = task_state
+            result = self.tool_executor.execute(
+                tool_name,
+                tool_args,
+                working_memory=self.working_memory,
+                tool_profile=self.active_tool_profile,
+                write_scope=self.write_scope,
+                runtime_mode=runtime_mode_name(self.session),
+                plan_path=runtime_mode_plan_path(self.session),
+                run_id=task_state.run_id,
+                runtime=self,
+                abort_requested=lambda: self.abort_requested,
+            )
 
         if tool_name in {"spawn_subagent", "send_subagent_message", "wait_subagent"} and result.status not in {"success", "ok"}:
             try:
@@ -804,7 +803,7 @@ class JCodeAgent:
                 subagent_changed = (
                     []
                     if subagent_snapshot_uncertain
-                    else sorted(set(subagent_snapshot_after) ^ set(subagent_snapshot_before or {}))
+                    else self.workspace.changed_paths(subagent_snapshot_before or {}, subagent_snapshot_after)
                 )
             except Exception:
                 subagent_changed = []
@@ -1042,76 +1041,44 @@ class JCodeAgent:
         return final_text
 
     def _handle_subagent_tool(self, tool_name: str, args: dict, task_state) -> ToolResult:
-        subagent_type = str(args.get("subagent_type", "worker") or "worker").strip() or "worker"
-        write_scope = list(args.get("write_scope", []) or [])
-        prompt = str(args.get("prompt", "") or "")
-        if subagent_type not in {"worker", "Explore"}:
-            decision = PolicyDecision.deny(
-                "tool_profile_denied",
-                f"error: tool {tool_name} requested invalid subagent type {subagent_type}",
-                layer="tool_profile",
-                metadata={"tool_profile": self.active_tool_profile_name},
-            )
-            return ToolResult(
-                "denied",
-                decision.message,
-                error_type=decision.reason,
-                metadata={"policy": [decision.to_dict()], "decision": decision.layer, "tool_name": tool_name, "source": "model", "run_id": task_state.run_id},
-                decision=decision.decision,
-            )
-        if self.plan_mode.mode == "plan" and subagent_type != "Explore":
-            decision = PolicyDecision.deny(
-                "tool_profile_denied",
-                f"error: plan mode only allows Explore subagents, not {subagent_type}",
-                layer="tool_profile",
-                metadata={"tool_profile": self.active_tool_profile_name},
-            )
-            return ToolResult(
-                "denied",
-                decision.message,
-                error_type=decision.reason,
-                metadata={"policy": [decision.to_dict()], "decision": decision.layer, "tool_name": tool_name, "source": "model", "run_id": task_state.run_id},
-                decision=decision.decision,
-            )
         if tool_name == "spawn_subagent":
-            return self.worker_manager.spawn(prompt, subagent_type=subagent_type, write_scope=write_scope)
+            role = str(args.get("role", "") or "").strip().lower()
+            write_scope = list(args.get("write_scope", []) or [])
+            prompt = str(args.get("prompt", "") or "")
+            acceptance_criteria = list(args.get("acceptance_criteria", []) or [])
+            try:
+                role_spec = get_role_spec(role)
+            except ValueError:
+                decision = PolicyDecision.deny(
+                    "invalid_subagent_role",
+                    f"error: tool {tool_name} requested invalid subagent role {role}",
+                    layer="tool_profile",
+                    metadata={"tool_profile": self.active_tool_profile_name},
+                )
+                return ToolResult("denied", decision.message, error_type=decision.reason, metadata={"policy": [decision.to_dict()], "decision": decision.layer, "tool_name": tool_name, "source": "model", "run_id": task_state.run_id}, decision=decision.decision)
+            if self.plan_mode.mode == "plan" and role_spec.role_id not in plan_mode_allowed_roles():
+                decision = PolicyDecision.deny(
+                    "tool_profile_denied",
+                    f"error: plan mode only allows read-only subagents, not {role_spec.role_id}",
+                    layer="tool_profile",
+                    metadata={"tool_profile": self.active_tool_profile_name},
+                )
+                return ToolResult("denied", decision.message, error_type=decision.reason, metadata={"policy": [decision.to_dict()], "decision": decision.layer, "tool_name": tool_name, "source": "model", "run_id": task_state.run_id}, decision=decision.decision)
+            return self.worker_manager.spawn(
+                prompt,
+                role=role_spec.role_id,
+                acceptance_criteria=acceptance_criteria,
+                write_scope=write_scope,
+                model_profile=dict(task_state.model_profile),
+                parent_session_id=str(self.session.get("id", "")),
+                parent_run_id=task_state.run_id,
+                plan_mode=self.plan_mode.mode == "plan",
+            )
         if tool_name == "send_subagent_message":
             worker_id = str(args.get("worker_id", ""))
-            if self.plan_mode.mode == "plan":
-                worker = self.worker_manager.workers.get(worker_id)
-                if worker is not None and worker.subagent_type != "Explore":
-                    decision = PolicyDecision.deny(
-                        "tool_profile_denied",
-                        f"error: plan mode only allows Explore subagents, not {worker.subagent_type}",
-                        layer="tool_profile",
-                        metadata={"tool_profile": self.active_tool_profile_name},
-                    )
-                    return ToolResult(
-                        "denied",
-                        decision.message,
-                        error_type=decision.reason,
-                        metadata={"policy": [decision.to_dict()], "decision": decision.layer, "tool_name": tool_name, "source": "model", "run_id": task_state.run_id},
-                        decision=decision.decision,
-                    )
             return self.worker_manager.send(worker_id, str(args.get("message", "")))
         if tool_name == "wait_subagent":
             worker_id = str(args.get("worker_id", ""))
-            if self.plan_mode.mode == "plan":
-                worker = self.worker_manager.workers.get(worker_id)
-                if worker is not None and worker.subagent_type != "Explore":
-                    decision = PolicyDecision.deny(
-                        "tool_profile_denied",
-                        f"error: plan mode only allows Explore subagents, not {worker.subagent_type}",
-                        layer="tool_profile",
-                        metadata={"tool_profile": self.active_tool_profile_name},
-                    )
-                    return ToolResult(
-                        "denied",
-                        decision.message,
-                        error_type=decision.reason,
-                        metadata={"policy": [decision.to_dict()], "decision": decision.layer, "tool_name": tool_name, "source": "model", "run_id": task_state.run_id},
-                        decision=decision.decision,
-                    )
             return self.worker_manager.wait(worker_id)
         return ToolResult("denied", f"unknown subagent tool {tool_name}", error_type="unknown_tool")
 

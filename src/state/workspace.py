@@ -116,6 +116,11 @@ class Workspace:
             items[self.relpath(path)] = (int(stat.st_mtime_ns), int(stat.st_size))
         return items
 
+    @staticmethod
+    def changed_paths(before: dict[str, tuple[int, int]], after: dict[str, tuple[int, int]]) -> list[str]:
+        """比较快照路径和元数据，覆盖新增、删除及已有文件修改。"""
+        return sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
+
     def runtime_text(self) -> str:
         commits = "\n".join(f"- {line}" for line in self.recent_commits) or "- none"
         return textwrap.dedent(

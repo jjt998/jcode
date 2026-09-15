@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ReadFileArgs(BaseModel):
@@ -82,9 +82,20 @@ class ExitPlanModeArgs(BaseModel):
 
 
 class SpawnSubagentArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     prompt: str = Field(min_length=1, description="子 Agent 要完成的具体任务目标。")
-    subagent_type: str = Field(default="worker", description="子 Agent 类型。")
+    role: str = Field(description="固定子 Agent 角色：explorer、planner、worker、tester 或 reviewer。")
+    acceptance_criteria: list[str] = Field(min_length=1, description="至少一条可检查的完成条件。")
     write_scope: list[str] = Field(default_factory=list, description="允许子 Agent 写入的工作区路径范围。")
+
+    @field_validator("acceptance_criteria")
+    @classmethod
+    def validate_acceptance_criteria(cls, values: list[str]) -> list[str]:
+        """验收条件必须逐项非空，避免创建无法验收的子任务。"""
+        if any(not str(value).strip() for value in values):
+            raise ValueError("acceptance_criteria items must be non-empty")
+        return [str(value).strip() for value in values]
 
 
 class SendSubagentMessageArgs(BaseModel):

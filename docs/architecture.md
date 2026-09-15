@@ -20,7 +20,7 @@ app
 - `state` 负责 session、task、history、checkpoint、workspace fingerprint 和 resume context 的持久形状。
 - `memory` 负责 Working_Memory、Daily Log、Durable Memory、检索、安全过滤和轮次整理。
 - `workers` 负责轻量子任务生命周期，父 Agent 只消费子 agent 的状态、摘要和 artifact。
-- `workers` 承载 `Explore` / `worker` 两种子 agent 语义；`plan mode` 只允许 `Explore`。
+- `workers` 承载 `explorer`、`planner`、`worker`、`tester` 和 `reviewer` 五种子 Agent 角色；`plan mode` 只允许三种只读角色。
 - `evidence` 负责 trace、session event、artifact 和 report，作为审计事实来源。
 
 ## 禁止事项
@@ -34,7 +34,7 @@ app
 - 禁止把运行证据、session history、working memory、checkpoint 混成同一个事实来源：history 面向上下文，trace 面向审计，working memory 面向当前推理，checkpoint 面向恢复。
 - 禁止把 Durable Memory 的晋升结果长期保存在 Working_Memory；晋升结果属于 memory audit、trace/report 或 Durable Memory 文件。
 - 禁止在 provider/router 的内部运行链路继续使用 `prompt` 命名表示 JCode 拼装出的模型输入；统一使用 `context`。
-- 禁止在 `plan mode` 下启动可写的 `worker` 子任务；只允许 `Explore` 子任务参与计划期探索。
+- 禁止在 `plan mode` 下启动可写的 `worker` 或可执行 shell 的 `tester` 子任务；只允许 `explorer`、`planner`、`reviewer` 参与计划期探索。
 
 ## 工具与策略合同
 

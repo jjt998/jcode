@@ -9,7 +9,7 @@ from src.policy.decisions import PolicyDecision
 from src.tools.base import ToolCallRequest, ToolInvocation, ToolResult
 from src.tools.workspace import freshness
 
-RUNTIME_TOOL_NAMES = {"todo_add", "todo_update", "todo_list", "todo_delete", "todo_archive", "ask_user", "enter_plan_mode", "exit_plan_mode"}
+RUNTIME_TOOL_NAMES = {"todo_add", "todo_update", "todo_list", "todo_delete", "todo_archive", "ask_user", "enter_plan_mode", "exit_plan_mode", "spawn_subagent", "send_subagent_message", "wait_subagent"}
 TODO_TOOL_NAMES = {"todo_add", "todo_update", "todo_list", "todo_delete", "todo_archive"}
 
 if TYPE_CHECKING:
@@ -144,7 +144,7 @@ class ToolExecutor:
         except Exception as exc:
             try:
                 after = self.workspace.snapshot() if tool.risky else before
-                changed = [] if snapshot_uncertain else sorted(set(after) ^ set(before))
+                changed = [] if snapshot_uncertain else self.workspace.changed_paths(before, after)
             except Exception:
                 after = before
                 changed = []
@@ -159,7 +159,7 @@ class ToolExecutor:
             return ToolResult(status, text, changed_files=changed, error_type=code, metadata=metadata, decision="executed")
         try:
             after = self.workspace.snapshot() if tool.risky else before
-            changed = [] if snapshot_uncertain else sorted(set(after) ^ set(before))
+            changed = [] if snapshot_uncertain else self.workspace.changed_paths(before, after)
         except Exception:
             after = before
             changed = []
@@ -218,6 +218,17 @@ class ToolExecutor:
                 text = runtime.enter_plan_mode(str(parsed_args.get("topic", "")), path=parsed_args.get("path"))
             elif invocation.tool.name == "exit_plan_mode":
                 text = runtime.exit_plan_mode()
+            elif invocation.tool.name in {"spawn_subagent", "send_subagent_message", "wait_subagent"}:
+                task_state = getattr(runtime, "_current_task_state", None)
+                if task_state is None:
+                    raise RuntimeError("subagent runtime task state is missing")
+                result = runtime._handle_subagent_tool(invocation.tool.name, parsed_args, task_state)
+                if result.status not in {"success", "ok"}:
+                    return result
+                result.text = self.redactor.redact(result.text)
+                result.decision = "executed"
+                result.metadata.update(self._metadata(invocation, [PolicyDecision.allow("runtime_tool_ok", layer="tool_execution")], {"decision": "executed", "runtime_tool": True}))
+                return result
             else:
                 decision = PolicyDecision.deny(
                     "runtime_tool_unknown",

@@ -78,7 +78,7 @@ def build_default_registry() -> ToolRegistry:
     registry.register(Tool("ask_user", AskUserArgs, tool_ask_user, read_only=False, description="Ask the user one question and wait for a free-text answer. choices must be a string array, never objects; ask one question per call."))
     registry.register(Tool("enter_plan_mode", EnterPlanModeArgs, tool_enter_plan_mode, read_only=False, description="Enter plan mode for one explicit topic; optionally bind a workspace plan file."))
     registry.register(Tool("exit_plan_mode", ExitPlanModeArgs, tool_exit_plan_mode, read_only=False, description="Exit plan mode. This tool takes no arguments."))
-    registry.register(Tool("spawn_subagent", SpawnSubagentArgs, tool_spawn_subagent, read_only=False, description="Start one scoped subagent task. write_scope limits where it may write; do not treat an unverified result as proof that files or tests changed."))  # 子 Agent 生命周期治理后置
+    registry.register(Tool("spawn_subagent", SpawnSubagentArgs, tool_spawn_subagent, read_only=False, description="Start one scoped subagent task with a fixed role and explicit acceptance criteria. Only worker may receive write_scope."))  # 子 Agent 角色和生命周期由运行时统一治理
     registry.register(Tool("send_subagent_message", SendSubagentMessageArgs, tool_send_subagent_message, read_only=False, description="Send a concrete message to an existing subagent worker ID. Do not invent worker IDs."))  # 子 Agent 消息治理后置
-    registry.register(Tool("wait_subagent", WaitSubagentArgs, tool_wait_subagent, read_only=False, description="Wait for an existing subagent worker ID and collect its result; verify reported changes before finalizing."))  # 子 Agent 等待治理后置
+    registry.register(Tool("wait_subagent", WaitSubagentArgs, tool_wait_subagent, read_only=False, risky=True, description="Wait for an existing subagent worker ID and collect its result; verify reported changes before finalizing."))  # 等待可能触发子 Agent 写入或 shell 副作用
     return registry
