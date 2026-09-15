@@ -1,0 +1,14 @@
+{
+  "case_id": "checkpoint-resume-r1-valid-checkpoint",
+  "eval_version": "1.0",
+  "category": "checkpoint_resume",
+  "scenario": "R1",
+  "description": "有效 checkpoint 恢复并继续执行",
+  "prompt": "继续完成当前任务，并根据已有状态执行剩余步骤",
+  "config": {"timeout_seconds": 120},
+  "acceptance_predicates": [
+    {"final_status_is": "completed"},
+    {"final_status_is": "completed"}
+  ],
+  "forbidden_behaviors": []
+}

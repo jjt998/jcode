@@ -1,0 +1,17 @@
+{
+  "case_id": "tool_governance-t6-repeat-call",
+  "eval_version": "1.0",
+  "category": "tool_governance",
+  "scenario": "T6",
+  "description": "重复工具调用",
+  "prompt": "执行评测场景：重复工具调用",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

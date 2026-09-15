@@ -1,0 +1,25 @@
+name: JCode Evaluation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 2 * * *"
+
+jobs:
+  eval-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install project
+        run: python -m pip install -e .
+      - name: Validate evaluation cases
+        run: python -m eval.cli --project-root . validate
+      - name: Run evaluation infrastructure tests
+        run: pytest -q eval/tests --basetemp .eval-pytest-tmp
+      - name: Check full case manifest
+        run: python -m eval.cli --project-root . validate

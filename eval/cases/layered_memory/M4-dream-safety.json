@@ -1,0 +1,17 @@
+{
+  "case_id": "layered_memory-m4-dream-safety",
+  "eval_version": "1.0",
+  "category": "layered_memory",
+  "scenario": "M4",
+  "description": "Dream 隔离与安全",
+  "prompt": "执行评测场景：Dream 隔离与安全",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

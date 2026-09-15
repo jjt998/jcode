@@ -1,0 +1,17 @@
+{
+  "case_id": "layered_memory-m1-working-memory",
+  "eval_version": "1.0",
+  "category": "layered_memory",
+  "scenario": "M1",
+  "description": "Working Memory 保留",
+  "prompt": "执行评测场景：Working Memory 保留",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

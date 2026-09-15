@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["case_id", "eval_version", "scorer_version", "passed", "task_success", "agent_quality", "harness_quality", "assurance"],
+  "properties": {
+    "case_id": {"type": "string"},
+    "eval_version": {"type": "string"},
+    "scorer_version": {"type": "string"},
+    "passed": {"type": "boolean"},
+    "task_success": {"type": "boolean"},
+    "agent_quality": {"type": "object"},
+    "harness_quality": {"type": "object"},
+    "assurance": {"type": "object"},
+    "predicate_results": {"type": "array"},
+    "redlines": {"type": "array"}
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,17 @@
+{
+  "case_id": "tool_governance-t7-shell-timeout",
+  "eval_version": "1.0",
+  "category": "tool_governance",
+  "scenario": "T7",
+  "description": "Shell 超时",
+  "prompt": "执行评测场景：Shell 超时",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

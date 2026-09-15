@@ -1,0 +1,17 @@
+{
+  "case_id": "context_compression-c1-normal-pressure",
+  "eval_version": "1.0",
+  "category": "context_compression",
+  "scenario": "C1",
+  "description": "正常压力触发压缩",
+  "prompt": "执行评测场景：正常压力触发压缩",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

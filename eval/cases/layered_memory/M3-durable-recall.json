@@ -1,0 +1,17 @@
+{
+  "case_id": "layered_memory-m3-durable-recall",
+  "eval_version": "1.0",
+  "category": "layered_memory",
+  "scenario": "M3",
+  "description": "Durable Memory 沉淀与召回",
+  "prompt": "执行评测场景：Durable Memory 沉淀与召回",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

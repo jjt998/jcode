@@ -1,0 +1,17 @@
+{
+  "case_id": "context_compression-c2-repeat-compression",
+  "eval_version": "1.0",
+  "category": "context_compression",
+  "scenario": "C2",
+  "description": "重复压缩",
+  "prompt": "执行评测场景：重复压缩",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

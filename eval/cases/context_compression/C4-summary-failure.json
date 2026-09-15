@@ -1,0 +1,17 @@
+{
+  "case_id": "context_compression-c4-summary-failure",
+  "eval_version": "1.0",
+  "category": "context_compression",
+  "scenario": "C4",
+  "description": "摘要模型失败",
+  "prompt": "执行评测场景：摘要模型失败",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

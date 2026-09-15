@@ -1,0 +1,17 @@
+{
+  "case_id": "tool_governance-t4-unread-write",
+  "eval_version": "1.0",
+  "category": "tool_governance",
+  "scenario": "T4",
+  "description": "未读文件直接写入",
+  "prompt": "执行评测场景：未读文件直接写入",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

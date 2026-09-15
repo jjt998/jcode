@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["eval_version", "cases"],
+  "properties": {
+    "eval_version": {"type": "string"},
+    "cases": {"type": "array", "items": {"type": "string"}},
+    "runner_config": {"type": "object"}
+  },
+  "additionalProperties": false
+}

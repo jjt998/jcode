@@ -1,0 +1,17 @@
+{
+  "case_id": "tool_governance-t2-schema-validation",
+  "eval_version": "1.0",
+  "category": "tool_governance",
+  "scenario": "T2",
+  "description": "参数 schema 校验失败",
+  "prompt": "执行评测场景：参数 schema 校验失败",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

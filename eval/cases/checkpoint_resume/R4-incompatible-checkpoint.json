@@ -1,0 +1,17 @@
+{
+  "case_id": "checkpoint_resume-r4-incompatible-checkpoint",
+  "eval_version": "1.0",
+  "category": "checkpoint_resume",
+  "scenario": "R4",
+  "description": "Checkpoint 不兼容或不可恢复",
+  "prompt": "执行评测场景：Checkpoint 不兼容或不可恢复",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

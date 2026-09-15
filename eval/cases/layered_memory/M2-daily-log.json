@@ -1,0 +1,17 @@
+{
+  "case_id": "layered_memory-m2-daily-log",
+  "eval_version": "1.0",
+  "category": "layered_memory",
+  "scenario": "M2",
+  "description": "Daily Log 追加",
+  "prompt": "执行评测场景：Daily Log 追加",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

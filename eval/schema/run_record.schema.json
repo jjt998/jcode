@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["case_id", "eval_version", "runner_version", "scorer_version", "jcode_revision", "run_id", "started_at", "finished_at", "final_status"],
+  "properties": {
+    "case_id": {"type": "string"},
+    "eval_version": {"type": "string"},
+    "runner_version": {"type": "string"},
+    "scorer_version": {"type": "string"},
+    "jcode_revision": {"type": "string"},
+    "run_id": {"type": "string"},
+    "started_at": {"type": "string"},
+    "finished_at": {"type": "string"},
+    "final_status": {"type": "string"},
+    "task_success": {"type": ["boolean", "null"]},
+    "changed_files": {"type": "array", "items": {"type": "string"}},
+    "evidence_paths": {"type": "object"}
+  },
+  "additionalProperties": false
+}

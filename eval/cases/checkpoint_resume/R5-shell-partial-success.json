@@ -1,0 +1,17 @@
+{
+  "case_id": "checkpoint_resume-r5-shell-partial-success",
+  "eval_version": "1.0",
+  "category": "checkpoint_resume",
+  "scenario": "R5",
+  "description": "Shell 半成功后的恢复",
+  "prompt": "执行评测场景：Shell 半成功后的恢复",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

@@ -1,0 +1,17 @@
+{
+  "case_id": "tool_governance-t5-freshness-conflict",
+  "eval_version": "1.0",
+  "category": "tool_governance",
+  "scenario": "T5",
+  "description": "文件 freshness 冲突",
+  "prompt": "执行评测场景：文件 freshness 冲突",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

@@ -12,9 +12,10 @@ dependencies = ["pydantic>=2.0.0", "fastapi", "uvicorn"]
 [project.scripts]
 jcode = "src.app.cli:main"
 jcode-web = "src.app.web:main"
+eval = "eval.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["src*"]
+include = ["src*", "eval*"]
 
 [tool.setuptools.package-data]
 "src.app" = ["web_static/*"]

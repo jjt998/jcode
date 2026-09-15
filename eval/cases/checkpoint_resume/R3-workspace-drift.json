@@ -1,0 +1,18 @@
+{
+  "case_id": "checkpoint_resume-r3-workspace-drift",
+  "eval_version": "1.0",
+  "category": "checkpoint_resume",
+  "scenario": "R3",
+  "description": "Workspace 整体漂移",
+  "prompt": "执行评测场景：Workspace 整体漂移",
+  "fault_injection": {"type": "workspace_drift", "path": ".external-change", "content": "drift"},
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

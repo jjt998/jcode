@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["case_id", "eval_version", "category", "scenario", "description", "prompt"],
+  "properties": {
+    "case_id": {"type": "string", "minLength": 1},
+    "eval_version": {"type": "string", "minLength": 1},
+    "category": {"type": "string", "minLength": 1},
+    "scenario": {"type": "string", "minLength": 1},
+    "description": {"type": "string"},
+    "prompt": {"type": "string"},
+    "workspace_fixture": {"type": ["string", "null"]},
+    "model_profile": {"type": ["string", "null"]},
+    "allowed_tools": {"type": "array", "items": {"type": "string"}},
+    "write_scope": {"type": "array", "items": {"type": "string"}},
+    "fault_injection": {"type": "object"},
+    "acceptance_predicates": {"type": "array", "items": {"type": "object"}},
+    "forbidden_behaviors": {"type": "array", "items": {"type": "string"}},
+    "config": {"type": "object"}
+  },
+  "additionalProperties": false
+}

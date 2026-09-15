@@ -1,0 +1,18 @@
+{
+  "case_id": "checkpoint_resume-r2-stale-file",
+  "eval_version": "1.0",
+  "category": "checkpoint_resume",
+  "scenario": "R2",
+  "description": "单文件事实过期后的重新校准",
+  "prompt": "执行评测场景：单文件事实过期后的重新校准",
+  "fault_injection": {"type": "external_file_change", "path": "src/main.py", "content": "外部最新内容"},
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

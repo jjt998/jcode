@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="jvCZFIcJ1OtPwvQPxGXEs3">
+<head data-page-node-id="RzOPNFY6MEH2iaFqwt3ylf">
+<meta charset="UTF-8" data-page-node-id="idprKxg2Q69ZbvX4aGqrY1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="jLylCtQWvgKg7wGvqVyXIT">
+<title>【姓名待填写】- AI Agent / LLM 应用开发工程师</title>
+<style>
+  /* ===== 基础重置 ===== */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --ink:        #1a1d21;   /* 正文墨色 */
+    --ink-soft:   #454b54;   /* 次级正文 */
+    --ink-mute:   #7b838d;   /* 辅助信息 */
+    --accent:     #1f4e79;   /* 主题强调色 */
+    --accent-lt:  #e8eef5;   /* 强调浅底 */
+    --rule:       #dde2e8;   /* 分隔线 */
+    --tag-bg:     #f2f5f8;   /* 标签底色 */
+    --warn:       #b45309;   /* 待填写提示色 */
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+                 "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+    background: #f0f2f5;
+    color: var(--ink);
+    font-size: 13.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    padding: 28px 16px 48px;
+  }
+
+  /* ===== A4 纸张容器 ===== */
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    background: #ffffff;
+    padding: 15mm 16mm 16mm;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 28px rgba(0,0,0,.07);
+    border-radius: 3px;
+  }
+
+  /* ===== 顶部姓名区 ===== */
+  header {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+  }
+  .name-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  h1 {
+    font-size: 27px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--accent);
+  }
+  .target {
+    font-size: 13px;
+    color: var(--ink-soft);
+    font-weight: 500;
+  }
+  .target b { color: var(--accent); font-weight: 700; }
+
+  .contact {
+    margin-top: 9px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .contact span::before {
+    content: "";
+    display: inline-block;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: .55;
+    margin-right: 6px;
+    vertical-align: 2px;
+  }
+
+  /* ===== 章节标题 ===== */
+  h2 {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 1px;
+    margin: 20px 0 9px;
+    padding-left: 9px;
+    border-left: 3.5px solid var(--accent);
+    line-height: 1.25;
+  }
+
+  /* ===== 教育背景 ===== */
+  .edu-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .edu-head .school { font-weight: 700; font-size: 14px; }
+  .edu-head .meta   { font-size: 12px; color: var(--ink-mute); }
+  .edu-major { font-size: 12.5px; color: var(--ink-soft); margin-top: 1px; }
+
+  ul { list-style: none; }
+  li {
+    position: relative;
+    padding-left: 13px;
+    margin-top: 4px;
+  }
+  li::before {
+    content: "";
+    position: absolute;
+    left: 2px; top: 8px;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--ink-mute);
+  }
+
+  /* ===== 技能区 ===== */
+  .skill-row {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: 4px 10px;
+    margin-top: 5px;
+    align-items: start;
+  }
+  .skill-key {
+    font-weight: 600;
+    font-size: 12.5px;
+    color: var(--accent);
+    text-align: right;
+    line-height: 1.7;
+    padding-top: 1px;
+  }
+  .skill-val { font-size: 12.5px; color: var(--ink-soft); }
+
+  /* ===== 项目卡片 ===== */
+  .project {
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: 13px 15px 14px;
+    margin-top: 4px;
+    background: #fdfefe;
+  }
+  .proj-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .proj-name { font-size: 14.5px; font-weight: 700; color: var(--ink); }
+  .proj-name .dot { color: var(--accent); }
+  .proj-date { font-size: 12px; color: var(--ink-mute); white-space: nowrap; }
+  .proj-role {
+    font-size: 12px;
+    color: var(--ink-mute);
+    margin-top: 2px;
+  }
+
+  /* 技术栈标签 */
+  .stack {
+    margin: 8px 0 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .stack span {
+    font-size: 11.5px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    background: var(--tag-bg);
+    color: var(--ink-soft);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1px 7px;
+    line-height: 1.55;
+  }
+
+  /* 规模数据条 */
+  .scale {
+    background: var(--accent-lt);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+    padding: 6px 11px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-bottom: 9px;
+    line-height: 1.7;
+  }
+  .scale b { color: var(--accent); font-weight: 700; }
+
+  .brief { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 9px; }
+  .brief b { color: var(--ink); }
+
+  /* 核心工作列表 */
+  .work-label {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 10px 0 3px;
+  }
+  .work-list li {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    text-align: justify;
+    margin-top: 6px;
+  }
+  .work-list li::before {
+    background: var(--accent);
+    opacity: .8;
+    top: 7.5px;
+  }
+  .work-list li b { color: var(--ink); font-weight: 700; }
+  .work-list li code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 11.5px;
+    background: var(--tag-bg);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 0 3px;
+    color: var(--accent);
+  }
+  .num { color: var(--accent); font-weight: 700; }
+
+  /* ===== 待填写占位提示 ===== */
+  .todo {
+    color: var(--warn);
+    font-weight: 600;
+    background: #fef6e7;
+    border-bottom: 1px dashed #f0c98a;
+    padding: 0 3px;
+    border-radius: 2px;
+  }
+
+  /* ===== 打印优化 ===== */
+  @page { size: A4; margin: 0; }
+  @media print {
+    body {
+      background: #fff;
+      padding: 0;
+      font-size: 12.5px;
+    }
+    .page {
+      width: auto;
+      min-height: auto;
+      margin: 0;
+      padding: 12mm 14mm;
+      box-shadow: none;
+      border-radius: 0;
+    }
+    .project { break-inside: avoid; page-break-inside: avoid; }
+    h2 { break-after: avoid; page-break-after: avoid; }
+    .scale, .stack { break-inside: avoid; }
+  }
+
+  @media (max-width: 800px) {
+    .page { width: 100%; padding: 20px 16px; }
+    .skill-row { grid-template-columns: 1fr; gap: 2px; }
+    .skill-key { text-align: left; }
+  }
+</style>
+</head>
+<body data-page-node-id="ql2Hjycj9zgNIy8DCAHcky">
+<div class="page" data-page-node-id="yT0xJnSbMteL5uHqAaaCXP">
+
+  <!-- ============ 个人信息 ============ -->
+  <header data-page-node-id="nOZbpibhS27J84CAQVC7t4">
+    <div class="name-row" data-page-node-id="sRTCJ0BGlDqCtO2u0Ob4Zg">
+      <h1 data-page-node-id="rlFTz15DHDS0J7e5IK9xRn"><span class="todo" data-page-node-id="dejx1DZtULZrqd8xawgNnI">姓名待填写</span></h1>
+      <div class="target" data-page-node-id="IyHibVamy4ztkAjZ98u31T">求职意向：<b data-page-node-id="zE0NMJH6A7Whl5DiRhkMEH">AI Agent / LLM 应用开发工程师</b>　|　校招　|　期望城市：<span class="todo" data-page-node-id="d7IUAEfOZgT2V3z0yfUD7U">待填写</span></div>
+    </div>
+    <div class="contact" data-page-node-id="uGroASycyEXiuyWs3aQBeZ">
+      <span data-page-node-id="DFBUaq4nv7wCyQf35LxDQF">手机：<span class="todo" data-page-node-id="hllaH2tXbkGX3l7lC7rKg1">待填写</span></span>
+      <span data-page-node-id="tUllhQjRFcunijYW8ROeGl">邮箱：<span class="todo" data-page-node-id="NtN6Ct9m0ym3Fkw1AKsJyf">待填写</span></span>
+      <span data-page-node-id="RZ55ODxSfhVnQm5JwS1Uoz">GitHub：<span class="todo" data-page-node-id="ThiQxlfI7OTyuljVGEcNMi">待填写</span></span>
+      <span data-page-node-id="scCCU49FQnGQDvN5wxX3WD">个人主页：<span class="todo" data-page-node-id="xpUDAn4zXbzutAW0fnAmuP">待填写</span></span>
+    </div>
+  </header>
+
+  <!-- ============ 教育背景 ============ -->
+  <h2 data-page-node-id="ObiCSPPCP5AGkpgM4VVqN3">教育背景</h2>
+  <div class="edu-head" data-page-node-id="gfKynoKIzczWeWUzG0b0JN">
+    <span class="school" data-page-node-id="cuJGmjiVHGQ3xt6nQpH5Fh"><span class="todo" data-page-node-id="McQ5FXMC7kEttjDaNg0Qoc">学校名称待填写</span></span>
+    <span class="meta" data-page-node-id="KLc3hda0tyWJEWdRu7dV5u"><span class="todo" data-page-node-id="RcGb8O4b3TWheDGTzCUY6l">2022.09 – 2026.06</span></span>
+  </div>
+  <div class="edu-major" data-page-node-id="ocnC77kIco3PieUn0efZDh"><span class="todo" data-page-node-id="UymJ2mSUeOy7Q5rSAIZFCJ">专业待填写</span>　·　<span class="todo" data-page-node-id="Js9POoZ9AV6uNNGx5sCiM3">本科 / 硕士</span></div>
+  <ul data-page-node-id="DvCHpvlbBXL2phWuEXa1tX">
+    <li data-page-node-id="ycCnN6Hp2OgXbdSDNO35Af">GPA：<span class="todo" data-page-node-id="z5e7uPgnbtmN5PcOAMqp3X">待填写</span>　|　专业排名：<span class="todo" data-page-node-id="8h0FqbmJPofFlwGDb9L7fd">待填写</span></li>
+    <li data-page-node-id="Xnm8r7Tf064KxgGmE5zhQk">主修课程：数据结构与算法、操作系统、计算机网络、数据库系统、机器学习<span class="todo" data-page-node-id="pxvyXsF0uvCTT0iT1RiCBx">、待补充</span></li>
+    <li data-page-node-id="oPXQHJCaqzsWGrGG7HacGX"><span class="todo" data-page-node-id="Zk5V1ujkfkQIa8RFGPhWFM">奖学金 / 荣誉待填写</span></li>
+  </ul>
+
+  <!-- ============ 专业技能 ============ -->
+  <h2 data-page-node-id="eleMZrt5C4XnkQXSZtNFSk">专业技能</h2>
+  <div class="skill-row" data-page-node-id="6HW8QUoU7cp5mrJP5hsDbN">
+    <div class="skill-key" data-page-node-id="wXpjjkaFy7o2SbVUvXDY7D">AI Agent 方向</div>
+    <div class="skill-val" data-page-node-id="ZjxDsFsSp5IAUcv1wESxe9">熟悉 LLM 原生工具调用（Function Calling）循环、上下文工程与分级压缩策略、多 Agent 协作与任务编排、Agent 运行可观测性与断点恢复机制</div>
+
+    <div class="skill-key" data-page-node-id="kWK79K6h4I5cZUthpYiPZT">编程语言</div>
+    <div class="skill-val" data-page-node-id="Pc2A5MLBgUkFbHsNAx3Way">Python（熟练）、JavaScript / TypeScript<span class="todo" data-page-node-id="eqQhbW5MrZucNQWwMe67Mi">（按实际调整）</span>、C++<span class="todo" data-page-node-id="jyCRNXRuw2ZzEjcanGiC94">（按实际调整）</span></div>
+
+    <div class="skill-key" data-page-node-id="IwKCitdzJHpZD8Hzp6UatA">框架与工具</div>
+    <div class="skill-val" data-page-node-id="BYWutXUy4dFpA4H0lhzU2h">Pydantic v2、FastAPI、Uvicorn、pytest、Git、Linux Shell</div>
+
+    <div class="skill-key" data-page-node-id="q8TnenC2HqZkiz7Bn7OGRs">模型服务</div>
+    <div class="skill-val" data-page-node-id="dvR1K0Ewe5C0eoDOCCjqTg">DeepSeek Responses API、MiniMax，熟悉 <code data-page-node-id="VgyYeM6mnv41d6eSyF6Zqc">openai_responses</code> 协议与推理模式（reasoning effort）配置</div>
+
+    <div class="skill-key" data-page-node-id="EbMsfTkrEql2308Z7lGVeQ">工程素养</div>
+    <div class="skill-val" data-page-node-id="CPD9umsBG2vBYGAJ7PXexb">模块化分层架构设计、协议版本管理、自动化测试与评测 baseline 建设</div>
+  </div>
+
+  <!-- ============ 项目经历 ============ -->
+  <h2 data-page-node-id="x6tzzMhTKbQRLEPW8DbUD1">项目经历</h2>
+
+  <div class="project" data-page-node-id="tBTt21J7lItOmi9GmcUeug">
+    <div class="proj-title" data-page-node-id="yXosylDPZjQ33mtnZmnTgS">
+      <div class="proj-name" data-page-node-id="auiiAYGdkHCTncJxQxnQr4">JCode <span class="dot" data-page-node-id="TMerIqx4PnLkZVZcc10hkY">·</span> 本地 Coding Agent</div>
+      <div class="proj-date" data-page-node-id="Gj5XcGwp41CmGvXNEx573Z">2026.08 – 2026.09</div>
+    </div>
+    <div class="proj-role" data-page-node-id="PGd9F1ofcuDJx8PuBoe4DE">个人独立项目　·　独立完成需求设计、架构设计、编码与测试</div>
+
+    <div class="stack" data-page-node-id="t00SsaAW3a3lYxBcOGVAyb">
+      <span data-page-node-id="61V9YGsmFEnP5sPdqtEIn0">Python 3.10+</span><span data-page-node-id="06Pf4JBjIIOhwTfA0psIkE">Pydantic v2</span><span data-page-node-id="erv8UOIpH3knA6mpcMsMnH">FastAPI</span><span data-page-node-id="vdGmGshanOn3QskJEd7Ava">Uvicorn</span>
+      <span data-page-node-id="2PowXHVWvYBnrGzSU4NHJ3">DeepSeek Responses API</span><span data-page-node-id="4GBaBhBCIgYsHAhTKvoDhV">MiniMax</span><span data-page-node-id="Yq5ALKRg74OEFzcda8LWLM">pytest</span>
+    </div>
+
+    <div class="scale" data-page-node-id="GXGO1wYMHtftm5XYSCcFDN">
+      项目规模：<b data-page-node-id="ywEgSgYRsYtrqWEj7anENC">10 个核心模块</b> · <b data-page-node-id="pbyB0NiDEQ1HBbjPdwmq9Q">83 个源文件</b> · <b data-page-node-id="mB1RPu0vAhjBWhmbbXAKob">约 8,200 行 Python 代码</b> ·
+      <b data-page-node-id="cJACnmHZvukrR8UrsC2Wb4">100 次 Git 提交</b> · <b data-page-node-id="75b3YQ7drfmkNYuhDAvSuo">106 个自动化测试用例</b> · <b data-page-node-id="vBqj5c0abIg2dZJkAdQeMV">65 份设计文档</b>
+    </div>
+
+    <div class="brief" data-page-node-id="htVRGiVfvqA2iZrObXNY1u">
+      <b data-page-node-id="EgHFbR3afl8SEx7HB6DM3e">项目简介：</b>从 0 设计并实现的一个轻量本地 Coding Agent，覆盖「命令行入口 → 运行时装配 → 原生工具调用循环 → 结构化上下文构建 → 工具安全治理 → 子 Agent 编排 → 分层记忆 → 运行证据与 Checkpoint 恢复」完整链路，可通过 CLI 与本地 Web 控制台两种方式驱动。
+    </div>
+
+    <div class="work-label" data-page-node-id="uDTSElD13AIFFpEFTrmOhX">核心工作</div>
+    <ul class="work-list" data-page-node-id="fvkL1IYEAJxrkUQaz568YB">
+      <li data-page-node-id="0GHWrUx0owuenwiBJ76OLl"><b data-page-node-id="fbPPmvhRp4dX8gQQQFFBrx">主链路架构设计</b>　独立完成 Agent 运行时分层设计，按 <code data-page-node-id="QEVYoWKqOJQGlEA66HEr4x">app / runtime / context / tools / policy / state / memory / workers / evidence / providers</code> 十层拆分职责边界，明确「装配—执行—治理—留痕」四类关注点分离，将约 8,200 行代码控制在单模块可读范围内，避免核心链路互相耦合。</li>
+
+      <li data-page-node-id="oW1EPt8v0JxkUe26P2tk1i"><b data-page-node-id="XfOIPfnmChRqVYY6wnV2da">原生工具调用循环</b>　基于 DeepSeek / MiniMax 的 <code data-page-node-id="OUH0NxOIfyqTqhpuKxNIZz">openai_responses</code> 协议实现原生 Function Calling 循环，注册 <span class="num" data-page-node-id="QOWiF7zNz7BstgaM2pdrxm">17 个</span>内置工具（文件读写、精确文本补丁、目录列举、内容检索、Shell 执行、Todo 管理、用户澄清、Plan Mode、子 Agent 创建/通信/等待）；工具参数 Schema 由 Pydantic Model 自动生成，校验失败直接回传结构化错误，不做静默兜底或自动修正。</li>
+
+      <li data-page-node-id="lWeaoXeu9aWuSgcwp2LLx1"><b data-page-node-id="dsFwzWKrhwcCtnvUvcMMiv">上下文工程与分级压缩</b>　设计 <code data-page-node-id="Es9ASxUNpIHSal3XeQECmh">prefix / skill / history / working_memory / tools</code> 五段式结构化上下文（<code data-page-node-id="F1AuMFlQEDE6NR8ur9NAWH">ContextResult</code>），统一编译为 <code data-page-node-id="9bvREEtbjZiVLsliQuxhxx">ProviderInputSnapshot</code> 供 Provider 调用、预览与审计三方共用同一快照；设计四级上下文压缩策略，当可治理压力达到 <span class="num" data-page-node-id="gUlfR19p5tblYhLIh5HHP6">95%</span> 时触发摘要流程——先将 History 落盘为 artifact 并验签，再按固定 JSON Schema 生成摘要，校验最终容量后原子提交，<b data-page-node-id="nG0x4ItQVpxbK9w9yXEcxV">杜绝静默截断与信息丢失</b>。</li>
+
+      <li data-page-node-id="Z2UXKxjcDccC0TWSY6tCGI"><b data-page-node-id="qupo8dfPR9RVPe75ErcawZ">工具安全治理链</b>　设计并实现固定 <span class="num" data-page-node-id="LZwlBIozi1WCHRWI7rfdSj">10 步</span>工具执行链：工具查找 → 参数校验 → 重复调用拦截 → 行为策略检查 → 权限检查 → Sandbox 检查 → 执行 → 工作区变更检测 → 结果脱敏 → 证据落盘。覆盖路径逃逸、未读先写、重复调用、Shell 超时、Sandbox 拦截、敏感信息脱敏等 <span class="num" data-page-node-id="MNClDFdy33wTrRD6mgFHqp">7 类</span>安全场景，保证 Agent 的每一次文件写入与命令执行都可追溯。</li>
+
+      <li data-page-node-id="jEl0rsAmWhRQwCHkr5lCXm"><b data-page-node-id="5fS8vJwWnG8hWQvPlfPDUU">分层记忆与子 Agent 编排</b>　实现 <code data-page-node-id="qNB4Y17WT1VfqUxpXJC9wt">Working_Memory</code>（回合内推理状态）/ <code data-page-node-id="3GHFuNUiiOSnwyqaqIPX6M">Daily Log</code>（过程日志）/ <code data-page-node-id="M2QRqh9CbuGv3lXpCsohOT">Durable Memory</code>（长期结论）三层记忆体系，回合结束自动将过程信号整理沉淀为长期知识，并对密钥、Token、Password 等敏感特征做过滤拦截；实现 <code data-page-node-id="EjDa5azk7YHHqhUhYDTmGu">worker</code> / <code data-page-node-id="f0n4hP5OnLCYhdK4FOlhoA">Explore</code> / <code data-page-node-id="IGSHvsOp1FWXX0e2rcJpqg">plan mode</code> 三类子 Agent 语义，子 Agent 继承父级工作区、工具策略与权限模型，结果回流至父级 Working Memory 而非直接成为最终回答，保证主循环对结果的最终裁决权。</li>
+
+      <li data-page-node-id="AYf59YqYoHhgZKPcEJp2Nd"><b data-page-node-id="7Wz3ehxrK09ojDNHF4Dnt8">运行可观测与断点恢复</b>　每次运行落盘 <code data-page-node-id="Ijbbe9tKzxzBzH63RPGuxW">trace.jsonl</code>（逐事件轨迹）/ <code data-page-node-id="JgoE48twvSsk1lOuogALnn">task_state.json</code>（任务状态）/ <code data-page-node-id="QO0HoPE6wJ2ZBvHS69NFgx">checkpoint.json</code>（含工作区指纹的恢复点）/ <code data-page-node-id="Y2SBkMp4zErnWuJafsdbIm">report.json</code>（运行汇总）四类运行证据，支持基于 Checkpoint 的会话恢复与跨 Run 事件流审计；自建评测 Harness（replay / scorer / manifest / baseline），对 Agent 行为做可复现的回归度量。</li>
+
+      <li data-page-node-id="AXnbxCPW7bywetuTsC0NId"><b data-page-node-id="FTPk5centVyW96MJlz3I8V">本地 Web 控制台</b>　基于 FastAPI + Uvicorn 实现单用户本地 Web 控制台，以本地仓库为项目单位组织工作区，支持浏览历史会话、新建会话与继续对话、实时观察工具执行日志与上下文容量占用。</li>
+
+      <li data-page-node-id="FjYFdGca4ekqrGfjbsAyzW"><b data-page-node-id="THtIN6mrLXKCOnsK5ElvYd">工程规范与协议治理</b>　建立显式协议版本管理机制（Session schema v6 / Working Memory v3 / Checkpoint schema v5），明确拒绝为旧协议做迁移兼容，从源头控制技术债；配套输出 <span class="num" data-page-node-id="hGYUE0XBWv72fwFA2fl2y9">65 份</span>设计文档与 <span class="num" data-page-node-id="s5ThXWWqqcI6esDs8W1XAl">106 个</span>自动化测试用例，覆盖上下文预算、压缩摘要、工具守卫、Provider 连续性、Checkpoint 等核心路径。</li>
+    </ul>
+  </div>
+
+  <!-- ============ 其他项目 ============ -->
+  <h2 data-page-node-id="5EHDI3dpi0aJMETc4IsCjb">其他项目</h2>
+  <div class="project" data-page-node-id="By7JgVInz6oa2jijE3gUDb">
+    <div class="proj-title" data-page-node-id="diXbdvDat1pqw02FjfzWyB">
+      <div class="proj-name" data-page-node-id="4DJhXsFmX6qxJobn53YprP"><span class="todo" data-page-node-id="ctfTSsFAROlnI4icKcQ1x9">项目名称待填写</span></div>
+      <div class="proj-date" data-page-node-id="OMmEpe4CamaVjUCgDQNjCx"><span class="todo" data-page-node-id="niyNFk2pWIZHfsiAcbq9LD">时间待填写</span></div>
+    </div>
+    <div class="proj-role" data-page-node-id="q8ZM3TRRSTwryDPML795fV"><span class="todo" data-page-node-id="MpLHR80mw5ksr6fk1AqLqv">角色待填写</span></div>
+    <div class="stack" data-page-node-id="kJXAKV8Hc874LV7t9XSMs3"><span data-page-node-id="gme2i3KFUUxhXDYNPUaXLB">技术栈待填写</span></div>
+    <ul class="work-list" data-page-node-id="SNWa1xA7ic7lSszJlCKawJ">
+      <li data-page-node-id="lZMQDbvVH5kxOBnL4VIbSS"><span class="todo" data-page-node-id="6e1EdarIJzPPBhboSuo8WL">做了什么 + 结果量化，待填写</span></li>
+      <li data-page-node-id="HI8Y3ITlsBkt99Lt3e88JA"><span class="todo" data-page-node-id="jdih7AeBzBpLaaKs1negkP">待填写</span></li>
+    </ul>
+  </div>
+
+  <!-- ============ 荣誉奖项 ============ -->
+  <h2 data-page-node-id="JEgUaCp6IOClcQtB9YJnvK">荣誉奖项</h2>
+  <ul data-page-node-id="sblgtDAyuWLtjeO65imhYr">
+    <li data-page-node-id="VgXGrJwTh9FK0IwLKzIcXu"><span class="todo" data-page-node-id="1YfB92N73Nf4mFhxrA3yH2">待填写：奖学金、竞赛（ACM / 天池 / Kaggle / 挑战杯等）、论文、专利、开源贡献</span></li>
+  </ul>
+
+  <!-- ============ 自我评价 ============ -->
+  <h2 data-page-node-id="3Pd3AGddC6NI8anlKlrS42">自我评价</h2>
+  <ul data-page-node-id="QfP3A0LHSbLYxJ1roPErAE">
+    <li data-page-node-id="OwVAVrvDWDtD38USESkyGk">具备 LLM Agent 方向的<b data-page-node-id="9TVHvawKuuxo7LkIGmG0PL">完整端到端工程实践</b>：不停留在调用 API 的 Demo 层，而是深入到上下文治理、工具安全边界、状态恢复与可观测性等生产级问题。</li>
+    <li data-page-node-id="9SuZnNsyPj6wgv9F2L9ROS">工程习惯严谨：坚持「先设计文档、再编码」的开发流程，对协议变更、失败语义与兜底行为有明确边界意识，拒绝用兜底逻辑掩盖设计缺陷。</li>
+    <li data-page-node-id="TBl1LcsCW3dRF215dZqPPh"><span class="todo" data-page-node-id="pqgPSoxgMjnwJq6ibOEGsy">补充 1 条与你个人特质相关的评价，待填写</span></li>
+  </ul>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,31 @@
+{
+  "eval_version": "1.0",
+  "name": "jcode-eval-v1",
+  "cases": [
+    "checkpoint_resume/R1-valid-checkpoint.json",
+    "checkpoint_resume/R2-stale-file.json",
+    "checkpoint_resume/R3-workspace-drift.json",
+    "checkpoint_resume/R4-incompatible-checkpoint.json",
+    "checkpoint_resume/R5-shell-partial-success.json",
+    "checkpoint_resume/R6-tool-chain-partial-success.json",
+    "context_compression/C1-normal-pressure.json",
+    "context_compression/C2-repeat-compression.json",
+    "context_compression/C3-large-output.json",
+    "context_compression/C4-summary-failure.json",
+    "layered_memory/M1-working-memory.json",
+    "layered_memory/M2-daily-log.json",
+    "layered_memory/M3-durable-recall.json",
+    "layered_memory/M4-dream-safety.json",
+    "tool_governance/T1-unknown-tool.json",
+    "tool_governance/T2-schema-validation.json",
+    "tool_governance/T3-path-escape.json",
+    "tool_governance/T4-unread-write.json",
+    "tool_governance/T5-freshness-conflict.json",
+    "tool_governance/T6-repeat-call.json",
+    "tool_governance/T7-shell-timeout.json",
+    "tool_governance/T8-shell-abort.json",
+    "tool_governance/T9-partial-side-effect.json",
+    "tool_governance/T10-side-effect-failure.json"
+  ],
+  "runner_config": {"timeout_seconds": 300}
+}

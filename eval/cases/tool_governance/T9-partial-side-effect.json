@@ -1,0 +1,17 @@
+{
+  "case_id": "tool_governance-t9-partial-side-effect",
+  "eval_version": "1.0",
+  "category": "tool_governance",
+  "scenario": "T9",
+  "description": "工具失败但 workspace 发生变化",
+  "prompt": "执行评测场景：工具失败但 workspace 发生变化",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}

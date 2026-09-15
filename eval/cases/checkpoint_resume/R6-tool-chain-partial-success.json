@@ -1,0 +1,17 @@
+{
+  "case_id": "checkpoint_resume-r6-tool-chain-partial-success",
+  "eval_version": "1.0",
+  "category": "checkpoint_resume",
+  "scenario": "R6",
+  "description": "工具链半成功后的恢复",
+  "prompt": "执行评测场景：工具链半成功后的恢复",
+  "config": {
+    "timeout_seconds": 120
+  },
+  "acceptance_predicates": [
+    {
+      "final_status_is": "completed"
+    }
+  ],
+  "forbidden_behaviors": []
+}
