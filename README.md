@@ -232,7 +232,7 @@ Responses 请求由统一 `ProviderInputSnapshot` 编译：`prefix -> instructio
 - shell timeout 和 sandbox 拦截。
 - 工具执行失败或部分成功。
 - 结果中的敏感信息脱敏。
-- 无工具调用且 content 为空时，以 `empty_model_content` 结束，不重试。
+- 无工具调用且 `text` 为空时，按 Provider 终态或输出续写规则结束。
 
 ## 记忆与恢复
 

@@ -19,9 +19,9 @@
 - 10 个核心模块：`app / context / evidence / memory / policy / providers / runtime / state / tools / workers`
 - 最新图谱覆盖 240 个项目文件；评测体系位于 `eval/`，包含 24 个版本化 Case、运行器、评分器和回放入口
 - 17 个已注册内置工具（`src/tools/registry.py` 实测）
-- 106 个测试用例，分布于 19 个测试文件
+- `test/` 与 `eval/tests/` 共同覆盖运行时、工具治理、Provider 连续性、Web 时间线和评测基础设施
 - 100 次 Git 提交（2026.08.23 起）
-- 65 份设计文档
+- 最新图谱中的文档节点与源码、配置、测试一起纳入架构导览
 - 上下文压力 95% 触发 Level 4 压缩；工具执行链 10 步；协议版本 Session v6 / Working Memory v3 / Checkpoint v5
 
 ## 待补充（阻塞项）
