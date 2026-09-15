@@ -44,13 +44,20 @@ flowchart TD
     StateWrite --> Checkpoint[写入 checkpoint.json]
     Checkpoint --> BuildContext
 
-    HasTools -->|否| Complete{是否有最终 content}
+    HasTools -->|否| Complete{是否有最终 text}
+<<<<<<< HEAD
     Complete -->|text 为空且可续写| Continue[保存 Provider continuation]
     Continue --> BuildContext
     Complete -->|text 非空| FinalGate[FinalReadiness 记录收口证据]
     FinalGate -->|要求纠正| Correction[注入 correction packet]
     Correction --> BuildContext
     FinalGate -->|允许结束| Finish[finish_run]
+=======
+    Complete -->|content 为空且可续写| Continue[保存 Provider continuation]
+    Continue --> BuildContext
+    Complete -->|content 非空| FinalGate[FinalReadiness 记录收口证据]
+    FinalGate --> Finish[finish_run]
+>>>>>>> f57dfc5b3e323fef1bf3b376e42d102dce6e9c79
 
     Finish --> MemoryMaintain[维护 Daily Log 与 Durable Memory]
     Finish --> EvidenceWrite[写 trace task_state report session]
@@ -61,7 +68,11 @@ flowchart TD
     SSE --> Browser[Web 时间线]
 ```
 
+<<<<<<< HEAD
 主循环由 `src/runtime/agent.py:JCodeAgent._ask_loop()` 驱动。一次模型响应可以包含多个原生工具调用；工具结果按 `call_id` 写回 Provider continuation 后进入下一子轮。没有工具调用时，非空 `text` 进入最终收口，空 `text` 按当前终态或续写规则处理；Final Gate 仍可要求注入纠正事实后重跑，不再通过 XML parser 重试。
+=======
+主循环由 `src/runtime/agent.py:JCodeAgent._ask_loop()` 驱动。一次模型响应可以包含多个原生工具调用；工具结果按 `call_id` 写回 Provider continuation 后进入下一子轮。没有工具调用时，非空 `content` 进入最终收口，空 `content` 按当前终态或续写规则处理，不再通过 XML parser 重试。
+>>>>>>> f57dfc5b3e323fef1bf3b376e42d102dce6e9c79
 
 ## 2. 工具治理分支
 

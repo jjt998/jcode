@@ -72,7 +72,11 @@ Stable safety rules
 ```
 
 - `System rules` 定义 JCode 的稳定身份和角色边界。
+<<<<<<< HEAD
 - `Output protocol` 不再定义 XML 文本协议；Provider 通过 `ModelResponse.text` 和 `ModelResponse.tool_calls` 返回最终文本或原生工具调用。
+=======
+- `Output protocol` 不再定义 XML 文本协议；Provider 通过 `ModelResponse.content` 和 `ModelResponse.tool_calls` 返回最终文本或原生工具调用。
+>>>>>>> f57dfc5b3e323fef1bf3b376e42d102dce6e9c79
 - `Tool definitions` 从 `ToolRegistry` 动态渲染，不允许手写复制工具列表。
 - `Project rules from JCODE.md` 读取当前 workspace 根目录的 `JCODE.md`；文件不存在时渲染为 `(none)`。
 - `Stable safety rules` 放路径、读写、重复调用、sandbox 和证据总结等稳定安全约束。

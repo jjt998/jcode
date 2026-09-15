@@ -13,10 +13,15 @@ MVP2 选择方案 A：将事件流内嵌到对应 turn 的推理抽屉中，并�
 - 移除右侧全局事件栏。
 - 将每个 run 的事件流挂载到对应对话 turn 内。
 - 在用户消息和助手最终回答之间展示一个默认折叠的步骤时间线。
+<<<<<<< HEAD
 - 每个步骤默认折叠，标题行展示步骤号、时间戳、状态、工具数量、耗时和过程摘要。
 - 步骤展开后展示模型过程消息、工具调用清单和工具结果，不展示未持久化的内部推理正文。
+=======
+- 每个步骤默认折叠，标题行展示步骤号、时间戳、状态、工具数量、耗时和推理摘要。
+- 步骤展开后展示推理全文、工具调用清单和工具结果。
+>>>>>>> f57dfc5b3e323fef1bf3b376e42d102dce6e9c79
 - 步骤内容来自 `model_responded`、`tool_requested`、`tool_executed` 和压缩审计事件；不再从 XML 标签抽取 reasoning。
-- 如果本轮只有最终 content 且没有工具事件，仍保留 turn 的最终状态，不创建虚假的推理步骤。
+- 如果本轮只有最终 text 且没有工具事件，仍保留 turn 的最终状态，不创建虚假的步骤。
 - 将完整 context、模型原始返回、工具请求和工具执行结果直接写入 `trace.jsonl`。
 - SSE 只做事件级流式更新，最终回答仍一次性出现。
 - 逐 token 输出明确留到 MVP3。
@@ -90,7 +95,7 @@ MVP2 引入面向 Web 展示的 turn view model。前端不再直接把 session 
           "index": 1,
           "timestamp": "2026-08-30T15:23:41Z",
           "status": "success",
-          "reasoning_text": "完整 reasoning 原文",
+          "process_content": "模型过程消息",
           "tool_calls": [
             {
               "tool_id": "tool-1",
@@ -120,6 +125,10 @@ Turn 对齐规则：
 - session history 中带 `run_id` 的 user message 是 turn 起点。
 - 同一 `run_id` 的 assistant message 是 turn 终点。
 - 同一 `run_id` 的 tool history 和 trace events 归入该 turn。
+<<<<<<< HEAD
+=======
+- 如果 `model_responded.response_text` 中包含首个 `<reasoning>...</reasoning>`，则提取成一个 step 的 `reasoning_text`。
+>>>>>>> f57dfc5b3e323fef1bf3b376e42d102dce6e9c79
 - 后端由 `src/app/web_steps.py` 根据原生事件顺序构造 `reasoning_steps[]`，并按 `step_id` 增量更新。
 - 若历史 session 没有完整 run_id，前端显示普通历史消息，不强行归入推理抽屉。
 - 若 run 中断且没有 assistant message，turn 状态显示 `stopped`、`failed` 或 `incomplete`。
@@ -151,7 +160,7 @@ MVP1 的 trace 更偏审计摘要。MVP2 需要把可浏览原文写入 trace。
 {
   "event": "model_responded",
   "run_id": "run-...",
-  "response_text": "<tool name=\"read_file\">...</tool>",
+  "response_text": "模型返回的文本（可能为空）",
   "estimated_input_tokens": 3200,
   "estimated_output_tokens": 400
 }
@@ -219,7 +228,7 @@ MVP2 的核心展示单位是 step，不再是单条 reasoning。
   "index": 1,
   "timestamp": "2026-08-30T15:23:41Z",
   "status": "pending",
-  "reasoning_text": "先检查仓库结构。",
+  "process_content": "模型过程消息",
   "tool_calls": [
     {
       "tool_id": "tool-1",
@@ -247,7 +256,7 @@ SSE 增量更新规则：
 - 该 step 必须带上 `step_id`。
 - 前端维护 `Map<step_id, Step>`，收到更新时直接覆盖同一个 step。
 - 前端按 `index` 或 `timestamp` 重新排序渲染。
-- 同一个 step 允许被多次追加更新，先有 reasoning，再补工具，再补结果。
+- 同一个 step 允许被多次追加更新，先有模型响应，再补工具，再补结果。
 
 ## 事件命名
 
