@@ -4,7 +4,7 @@ JCode 是一个本地 Coding Agent，保留更小的代码体量和更直接的�
 
 它覆盖本地代码代理最核心的一条链路：命令行入口、运行时装配、原生工具调用循环、结构化上下文、DeepSeek Responses API、工具执行、子 Agent、策略治理、工作记忆、运行证据、Checkpoint 和最终回答。
 
-JCode 已包含受限 Dream 子 Agent、会话级 plan mode、固定角色多 Agent 和工具 Profile，但还不包含 TUI、完整评测套件、复杂多 Provider 路由、大规模 benchmark、vision/media 工具等非核心能力。
+JCode 已包含受限 Dream 子 Agent、会话级 plan mode、固定角色多 Agent、工具 Profile，以及位于 `eval/` 的 24 个 Case 评测集。项目仍不包含 TUI、大规模 benchmark、vision/media 工具等非核心能力；Provider 路由只支持当前注册的 DeepSeek/MiniMax Responses Adapter。
 
 ## 安装
 
@@ -14,7 +14,7 @@ JCode 已包含受限 Dream 子 Agent、会话级 plan mode、固定角色多 Ag
 pip install -e .
 ```
 
-项目要求 Python 3.10 或更高版本，核心依赖只有 `pydantic`。
+项目要求 Python 3.10 或更高版本，运行时依赖 `pydantic`、`fastapi` 和 `uvicorn`。
 
 ## 配置
 
@@ -246,7 +246,11 @@ JCode 对外统一使用三层记忆认知：
 
 Dream 子 Agent 可以通过内部入口 `agent.run_dream()` 手动触发。Dream 使用受限工具 Profile，只能在 `.jcode/memory/` 内整理 Daily Log、topic 和 `MEMORY.md`，不会修改普通源码文件。
 
-Session 使用 schema v6，Working Memory 使用 `jcode.layered_memory.v3`，Checkpoint 使用 schema v5。旧协议不做迁移兼容。Checkpoint 保存在每次运行的 `checkpoint.json` 中，记录 session、run、step、last action、changed files、working memory、workspace fingerprint 和 worker refs，用于后续恢复判断。
+Session 使用 schema v6，Working Memory 使用 `jcode.layered_memory.v3`，Checkpoint 使用 schema v5。旧协议不做迁移兼容。Checkpoint 保存在每次运行的 `checkpoint.json` 中，记录 session、run、step、last action、changed files、working memory、workspace fingerprint、Provider continuation 和 worker refs，用于后续恢复判断。
+
+## 评测集
+
+评测入口位于 `eval/`，当前 manifest v1 收录 24 个 Case，覆盖 checkpoint/resume、上下文压缩、分层记忆和工具治理四类行为。评测运行器会隔离 workspace，保存标准化 `RunRecord`，评分器读取验收谓词、运行证据和质量字段生成 score；详细命令和字段说明见 [评测集与运行指南](docs/评测集与运行指南.md)。
 
 ## 子 Agent
 

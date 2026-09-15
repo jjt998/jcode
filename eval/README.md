@@ -24,4 +24,4 @@
 
 ## 当前状态
 
-当前已落地 Case 加载、workspace 隔离、JCode 子进程运行、证据复制、RunRecord 和基础离线评分。后续按《docs/改进方案/评测完整实施方案.md》的 P1-P4 阶段扩展完整 Case 集、回放、Baseline、Ablation 和 CI。
+当前已落地 24 个版本化 Case，覆盖 checkpoint/resume、上下文压缩、分层记忆和工具治理；同时提供 workspace 隔离、JCode 子进程运行、证据复制、RunRecord、离线评分、trace 回放和结果汇总。Case 清单以 `eval/manifests/v1.json` 为准，评测协议版本为 `1.0`。

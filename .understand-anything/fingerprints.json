@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "gitCommitHash": "b54516a05a522a43ea153d24523d4d3e305caf44",
-  "generatedAt": "2026-09-07T14:06:54.456Z",
+  "gitCommitHash": "3243267f18ce031e342bd4af9d01eae8062aea4e",
+  "generatedAt": "2026-09-15T11:05:48.560Z",
   "files": {
     ".env.example": {
       "filePath": ".env.example",
@@ -11,6 +11,16 @@
       "imports": [],
       "exports": [],
       "totalLines": 4,
+      "hasStructuralAnalysis": true
+    },
+    ".github/workflows/eval.yml": {
+      "filePath": ".github/workflows/eval.yml",
+      "contentHash": "ae792b2a1a064935702b4b25ead63d7c295ab5608432210c0aef979180b2a634",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 26,
       "hasStructuralAnalysis": true
     },
     ".jcode.toml": {
@@ -25,12 +35,12 @@
     },
     ".jcode.toml.example": {
       "filePath": ".jcode.toml.example",
-      "contentHash": "b06347e7b9c88fef186c9752d730f88ec182f4068470fe259d9dd1ceefe52fb1",
+      "contentHash": "2de81762b2e48756428d9785a0280043b2fea1e1ef6f70ee80b729518f8b9df9",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 15,
+      "totalLines": 69,
       "hasStructuralAnalysis": false
     },
     ".understand-anything/.understandignore": {
@@ -43,58 +53,178 @@
       "totalLines": 31,
       "hasStructuralAnalysis": false
     },
-    ".understand-anything/intermediate/batches.json": {
-      "filePath": ".understand-anything/intermediate/batches.json",
-      "contentHash": "3b4be74403f1166b6456356e7cc0b06a90125386b44270a4af8a10151f970dcc",
+    ".understand-anything/fingerprints.json": {
+      "filePath": ".understand-anything/fingerprints.json",
+      "contentHash": "0ad8f0544161bab6d2341b5cea6da2dfc229a773c464cc4c8b436b4b7a7fdc6e",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 3542,
+      "totalLines": 8724,
       "hasStructuralAnalysis": true
     },
-    ".understand-anything/intermediate/scan-result.json": {
-      "filePath": ".understand-anything/intermediate/scan-result.json",
-      "contentHash": "a5d09c944a0b893c4cc3e5329f229df7bf3a56ecafe17d45f1d628477c58f94c",
+    ".understand-anything/knowledge-graph.json": {
+      "filePath": ".understand-anything/knowledge-graph.json",
+      "contentHash": "160b0eae166b1c74262ada04a1ab4d1bdc2210e35fbf47183017c45db9078cc2",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 1334,
+      "totalLines": 15066,
+      "hasStructuralAnalysis": true
+    },
+    ".understand-anything/meta.json": {
+      "filePath": ".understand-anything/meta.json",
+      "contentHash": "911d86e9d8c7f26465db5ee681a6defce641dec7648671677ad9fd7c5a7f3366",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 6,
+      "hasStructuralAnalysis": true
+    },
+    ".workbuddy/memory/2026-09-15.md": {
+      "filePath": ".workbuddy/memory/2026-09-15.md",
+      "contentHash": "2e12be68ea347e96ae0e5905bbb66b8dc7ff4d6c1594e24b5d12f28bdd70bca9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
       "hasStructuralAnalysis": true
     },
     "AGENTS.md": {
       "filePath": "AGENTS.md",
-      "contentHash": "dbdc34cb3f162e75bdbb660a57a2eaf9b4a763b35a22ebae59e5e3359be99e51",
+      "contentHash": "59cefa1bd27387317409940e4eea495a1525046ff60e1ba31f547e329f01ed38",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 63,
+      "totalLines": 83,
       "hasStructuralAnalysis": true
     },
-    "docs/工具治理完整链路.md": {
-      "filePath": "docs/工具治理完整链路.md",
-      "contentHash": "438ee7bc66334f061214a0f2a825f6e425c6e42ec5498f9b38efe215cc8e61d5",
+    "docs/改进方案/2026-09-08-会话延续与执行环境一致性改进方案.md": {
+      "filePath": "docs/改进方案/2026-09-08-会话延续与执行环境一致性改进方案.md",
+      "contentHash": "c09cd4f3822f3aa33a06d58230449fc63502757171d7324b881ffc71cbb2710a",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 341,
+      "totalLines": 193,
       "hasStructuralAnalysis": true
     },
-    "docs/上下文治理改进策略9.5/实施计划.md": {
-      "filePath": "docs/上下文治理改进策略9.5/实施计划.md",
-      "contentHash": "6b870cd046492b50bf3537ab4a0a5f03a85b17ef32a01cbe5b4ba7194020f901",
+    "docs/改进方案/2026-09-08-todo工具与描述加强设计.md": {
+      "filePath": "docs/改进方案/2026-09-08-todo工具与描述加强设计.md",
+      "contentHash": "b620c2261836273dfccb57ffcba499ec709a61630e944124052d91b9bfb19e1c",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 792,
+      "totalLines": 27,
       "hasStructuralAnalysis": true
     },
-    "docs/上下文治理改进策略9.5/实施todo.md": {
-      "filePath": "docs/上下文治理改进策略9.5/实施todo.md",
+    "docs/改进方案/2026-09-09-apply_patch换行传输兼容改进方案.md": {
+      "filePath": "docs/改进方案/2026-09-09-apply_patch换行传输兼容改进方案.md",
+      "contentHash": "618ec4ac02de397e17e2f77af5e7b0865331e8945b94f80d0f4f9dfc62d6b190",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 75,
+      "hasStructuralAnalysis": true
+    },
+    "docs/改进方案/2026-09-09-harness-component-timing-design.md": {
+      "filePath": "docs/改进方案/2026-09-09-harness-component-timing-design.md",
+      "contentHash": "49d815dcafe46bd8abc560fd48e160304ecc0dcabfb2a83fc21abc7066821a99",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 34,
+      "hasStructuralAnalysis": true
+    },
+    "docs/改进方案/2026-09-10-恢复上下文变更路径模型投影冻结方案.md": {
+      "filePath": "docs/改进方案/2026-09-10-恢复上下文变更路径模型投影冻结方案.md",
+      "contentHash": "14cdc38ede5d10d8b98f98daf11a42fd954132a095980386e6d67af2b9073a7b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 53,
+      "hasStructuralAnalysis": true
+    },
+    "docs/改进方案/2026-09-10-删除task_goal重复请求字段.md": {
+      "filePath": "docs/改进方案/2026-09-10-删除task_goal重复请求字段.md",
+      "contentHash": "bd496c97b9e622d441e77368c1507d43918ca188a2f206887e7c27350dbfb154",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 41,
+      "hasStructuralAnalysis": true
+    },
+    "docs/改进方案/2026-09-11-摘要模型结构化调用修复设计.md": {
+      "filePath": "docs/改进方案/2026-09-11-摘要模型结构化调用修复设计.md",
+      "contentHash": "90fb989096772894cac2471c73a4decd4b00b22b195e319628b88df19016ed65",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "docs/改进方案/2026-09-12-记忆系统最小闭环方案.md": {
+      "filePath": "docs/改进方案/2026-09-12-记忆系统最小闭环方案.md",
+      "contentHash": "5703cb6d7484b9338197211df3aa2dc5adcfda6257dcc6d91d011de01847347b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 361,
+      "hasStructuralAnalysis": true
+    },
+    "docs/改进方案/2026-09-15-多Agent角色与主子Agent闭环方案.md": {
+      "filePath": "docs/改进方案/2026-09-15-多Agent角色与主子Agent闭环方案.md",
+      "contentHash": "1b66a5a650001060f371117afd7ad08dd33e1c32c90a99ab58fa28c6f12c2e8b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 574,
+      "hasStructuralAnalysis": true
+    },
+    "docs/改进方案/评测补充.md": {
+      "filePath": "docs/改进方案/评测补充.md",
+      "contentHash": "0e2896e037cd61d7851b2daa26fc2e91319986a42ed70adc4dc6aee7c7ad1e25",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 466,
+      "hasStructuralAnalysis": true
+    },
+    "docs/改进方案/评测完整实施方案.md": {
+      "filePath": "docs/改进方案/评测完整实施方案.md",
+      "contentHash": "372df7389acf109c6760631a1c5ea98240753d292603d17d6191b0124b66b03f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 524,
+      "hasStructuralAnalysis": true
+    },
+    "docs/改进方案/上下文治理改进策略9.5/实施计划.md": {
+      "filePath": "docs/改进方案/上下文治理改进策略9.5/实施计划.md",
+      "contentHash": "1819bf6ee0b1ed50f2cc9957846dbfc27f3a58e33a8b3d952a7b0ea7416a03a7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 789,
+      "hasStructuralAnalysis": true
+    },
+    "docs/改进方案/上下文治理改进策略9.5/实施todo.md": {
+      "filePath": "docs/改进方案/上下文治理改进策略9.5/实施todo.md",
       "contentHash": "504b85e75b21befca8268d546baa26414d761b0ca85c50e4efd64193383a6ea5",
       "functions": [],
       "classes": [],
@@ -103,29 +233,49 @@
       "totalLines": 20,
       "hasStructuralAnalysis": true
     },
-    "docs/上下文治理改进策略9.5/细节讨论议程.md": {
-      "filePath": "docs/上下文治理改进策略9.5/细节讨论议程.md",
-      "contentHash": "703bf1354f5eaf44ffc450895b684aa7243e2dacd7b5352e236ec962fe152a87",
+    "docs/改进方案/上下文治理改进策略9.5/细节讨论议程.md": {
+      "filePath": "docs/改进方案/上下文治理改进策略9.5/细节讨论议程.md",
+      "contentHash": "f480fcf5f970a3f3e52ea55148a0f2b376c9cfcce7848cc3af3f59cbe9947ba2",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 490,
+      "totalLines": 488,
       "hasStructuralAnalysis": true
     },
-    "docs/上下文治理改进策略9.5/总策略.md": {
-      "filePath": "docs/上下文治理改进策略9.5/总策略.md",
-      "contentHash": "cffef2abe88165263f078af8fdbf597218df0852f29216ed0450456bc0ef14fc",
+    "docs/改进方案/上下文治理改进策略9.5/总策略.md": {
+      "filePath": "docs/改进方案/上下文治理改进策略9.5/总策略.md",
+      "contentHash": "de87f052d252b0fa9014e6cee921e567f90711e858998c9de838909b3b07bfaf",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 506,
+      "totalLines": 505,
+      "hasStructuralAnalysis": true
+    },
+    "docs/工具治理完整链路.md": {
+      "filePath": "docs/工具治理完整链路.md",
+      "contentHash": "0f8c750f0f63943c16e60edb9b064357c98095f6abf14feb75530f9a8b79e78e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 343,
+      "hasStructuralAnalysis": true
+    },
+    "docs/记忆系统完整链路.md": {
+      "filePath": "docs/记忆系统完整链路.md",
+      "contentHash": "293202dfd454ce9bf0de72a01cf7ab229d8be2fc8af329b141647f6f49c9e4f3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 66,
       "hasStructuralAnalysis": true
     },
     "docs/上下文治理完整链路.md": {
       "filePath": "docs/上下文治理完整链路.md",
-      "contentHash": "667b8049851f9c196741a44881a9ace8552d84ccb5d84fddd40da29377901fb5",
+      "contentHash": "5fc136d68a4f3bf48780aace2afe2cceec46cf5e421522e9ec7b09e4b40d2df1",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -141,6 +291,16 @@
       "imports": [],
       "exports": [],
       "totalLines": 83,
+      "hasStructuralAnalysis": true
+    },
+    "docs/实施计划/2026-09-08-会话延续与执行环境一致性实施计划.md": {
+      "filePath": "docs/实施计划/2026-09-08-会话延续与执行环境一致性实施计划.md",
+      "contentHash": "4ae8eae1da35876ca70d01ad170401b0f61017043031a109ec8005ee501bcd0d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 225,
       "hasStructuralAnalysis": true
     },
     "docs/实施计划/20260907-175326-网页会话无感增量刷新实施计划.md": {
@@ -175,7 +335,7 @@
     },
     "docs/architecture.md": {
       "filePath": "docs/architecture.md",
-      "contentHash": "2ed246f2e7a234c08cf7ca9ebc43dfef216d21fee813144fd84b0dde7bbe974e",
+      "contentHash": "148c3a4d61da727dce9dc0330b73b66ab7eb62a08ef97bae7b05b1fff563129e",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -253,6 +413,136 @@
       "totalLines": 22,
       "hasStructuralAnalysis": true
     },
+    "docs/BUGS-after9.6/2026-09-08-会话后续发送未统一恢复工作区与执行环境.md": {
+      "filePath": "docs/BUGS-after9.6/2026-09-08-会话后续发送未统一恢复工作区与执行环境.md",
+      "contentHash": "e2c52456f86322c6e60828eae8d58a538cdefde93b5ea0498f7ea636925a370b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-after9.6/2026-09-08-最终容量校验前静默删除历史.md": {
+      "filePath": "docs/BUGS-after9.6/2026-09-08-最终容量校验前静默删除历史.md",
+      "contentHash": "ba66eab0c8a14941b2b314f993423cf8e8682e2a514edb1908fd7f13ab6d6657",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-after9.6/2026-09-08-patch_text跨行old_text换行不一致.md": {
+      "filePath": "docs/BUGS-after9.6/2026-09-08-patch_text跨行old_text换行不一致.md",
+      "contentHash": "cb5fd7a582a081ef2765a69a855957d9967008be0ef83630a253ee9af7aebecc",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-after9.6/2026-09-08-Web压缩前后对比数据与事件关联不一致.md": {
+      "filePath": "docs/BUGS-after9.6/2026-09-08-Web压缩前后对比数据与事件关联不一致.md",
+      "contentHash": "558a2520468b94d9a7d79314674259e490082a37aca6510d90c675f67ff02b1d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-after9.6/2026-09-09-工作区重复扫描导致首次与恢复运行耗时过长.md": {
+      "filePath": "docs/BUGS-after9.6/2026-09-09-工作区重复扫描导致首次与恢复运行耗时过长.md",
+      "contentHash": "81e4c18d19dc294d58385316f068ebb4d46ecd7e2a48db3b5a40a7f7879fb580",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-after9.6/2026-09-09-恢复上下文携带完整工作区基线导致后续run爆量.md": {
+      "filePath": "docs/BUGS-after9.6/2026-09-09-恢复上下文携带完整工作区基线导致后续run爆量.md",
+      "contentHash": "5cc8a70b04ada0110abf466b50c80747561294ee8630822a0e3c08fce34e1f01",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 26,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-after9.6/2026-09-09-未发送历史元数据误触发四级压缩.md": {
+      "filePath": "docs/BUGS-after9.6/2026-09-09-未发送历史元数据误触发四级压缩.md",
+      "contentHash": "339703e0e38f14a0ff72671d5806e763524cb2dddafebec3f82bd1147d743195",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-after9.6/2026-09-09-新会话错误注入恢复上下文.md": {
+      "filePath": "docs/BUGS-after9.6/2026-09-09-新会话错误注入恢复上下文.md",
+      "contentHash": "630977bc3fa59a81ed4850cb888d5ae9d8b789e065d7dd62d8ef2671f2da2b59",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 14,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-after9.6/2026-09-09-patch_text换行传输规范化导致精确匹配失败.md": {
+      "filePath": "docs/BUGS-after9.6/2026-09-09-patch_text换行传输规范化导致精确匹配失败.md",
+      "contentHash": "e8046bdd69c0593d520a8c8c93120537e5cbf6a8f595ffe169ed080df40a4339",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 39,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-after9.6/2026-09-10-当前请求被工作记忆重复加权.md": {
+      "filePath": "docs/BUGS-after9.6/2026-09-10-当前请求被工作记忆重复加权.md",
+      "contentHash": "4ac16bc406df0ad71bd76824c36926039dd6b303b2c0b1f99a6d7134c90942c1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-after9.6/2026-09-10-恢复上下文完整变更路径导致后续run爆量.md": {
+      "filePath": "docs/BUGS-after9.6/2026-09-10-恢复上下文完整变更路径导致后续run爆量.md",
+      "contentHash": "8ec701ac366040db5551f68c1131be6d210467943ff94c3081ef0339d7c5e4ad",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 30,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-after9.6/2026-09-10-新会话区未显示模型推理配置.md": {
+      "filePath": "docs/BUGS-after9.6/2026-09-10-新会话区未显示模型推理配置.md",
+      "contentHash": "9f835eec767d04c3d6a68e93e264fdbb2bef88b9f094dfd2451ea3bf0e8b8c77",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-after9.6/2026-09-15-shell快照漏记已有文件修改.md": {
+      "filePath": "docs/BUGS-after9.6/2026-09-15-shell快照漏记已有文件修改.md",
+      "contentHash": "cd6cf1ef3d35dead2c3f1d323af4170bbf9857a5fe0be4f398d2a6bef6dd8400",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
     "docs/BUGS-solve/2026-09-06-FinalGate从答案阻断转为运行质量观察.md": {
       "filePath": "docs/BUGS-solve/2026-09-06-FinalGate从答案阻断转为运行质量观察.md",
       "contentHash": "a264e3af76e49070ee5f19d1a7a0104755ee6edc46388327c436a30f5f27e56a",
@@ -323,6 +613,146 @@
       "totalLines": 11,
       "hasStructuralAnalysis": true
     },
+    "docs/BUGS-solve/2026-09-08-会话后续发送未统一恢复工作区与执行环境.md": {
+      "filePath": "docs/BUGS-solve/2026-09-08-会话后续发送未统一恢复工作区与执行环境.md",
+      "contentHash": "485abc271cdf8c52df1707e94df2a4bce26f1d2e6b591dab3ae902a4731c8fcd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 11,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-solve/2026-09-08-最终容量校验前静默删除历史.md": {
+      "filePath": "docs/BUGS-solve/2026-09-08-最终容量校验前静默删除历史.md",
+      "contentHash": "65fc76bae2b73b1859a009f90d41d7c8393e07d77b958c00df3022f4f8d46c01",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-solve/2026-09-08-patch_text跨行old_text换行不一致.md": {
+      "filePath": "docs/BUGS-solve/2026-09-08-patch_text跨行old_text换行不一致.md",
+      "contentHash": "467bf434d9f6d484237d1470729068253a7b93f516ce58e6a7802fdaed5b9c2a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 6,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-solve/2026-09-08-Web压缩前后对比数据与事件关联不一致.md": {
+      "filePath": "docs/BUGS-solve/2026-09-08-Web压缩前后对比数据与事件关联不一致.md",
+      "contentHash": "3beedf30d29cc19efa1360bb7a6ca992bf7abbcbf2c7d837592ab722bbf8214d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-solve/2026-09-09-工作区重复扫描导致首次与恢复运行耗时过长.md": {
+      "filePath": "docs/BUGS-solve/2026-09-09-工作区重复扫描导致首次与恢复运行耗时过长.md",
+      "contentHash": "14cafad9935754d24a415609a85cbe62ed897d2e4c7088df2485049261465c7e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 14,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-solve/2026-09-09-恢复上下文携带完整工作区基线导致后续run爆量.md": {
+      "filePath": "docs/BUGS-solve/2026-09-09-恢复上下文携带完整工作区基线导致后续run爆量.md",
+      "contentHash": "d1615ceb3a3d2595f80a0f6a609388a934b14655ae6d11b164dd16f5f759e01a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 28,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-solve/2026-09-09-未发送历史元数据误触发四级压缩.md": {
+      "filePath": "docs/BUGS-solve/2026-09-09-未发送历史元数据误触发四级压缩.md",
+      "contentHash": "a319608c84ba3048e2f38fc60075a11795e9d22f8f7c7cf54be0de0be40341bb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-solve/2026-09-09-新会话错误注入恢复上下文.md": {
+      "filePath": "docs/BUGS-solve/2026-09-09-新会话错误注入恢复上下文.md",
+      "contentHash": "972e9e7e25c86d0ce0852b20bcb2aaafd785f5104414f0f553006de97508f043",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 12,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-solve/2026-09-09-patch_text换行传输规范化导致精确匹配失败.md": {
+      "filePath": "docs/BUGS-solve/2026-09-09-patch_text换行传输规范化导致精确匹配失败.md",
+      "contentHash": "ea293b1a5387e67356306fca6b8b3670d7d10b654860abbb401f438c20aee8fa",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 67,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-solve/2026-09-10-当前请求被工作记忆重复加权.md": {
+      "filePath": "docs/BUGS-solve/2026-09-10-当前请求被工作记忆重复加权.md",
+      "contentHash": "ecc6057c753e0ea34f04a7f9c28ab060aac7b2ed398848af5827ef48f2ddcefc",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 27,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-solve/2026-09-10-恢复上下文完整变更路径导致后续run爆量.md": {
+      "filePath": "docs/BUGS-solve/2026-09-10-恢复上下文完整变更路径导致后续run爆量.md",
+      "contentHash": "24845a6356f9b19391941bf8b8118b10d6f99c4ff8fd7768ad4ed7839c35ba98",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 48,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-solve/2026-09-10-新会话区未显示模型推理配置.md": {
+      "filePath": "docs/BUGS-solve/2026-09-10-新会话区未显示模型推理配置.md",
+      "contentHash": "389709eddfb114cfe60b9c49a7eb33dee25421123c81e5ade788e03dd2080255",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 26,
+      "hasStructuralAnalysis": true
+    },
+    "docs/BUGS-solve/2026-09-15-shell快照漏记已有文件修改.md": {
+      "filePath": "docs/BUGS-solve/2026-09-15-shell快照漏记已有文件修改.md",
+      "contentHash": "aab4503208086b8f5715f630589f593834769ba9546a7324dc74abb08064454d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "docs/JCode项目完整链路.md": {
+      "filePath": "docs/JCode项目完整链路.md",
+      "contentHash": "e2f39147e484dff7a0df006babd64439b93bf58c929800f46fe1ac9eb64a9d6d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 369,
+      "hasStructuralAnalysis": true
+    },
     "docs/mvp1-web-design.md": {
       "filePath": "docs/mvp1-web-design.md",
       "contentHash": "01e57f51bc31476e0403491b46781c9a820d3811e9d6b705ef98c67b9a2e1028",
@@ -345,12 +775,1176 @@
     },
     "docs/Provider架构与模型切换链路.md": {
       "filePath": "docs/Provider架构与模型切换链路.md",
-      "contentHash": "c4fb7336bb45ea87009413fe44340b9a2c0ff90620435a926a41daf2c165429c",
+      "contentHash": "b942d6f5fa42f7b45fd48b2b616c42933eb6532e69e9ee1e6b9693bdfc4fd529",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 238,
+      "totalLines": 100,
+      "hasStructuralAnalysis": true
+    },
+    "eval/__init__.py": {
+      "filePath": "eval/__init__.py",
+      "contentHash": "228d0d7a79e3634f538f964c39f3debfcb5a1997a5c19d5ba4713131121fe1e0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "eval/baselines.py": {
+      "filePath": "eval/baselines.py",
+      "contentHash": "5c114b40580ec584e80122e504ef964dae199f57077264592822e44afad51cef",
+      "functions": [
+        {
+          "name": "available_systems",
+          "params": [],
+          "returnType": "tuple[EvaluationSystem, ...]",
+          "exported": true,
+          "lineCount": 7
+        }
+      ],
+      "classes": [
+        {
+          "name": "EvaluationSystem",
+          "methods": [],
+          "properties": [
+            "system_id",
+            "description",
+            "command_builder"
+          ],
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "imports": [
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Callable"
+          ]
+        }
+      ],
+      "exports": [
+        "EvaluationSystem",
+        "available_systems"
+      ],
+      "totalLines": 23,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/checkpoint_resume/R1-valid-checkpoint.json": {
+      "filePath": "eval/cases/checkpoint_resume/R1-valid-checkpoint.json",
+      "contentHash": "5dcdac2a1afd641a76a32a77da76ba97886dc2765e6a0244e9548f64ed6b5488",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/checkpoint_resume/R2-stale-file.json": {
+      "filePath": "eval/cases/checkpoint_resume/R2-stale-file.json",
+      "contentHash": "2a26b25cbf702b205b4413a483f35a60f525fde1edf4feb889f412d9cd71d051",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/checkpoint_resume/R3-workspace-drift.json": {
+      "filePath": "eval/cases/checkpoint_resume/R3-workspace-drift.json",
+      "contentHash": "bc3a5455238fc23b05e3670f6ff6dec92c266efa901d1f5380d7eb579fd6c87d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/checkpoint_resume/R4-incompatible-checkpoint.json": {
+      "filePath": "eval/cases/checkpoint_resume/R4-incompatible-checkpoint.json",
+      "contentHash": "6c4908db0e83c1698a2d86bb1d9128278840f87e7bfc3251b06a022f80b492ef",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/checkpoint_resume/R5-shell-partial-success.json": {
+      "filePath": "eval/cases/checkpoint_resume/R5-shell-partial-success.json",
+      "contentHash": "51a42c0a94c40eda05ed5c64cd21c7a06b281414754593ddac96f69f572d4742",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/checkpoint_resume/R6-tool-chain-partial-success.json": {
+      "filePath": "eval/cases/checkpoint_resume/R6-tool-chain-partial-success.json",
+      "contentHash": "8b552c7163a5497feba1d8c3f11d59358880a491e5628ceb4674fc05c6c2abe2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/context_compression/C1-normal-pressure.json": {
+      "filePath": "eval/cases/context_compression/C1-normal-pressure.json",
+      "contentHash": "0bd24d6b423eb35f627026efbc745f2a027917cedc27725a039c10ca23f563c7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/context_compression/C2-repeat-compression.json": {
+      "filePath": "eval/cases/context_compression/C2-repeat-compression.json",
+      "contentHash": "bf5b0b48872d4f20469bb0c4062b8ee724b74ab6bed93a7a817cea9883653dd5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/context_compression/C3-large-output.json": {
+      "filePath": "eval/cases/context_compression/C3-large-output.json",
+      "contentHash": "fe19a1199f7314348403b49b0eaefb6974348771dcaca8ee6bdb3ee5be946093",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/context_compression/C4-summary-failure.json": {
+      "filePath": "eval/cases/context_compression/C4-summary-failure.json",
+      "contentHash": "6524fe7aab76d33bbd0eebdd9865d8fb8fa14114ccc72aa7cd03e58692e76d6f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/layered_memory/M1-working-memory.json": {
+      "filePath": "eval/cases/layered_memory/M1-working-memory.json",
+      "contentHash": "52226cfa2f29243c9068a06d5f03b3f220fce94791d9d014545dbc58a9262d0e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/layered_memory/M2-daily-log.json": {
+      "filePath": "eval/cases/layered_memory/M2-daily-log.json",
+      "contentHash": "d5a1a83f4e31bd3ea24428b5dac9ca98a9439ede253377d883b0f09063b03c38",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/layered_memory/M3-durable-recall.json": {
+      "filePath": "eval/cases/layered_memory/M3-durable-recall.json",
+      "contentHash": "04fba71a27a8ad93554db4a853ac439d9e1cb95c5d559521768baba1664a0432",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/layered_memory/M4-dream-safety.json": {
+      "filePath": "eval/cases/layered_memory/M4-dream-safety.json",
+      "contentHash": "19b6721a6f0c373790f98548a349042ec7e7ed4df1bcdf37ede8a3601cbd6ca3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/tool_governance/T1-unknown-tool.json": {
+      "filePath": "eval/cases/tool_governance/T1-unknown-tool.json",
+      "contentHash": "9b556661c51a1cdb91ce8a57c76ffb23fd3cc0a1d2b4c7f23b308b1d990cc94c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 14,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/tool_governance/T10-side-effect-failure.json": {
+      "filePath": "eval/cases/tool_governance/T10-side-effect-failure.json",
+      "contentHash": "14ec06da0ff8474c4d9a2ef367543e0cf0c439f4017b4e5a8af5103daf188a0d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 12,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/tool_governance/T2-schema-validation.json": {
+      "filePath": "eval/cases/tool_governance/T2-schema-validation.json",
+      "contentHash": "c31ee48beddcc2763e208d0d1af48d408f5012a2fb8c25693ca4db512584b465",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/tool_governance/T3-path-escape.json": {
+      "filePath": "eval/cases/tool_governance/T3-path-escape.json",
+      "contentHash": "7ab5768f4d385a68abaf8ed4c347aadc5e19aab22649b4998ef6c8384c08c880",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/tool_governance/T4-unread-write.json": {
+      "filePath": "eval/cases/tool_governance/T4-unread-write.json",
+      "contentHash": "23ec9d08f0d2b7e0eb042b7c8cb6ae5d30d8bfff43426ef80dd6f24557dc7ae5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/tool_governance/T5-freshness-conflict.json": {
+      "filePath": "eval/cases/tool_governance/T5-freshness-conflict.json",
+      "contentHash": "063b2784574abe2775183d4e07d34fc4591dd04eafca6d5b990970f056741a76",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/tool_governance/T6-repeat-call.json": {
+      "filePath": "eval/cases/tool_governance/T6-repeat-call.json",
+      "contentHash": "4a70be5f4ffccc096934b1054a35208909057788de42edaf0f4a6473e42030ad",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/tool_governance/T7-shell-timeout.json": {
+      "filePath": "eval/cases/tool_governance/T7-shell-timeout.json",
+      "contentHash": "01744eba24dc8bd8b069c258d99f32873b371619ac8974d47d3220b5578e5b84",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/tool_governance/T8-shell-abort.json": {
+      "filePath": "eval/cases/tool_governance/T8-shell-abort.json",
+      "contentHash": "55d4332d20c086f0c6dff708132d76e92570649b27bf4473d6a506160cca0d35",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cases/tool_governance/T9-partial-side-effect.json": {
+      "filePath": "eval/cases/tool_governance/T9-partial-side-effect.json",
+      "contentHash": "e5907c86c0d7dad3fe2259649be046adac36d582abbea47603287624d83902b4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "eval/cli.py": {
+      "filePath": "eval/cli.py",
+      "contentHash": "50751335b633786308e5de279c53e023161e30d7ea0395f734c4d9dc29a33720",
+      "functions": [
+        {
+          "name": "build_parser",
+          "params": [],
+          "returnType": "argparse.ArgumentParser",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "main",
+          "params": [
+            "argv"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 45
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "argparse",
+          "specifiers": [
+            "argparse"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "eval.loader",
+          "specifiers": [
+            "CaseLoader"
+          ]
+        },
+        {
+          "source": "eval.runner",
+          "specifiers": [
+            "EvalRunner"
+          ]
+        },
+        {
+          "source": "eval.scorer",
+          "specifiers": [
+            "OfflineScorer"
+          ]
+        }
+      ],
+      "exports": [
+        "build_parser",
+        "main"
+      ],
+      "totalLines": 86,
+      "hasStructuralAnalysis": true
+    },
+    "eval/loader.py": {
+      "filePath": "eval/loader.py",
+      "contentHash": "d6f5a539d05ce80511cce139945385c8c07a3a7e194284cf11794152b0e3084b",
+      "functions": [],
+      "classes": [
+        {
+          "name": "CaseLoader",
+          "methods": [
+            "__init__",
+            "list_cases",
+            "load_all",
+            "validate",
+            "find",
+            "load_manifest"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 40
+        }
+      ],
+      "imports": [
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "eval.protocol",
+          "specifiers": [
+            "EvalCase"
+          ]
+        }
+      ],
+      "exports": [
+        "CaseLoader"
+      ],
+      "totalLines": 49,
+      "hasStructuralAnalysis": true
+    },
+    "eval/manifests/v1.json": {
+      "filePath": "eval/manifests/v1.json",
+      "contentHash": "678f41ed9390459e376c0738eb139f57101ad972413886031a2a7c39386161fe",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 32,
+      "hasStructuralAnalysis": true
+    },
+    "eval/protocol.py": {
+      "filePath": "eval/protocol.py",
+      "contentHash": "163dacfac12fe6e111e6b174e34a77b57cf0ce2b242534fbee572f4e370a56aa",
+      "functions": [
+        {
+          "name": "now_iso",
+          "params": [],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [
+        {
+          "name": "EvalCase",
+          "methods": [
+            "from_dict",
+            "load"
+          ],
+          "properties": [
+            "case_id",
+            "eval_version",
+            "category",
+            "scenario",
+            "description",
+            "prompt",
+            "workspace_fixture",
+            "model_profile",
+            "allowed_tools",
+            "write_scope",
+            "fault_injection",
+            "acceptance_predicates",
+            "forbidden_behaviors",
+            "config"
+          ],
+          "exported": true,
+          "lineCount": 52
+        },
+        {
+          "name": "RunRecord",
+          "methods": [
+            "to_dict",
+            "write",
+            "load"
+          ],
+          "properties": [
+            "case_id",
+            "eval_version",
+            "runner_version",
+            "scorer_version",
+            "jcode_revision",
+            "run_id",
+            "started_at",
+            "finished_at",
+            "final_status",
+            "task_success",
+            "initial_workspace_hash",
+            "final_workspace_hash",
+            "changed_files",
+            "tool_attempts",
+            "verification",
+            "checkpoint_status",
+            "context_usage",
+            "memory_observations",
+            "agent_quality",
+            "harness_quality",
+            "assurance",
+            "latency_ms",
+            "failure_taxonomy",
+            "evidence_paths",
+            "process_exit_code",
+            "stdout",
+            "stderr",
+            "trace_events",
+            "report",
+            "checkpoint"
+          ],
+          "exported": true,
+          "lineCount": 50
+        }
+      ],
+      "imports": [
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "datetime",
+          "specifiers": [
+            "datetime",
+            "timezone"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        }
+      ],
+      "exports": [
+        "now_iso",
+        "EvalCase",
+        "RunRecord"
+      ],
+      "totalLines": 121,
+      "hasStructuralAnalysis": true
+    },
+    "eval/README.md": {
+      "filePath": "eval/README.md",
+      "contentHash": "c2ed5a09ca7a7ac0ebe2d916a16795a871c0f4d5e7ea3b917d772eb94713e6fa",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 28,
+      "hasStructuralAnalysis": true
+    },
+    "eval/replay.py": {
+      "filePath": "eval/replay.py",
+      "contentHash": "13342f7e4f53e8caa3db84d6ef100ee228bd09eff856143c36e6310fc654a1e6",
+      "functions": [
+        {
+          "name": "read_trace",
+          "params": [
+            "result_dir"
+          ],
+          "returnType": "Iterator[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "replay_summary",
+          "params": [
+            "result_dir"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 9
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any",
+            "Iterator"
+          ]
+        }
+      ],
+      "exports": [
+        "read_trace",
+        "replay_summary"
+      ],
+      "totalLines": 32,
+      "hasStructuralAnalysis": true
+    },
+    "eval/runner.py": {
+      "filePath": "eval/runner.py",
+      "contentHash": "8f685a60171c6a836b3ce0ab0e3e0008ba85d9d31912433a57b20729cd429309",
+      "functions": [],
+      "classes": [
+        {
+          "name": "EvalRunner",
+          "methods": [
+            "__init__",
+            "run",
+            "_inject_fault",
+            "_command",
+            "_environment",
+            "_git_revision",
+            "_collect_evidence",
+            "_read_evidence_metadata"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 177
+        }
+      ],
+      "imports": [
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "shutil",
+          "specifiers": [
+            "shutil"
+          ]
+        },
+        {
+          "source": "subprocess",
+          "specifiers": [
+            "subprocess"
+          ]
+        },
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "uuid",
+          "specifiers": [
+            "uuid"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "eval.protocol",
+          "specifiers": [
+            "EvalCase",
+            "RunRecord",
+            "now_iso"
+          ]
+        },
+        {
+          "source": "eval.workspace",
+          "specifiers": [
+            "WorkspaceSandbox"
+          ]
+        }
+      ],
+      "exports": [
+        "EvalRunner"
+      ],
+      "totalLines": 197,
+      "hasStructuralAnalysis": true
+    },
+    "eval/schema/case.schema.json": {
+      "filePath": "eval/schema/case.schema.json",
+      "contentHash": "2c68a3ce5a8523a3f238415a802dcc0a8ba48a4022b74188ee16535149958287",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 23,
+      "hasStructuralAnalysis": true
+    },
+    "eval/schema/manifest.schema.json": {
+      "filePath": "eval/schema/manifest.schema.json",
+      "contentHash": "9b6a9d12149b5bf4c9cfe900f54f1daa478bbaf75ac957ea1359ff83e73a62cb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 12,
+      "hasStructuralAnalysis": true
+    },
+    "eval/schema/run_record.schema.json": {
+      "filePath": "eval/schema/run_record.schema.json",
+      "contentHash": "4c81576073e6302f0da1b4b06d0d401b78f063d576038dbf2e62ac287f175893",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "eval/schema/score.schema.json": {
+      "filePath": "eval/schema/score.schema.json",
+      "contentHash": "5ac1a7f20b403fb54a7593a9dd66019090e14bc0decee3b46aa8178b12068b97",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "eval/scorer.py": {
+      "filePath": "eval/scorer.py",
+      "contentHash": "412ae2b0baca66df19fb32244c62415fe4b36a7360b4b8f780a262e525931180",
+      "functions": [
+        {
+          "name": "score_file",
+          "params": [
+            "case_path",
+            "record_path",
+            "output_path"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 8
+        }
+      ],
+      "classes": [
+        {
+          "name": "OfflineScorer",
+          "methods": [
+            "score",
+            "_evaluate_predicate",
+            "_redlines",
+            "_agent_quality",
+            "_harness_quality",
+            "_assurance"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 102
+        }
+      ],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "eval.protocol",
+          "specifiers": [
+            "EvalCase",
+            "RunRecord"
+          ]
+        }
+      ],
+      "exports": [
+        "OfflineScorer",
+        "score_file"
+      ],
+      "totalLines": 125,
+      "hasStructuralAnalysis": true
+    },
+    "eval/summary.py": {
+      "filePath": "eval/summary.py",
+      "contentHash": "08e6917e5a99a21a174625d6062205dbd9d2c3f775f3b118f3133e10cc8db1c8",
+      "functions": [
+        {
+          "name": "summarize_scores",
+          "params": [
+            "score_paths"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 24
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "collections",
+          "specifiers": [
+            "Counter"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        }
+      ],
+      "exports": [
+        "summarize_scores"
+      ],
+      "totalLines": 33,
+      "hasStructuralAnalysis": true
+    },
+    "eval/tests/__init__.py": {
+      "filePath": "eval/tests/__init__.py",
+      "contentHash": "508f3c2dad4021224b399c7eafbab0ef1b1d44b703c4064817be9b38bf321ca8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "eval/tests/test_checkpoint_timing.py": {
+      "filePath": "eval/tests/test_checkpoint_timing.py",
+      "contentHash": "c3ba641e9d4b56bf92853b51007b0c202ebd34afe965161085346034f016aae1",
+      "functions": [
+        {
+          "name": "test_checkpoint_create_scans_workspace_once",
+          "params": [
+            "tmp_path",
+            "monkeypatch"
+          ],
+          "exported": true,
+          "lineCount": 15
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "src.state.checkpoint",
+          "specifiers": [
+            "CheckpointManager"
+          ]
+        },
+        {
+          "source": "src.state.task",
+          "specifiers": [
+            "TaskState"
+          ]
+        },
+        {
+          "source": "src.state.workspace",
+          "specifiers": [
+            "Workspace"
+          ]
+        },
+        {
+          "source": "src.memory.working",
+          "specifiers": [
+            "WorkingMemory"
+          ]
+        }
+      ],
+      "exports": [
+        "test_checkpoint_create_scans_workspace_once"
+      ],
+      "totalLines": 24,
+      "hasStructuralAnalysis": true
+    },
+    "eval/tests/test_eval_core.py": {
+      "filePath": "eval/tests/test_eval_core.py",
+      "contentHash": "9dbaba4230a99490ee5848f631c036785eb7792a535d4098fa3b7bf90622be2a",
+      "functions": [
+        {
+          "name": "test_case_loader_reads_versioned_cases",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "test_workspace_sandbox_tracks_content_changes",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "test_offline_scorer_evaluates_persisted_record",
+          "params": [],
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "test_run_record_round_trip",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "eval.loader",
+          "specifiers": [
+            "CaseLoader"
+          ]
+        },
+        {
+          "source": "eval.protocol",
+          "specifiers": [
+            "EvalCase",
+            "RunRecord"
+          ]
+        },
+        {
+          "source": "eval.scorer",
+          "specifiers": [
+            "OfflineScorer"
+          ]
+        },
+        {
+          "source": "eval.workspace",
+          "specifiers": [
+            "WorkspaceSandbox"
+          ]
+        }
+      ],
+      "exports": [
+        "test_case_loader_reads_versioned_cases",
+        "test_workspace_sandbox_tracks_content_changes",
+        "test_offline_scorer_evaluates_persisted_record",
+        "test_run_record_round_trip"
+      ],
+      "totalLines": 66,
+      "hasStructuralAnalysis": true
+    },
+    "eval/tests/test_eval_faults.py": {
+      "filePath": "eval/tests/test_eval_faults.py",
+      "contentHash": "f72988fdd168e066a422c95abfcd46c03ebcdc1b774332b2f30615b22d898ab8",
+      "functions": [
+        {
+          "name": "test_external_file_fault_injection_is_explicit",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "test_trace_and_checkpoint_predicates_use_persisted_metadata",
+          "params": [],
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "test_summary_uses_category_field",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "eval.protocol",
+          "specifiers": [
+            "EvalCase",
+            "RunRecord"
+          ]
+        },
+        {
+          "source": "eval.runner",
+          "specifiers": [
+            "EvalRunner"
+          ]
+        },
+        {
+          "source": "eval.scorer",
+          "specifiers": [
+            "OfflineScorer"
+          ]
+        }
+      ],
+      "exports": [
+        "test_external_file_fault_injection_is_explicit",
+        "test_trace_and_checkpoint_predicates_use_persisted_metadata",
+        "test_summary_uses_category_field"
+      ],
+      "totalLines": 45,
+      "hasStructuralAnalysis": true
+    },
+    "eval/tests/test_harness_timing.py": {
+      "filePath": "eval/tests/test_harness_timing.py",
+      "contentHash": "9d4868f1d0ac0f1d38134ab79c529a52f1cef3df09fe92a61cd236ab52c2c6b2",
+      "functions": [
+        {
+          "name": "test_harness_timing_records_component_and_prints_console",
+          "params": [
+            "capsys"
+          ],
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "test_harness_timing_summary_aggregates_components",
+          "params": [],
+          "exported": true,
+          "lineCount": 12
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "src.evidence.timing",
+          "specifiers": [
+            "HarnessTiming"
+          ]
+        }
+      ],
+      "exports": [
+        "test_harness_timing_records_component_and_prints_console",
+        "test_harness_timing_summary_aggregates_components"
+      ],
+      "totalLines": 35,
+      "hasStructuralAnalysis": true
+    },
+    "eval/workspace.py": {
+      "filePath": "eval/workspace.py",
+      "contentHash": "f4a53136a86b967454a567d9ce29b77226e2cbe0f1313ec12f988d2f69cb9987",
+      "functions": [],
+      "classes": [
+        {
+          "name": "WorkspaceSandbox",
+          "methods": [
+            "__init__",
+            "prepare",
+            "snapshot",
+            "fingerprint",
+            "changed_files",
+            "cleanup"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 47
+        }
+      ],
+      "imports": [
+        {
+          "source": "hashlib",
+          "specifiers": [
+            "hashlib"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "shutil",
+          "specifiers": [
+            "shutil"
+          ]
+        },
+        {
+          "source": "tempfile",
+          "specifiers": [
+            "tempfile"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        }
+      ],
+      "exports": [
+        "WorkspaceSandbox"
+      ],
+      "totalLines": 58,
       "hasStructuralAnalysis": true
     },
     "learn_workspace/assets/lesson.css": {
@@ -395,22 +1989,52 @@
     },
     "pyproject.toml": {
       "filePath": "pyproject.toml",
-      "contentHash": "7e95a3ba07ad630b28a49dee2bb6411512a2289f392a46a34942bc9413fd3465",
+      "contentHash": "2f3a0b47af889dd05b832d4ba9d649bec74d0a428233ee2eea114c8f0dce285c",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 21,
+      "totalLines": 22,
       "hasStructuralAnalysis": true
     },
     "README.md": {
       "filePath": "README.md",
-      "contentHash": "b419ae3696fd6640cc9f92de19ea7db9275526506e0b2e9227fd2ecba0d2d597",
+      "contentHash": "4c6a6ee0518b99437a57c119ade54280da26acc510e4b6f6c1a47c2a8033046d",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 286,
+      "totalLines": 292,
+      "hasStructuralAnalysis": true
+    },
+    "resume/简历-待填写.html": {
+      "filePath": "resume/简历-待填写.html",
+      "contentHash": "a3ad508b70daf83dfacacc819d056e6e634bbe67b3e4a0baed151738c9cde891",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 397,
+      "hasStructuralAnalysis": false
+    },
+    "resume/简历-待填写.md": {
+      "filePath": "resume/简历-待填写.md",
+      "contentHash": "b54165c0aa05b9aaa9ec006dd51566927a7e9c5a9d4e7889cc0e44ef22a3f52f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 90,
+      "hasStructuralAnalysis": true
+    },
+    "resume/overview.md": {
+      "filePath": "resume/overview.md",
+      "contentHash": "b0dea75b7192783aecc88eb42dc06725d164176c569191e9496f3e15a52c1741",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 39,
       "hasStructuralAnalysis": true
     },
     "src/__init__.py": {
@@ -452,7 +2076,7 @@
     },
     "src/app/bootstrap.py": {
       "filePath": "src/app/bootstrap.py",
-      "contentHash": "fcfef8086cb3520bc48bd5ef5ac59a2277f8af46e38dabbdf7073a1bf15e8aca",
+      "contentHash": "c795d99608a4683f87ba79af0c6899b7c1c601bf0d5365eae3a9bf7492cda9ae",
       "functions": [
         {
           "name": "build_agent",
@@ -461,7 +2085,7 @@
           ],
           "returnType": "JCodeAgent",
           "exported": true,
-          "lineCount": 84
+          "lineCount": 89
         }
       ],
       "classes": [],
@@ -596,6 +2220,7 @@
         {
           "source": "src.state.resume",
           "specifiers": [
+            "build_execution_fingerprint",
             "build_resume_context"
           ]
         },
@@ -633,19 +2258,19 @@
       "exports": [
         "build_agent"
       ],
-      "totalLines": 116,
+      "totalLines": 121,
       "hasStructuralAnalysis": true
     },
     "src/app/cli.py": {
       "filePath": "src/app/cli.py",
-      "contentHash": "95c991b9d06283e4bf54b98e462351f735f77a4cbd3ab52005adc68ee704b38a",
+      "contentHash": "5c381b8fe3fafefdcea6f8e4ff4160834fa56f7107265195f57123ee082efc59",
       "functions": [
         {
           "name": "build_parser",
           "params": [],
           "returnType": "argparse.ArgumentParser",
           "exported": true,
-          "lineCount": 19
+          "lineCount": 20
         },
         {
           "name": "main",
@@ -654,7 +2279,7 @@
           ],
           "returnType": "int",
           "exported": true,
-          "lineCount": 11
+          "lineCount": 20
         }
       ],
       "classes": [],
@@ -682,7 +2307,7 @@
         "build_parser",
         "main"
       ],
-      "totalLines": 41,
+      "totalLines": 51,
       "hasStructuralAnalysis": true
     },
     "src/app/config.py": {
@@ -1034,7 +2659,7 @@
     },
     "src/app/web_runs.py": {
       "filePath": "src/app/web_runs.py",
-      "contentHash": "f6591e2d16e9b8e55688919379cd2c479c96fe025fc6d44888e9280d276c21ed",
+      "contentHash": "fe026a9ee8901a1d5ef40e4f6a92f317ec3a4756f272f18b810b0eeaf23a95b4",
       "functions": [],
       "classes": [
         {
@@ -1080,6 +2705,7 @@
             "list_sessions",
             "get_session",
             "model_profiles",
+            "model_configuration",
             "switch_model",
             "get_session_turns",
             "create_session",
@@ -1108,7 +2734,7 @@
             "lock"
           ],
           "exported": true,
-          "lineCount": 355
+          "lineCount": 364
         }
       ],
       "imports": [
@@ -1255,12 +2881,12 @@
         "WebRun",
         "WebRunManager"
       ],
-      "totalLines": 448,
+      "totalLines": 457,
       "hasStructuralAnalysis": true
     },
     "src/app/web_server.py": {
       "filePath": "src/app/web_server.py",
-      "contentHash": "430008a7a04cd2e0347c328459ca2637cccec654d45e21d6761f09dbc46e88c6",
+      "contentHash": "0f6e297a5e240686997abf7fcdfca07764ad1dbd15dea0c0a7cddbb83f655efd",
       "functions": [
         {
           "name": "create_app",
@@ -1269,7 +2895,7 @@
           ],
           "returnType": "FastAPI",
           "exported": true,
-          "lineCount": 215
+          "lineCount": 220
         }
       ],
       "classes": [
@@ -1381,12 +3007,12 @@
         "ProjectRequest",
         "create_app"
       ],
-      "totalLines": 250,
+      "totalLines": 255,
       "hasStructuralAnalysis": true
     },
     "src/app/web_static/app.js": {
       "filePath": "src/app/web_static/app.js",
-      "contentHash": "c9d817546461b0c97930499db5a3de9db35c8b1c2ff48cd9864e82379147feba",
+      "contentHash": "e7b26eed57eaefd534622797b09b7f469e6e560857e159cc2e0efc10762abc6c",
       "functions": [
         {
           "name": "isAtLatest",
@@ -1466,7 +3092,7 @@
           "name": "loadProjects",
           "params": [],
           "exported": false,
-          "lineCount": 7
+          "lineCount": 13
         },
         {
           "name": "renderProjects",
@@ -1480,7 +3106,7 @@
             "projectId"
           ],
           "exported": false,
-          "lineCount": 20
+          "lineCount": 21
         },
         {
           "name": "loadSessions",
@@ -1701,7 +3327,15 @@
             "value"
           ],
           "exported": false,
-          "lineCount": 4
+          "lineCount": 6
+        },
+        {
+          "name": "formatMetric",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 5
         },
         {
           "name": "compressionMetricBlock",
@@ -1710,7 +3344,7 @@
             "data"
           ],
           "exported": false,
-          "lineCount": 7
+          "lineCount": 10
         },
         {
           "name": "compressionDeltaBlock",
@@ -1922,12 +3556,12 @@
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 1415,
+      "totalLines": 1451,
       "hasStructuralAnalysis": true
     },
     "src/app/web_static/index.html": {
       "filePath": "src/app/web_static/index.html",
-      "contentHash": "b87a05e796a554915e76f623a6424065340af2307ef40899990ed6c623998f61",
+      "contentHash": "9335824497d14cd143607cda46335afe560308448dd29431912495815a4f3720",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -1947,7 +3581,7 @@
     },
     "src/app/web_steps.py": {
       "filePath": "src/app/web_steps.py",
-      "contentHash": "cca0f77a540bccd47035fcc3fb256abeb12bbfec248048f6077b900fae4ec814",
+      "contentHash": "1a2f135fc1e5fcb9f984431cc53c323ef33e21f50b36ae80c28e3b919cf7fbb1",
       "functions": [
         {
           "name": "build_reasoning_steps",
@@ -2043,7 +3677,7 @@
           ],
           "properties": [],
           "exported": true,
-          "lineCount": 258
+          "lineCount": 281
         }
       ],
       "imports": [
@@ -2084,7 +3718,7 @@
         "_parse_time",
         "_normalize_status"
       ],
-      "totalLines": 372,
+      "totalLines": 395,
       "hasStructuralAnalysis": true
     },
     "src/app/web_turns.py": {
@@ -2588,7 +4222,7 @@
     },
     "src/context/manager.py": {
       "filePath": "src/context/manager.py",
-      "contentHash": "2a289d871b64905fd99951abc0a4950304a08cef54b021ca9c9b0f12789375fe",
+      "contentHash": "d2a0032b5042d0401991f4343fd9a4d04782cb73d2f81336eded37eec470cdd9",
       "functions": [],
       "classes": [
         {
@@ -2602,14 +4236,13 @@
             "_history_window_for_level",
             "_build_structured_history",
             "_normalize_list_files_path",
-            "_fit_optional_history",
             "_reduce_memory",
             "_reduce_working_memory_for_pressure",
             "_pressure_level"
           ],
           "properties": [],
           "exported": true,
-          "lineCount": 323
+          "lineCount": 308
         }
       ],
       "imports": [
@@ -2638,7 +4271,6 @@
             "SAFETY_MARGIN",
             "TokenizerAdapter",
             "calculate_pressure",
-            "ContextBudgetCandidate",
             "effective_window",
             "validate_final_capacity",
             "BudgetOccupancy"
@@ -2697,12 +4329,12 @@
       "exports": [
         "ContextManager"
       ],
-      "totalLines": 349,
+      "totalLines": 333,
       "hasStructuralAnalysis": true
     },
     "src/context/prefix.py": {
       "filePath": "src/context/prefix.py",
-      "contentHash": "a633cbcb675b7f767b8315c62ed0a7f2e26d065bffa560b8a6c182d636dbbe46",
+      "contentHash": "4b95b69a519b09602792f455f8ce26386cb95e5a0c2431ff579fc3e552505969",
       "functions": [
         {
           "name": "render_prefix",
@@ -2898,7 +4530,7 @@
     },
     "src/context/summary.py": {
       "filePath": "src/context/summary.py",
-      "contentHash": "689994f76e5c6fb31e85462fdd399e6c06ab47dd624ad78c1ec3710b822246f0",
+      "contentHash": "e592c6f15e4c5b506cd8f99bd12cc960d8f5644a40dc02a4b25c916482d9efcc",
       "functions": [
         {
           "name": "build_summary_request",
@@ -2918,14 +4550,13 @@
           ],
           "returnType": "CompactSummaryPayload",
           "exported": true,
-          "lineCount": 12
+          "lineCount": 15
         },
         {
           "name": "build_deterministic_summary",
           "params": [
             "old_summary",
-            "evicted_turns",
-            "task_goal"
+            "evicted_turns"
           ],
           "returnType": "CompactSummaryPayload",
           "exported": true,
@@ -2967,7 +4598,6 @@
           "methods": [],
           "properties": [
             "summary_version",
-            "task_goal",
             "decisions",
             "files_read",
             "files_modified",
@@ -2979,7 +4609,7 @@
             "artifact_paths"
           ],
           "exported": true,
-          "lineCount": 14
+          "lineCount": 13
         }
       ],
       "imports": [
@@ -3027,7 +4657,7 @@
         "summary_output_reservation",
         "call_summary_model"
       ],
-      "totalLines": 103,
+      "totalLines": 143,
       "hasStructuralAnalysis": true
     },
     "src/evidence/__init__.py": {
@@ -3199,7 +4829,7 @@
     },
     "src/evidence/summaries.py": {
       "filePath": "src/evidence/summaries.py",
-      "contentHash": "66f3916fe78d4bed1a2b4d34aa6257292f0d96e0f5e541fd95e266eefa5a2312",
+      "contentHash": "765d9291107261aca934d9589dc033a82fc68e7a3a43f59f5f93b6d74754954a",
       "functions": [
         {
           "name": "build_report",
@@ -3212,11 +4842,12 @@
             "workers",
             "memory",
             "resume",
-            "ctx_info"
+            "ctx_info",
+            "timing"
           ],
           "returnType": "dict",
           "exported": true,
-          "lineCount": 35
+          "lineCount": 36
         }
       ],
       "classes": [],
@@ -3224,7 +4855,75 @@
       "exports": [
         "build_report"
       ],
-      "totalLines": 39,
+      "totalLines": 40,
+      "hasStructuralAnalysis": true
+    },
+    "src/evidence/timing.py": {
+      "filePath": "src/evidence/timing.py",
+      "contentHash": "09ef9c2360e95a773fbae2f10919f4e8b7d70d483ce59d57c189d6166b11738b",
+      "functions": [],
+      "classes": [
+        {
+          "name": "TimingSpan",
+          "methods": [],
+          "properties": [
+            "component",
+            "operation",
+            "span_id",
+            "parent_span_id",
+            "level",
+            "started_at",
+            "started_ns",
+            "metadata"
+          ],
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "HarnessTiming",
+          "methods": [
+            "__init__",
+            "start",
+            "finish",
+            "summary"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 67
+        }
+      ],
+      "imports": [
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "src.state.workspace",
+          "specifiers": [
+            "now_iso"
+          ]
+        }
+      ],
+      "exports": [
+        "TimingSpan",
+        "HarnessTiming"
+      ],
+      "totalLines": 91,
       "hasStructuralAnalysis": true
     },
     "src/evidence/tool_artifacts.py": {
@@ -3282,7 +4981,7 @@
     },
     "src/memory/consolidation.py": {
       "filePath": "src/memory/consolidation.py",
-      "contentHash": "36b7f2d79088e410c40d364cc82edc32cdffae5802731ff8f4e534437b36be09",
+      "contentHash": "09a4939520fb7b521d6b5de0cf750ad7839f599ad355dd18dc88a3b2a3431251",
       "functions": [
         {
           "name": "maintain_after_turn",
@@ -3291,9 +4990,19 @@
             "working_memory",
             "user_message",
             "final_text",
-            "agent"
+            "agent",
+            "task_state"
           ],
           "returnType": "dict",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "extract_memory_candidates",
+          "params": [
+            "user_message"
+          ],
+          "returnType": "list[dict]",
           "exported": true,
           "lineCount": 11
         },
@@ -3312,11 +5021,12 @@
           "params": [
             "agent",
             "quiet",
-            "session_ids"
+            "session_ids",
+            "trigger"
           ],
           "returnType": "str",
           "exported": true,
-          "lineCount": 53
+          "lineCount": 57
         },
         {
           "name": "_build_dream_agent",
@@ -3324,7 +5034,7 @@
             "agent"
           ],
           "exported": true,
-          "lineCount": 38
+          "lineCount": 37
         },
         {
           "name": "_maybe_run_auto_dream",
@@ -3342,6 +5052,25 @@
             "agent"
           ],
           "returnType": "str",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "_daily_log_count",
+          "params": [
+            "memory_dir"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_memory_status_count",
+          "params": [
+            "store",
+            "status"
+          ],
+          "returnType": "int",
           "exported": true,
           "lineCount": 5
         },
@@ -3407,6 +5136,12 @@
           ]
         },
         {
+          "source": "re",
+          "specifiers": [
+            "re"
+          ]
+        },
+        {
           "source": "time",
           "specifiers": [
             "time"
@@ -3451,32 +5186,79 @@
       ],
       "exports": [
         "maintain_after_turn",
+        "extract_memory_candidates",
         "build_dream_prompt",
         "run_dream",
         "_build_dream_agent",
         "_maybe_run_auto_dream",
         "_memory_scope",
+        "_daily_log_count",
+        "_memory_status_count",
         "_recent_session_ids",
         "_hours_since_last_dream",
         "_dream_report_path",
         "_memory_snapshot",
         "_changed_files"
       ],
-      "totalLines": 263,
+      "totalLines": 295,
       "hasStructuralAnalysis": true
     },
     "src/memory/durable.py": {
       "filePath": "src/memory/durable.py",
-      "contentHash": "a195eefa2eb222f3bffac075e57fe8d3ace891b190189de25d1fc604dffb53d8",
-      "functions": [],
+      "contentHash": "c8215bbd5ad67e2249ceb955f3ef503dfcfbccae1392ebafdb155654845646fa",
+      "functions": [
+        {
+          "name": "_query_terms",
+          "params": [
+            "query"
+          ],
+          "returnType": "list[str]",
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
       "classes": [
+        {
+          "name": "MemoryRecord",
+          "methods": [],
+          "properties": [
+            "memory_id",
+            "memory_type",
+            "text",
+            "status",
+            "source_entry_id",
+            "source_session_id",
+            "source_run_id",
+            "evidence_refs",
+            "created_at",
+            "updated_at"
+          ],
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "MemoryHit",
+          "methods": [],
+          "properties": [
+            "memory_id",
+            "memory_type",
+            "text",
+            "score",
+            "matched_terms",
+            "source_entry_id"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
         {
           "name": "DurableMemoryStore",
           "methods": [
             "__init__",
             "add",
+            "append_candidate",
             "append_daily_log",
             "retrieve",
+            "_records",
             "promote_from_turn",
             "consolidate_daily_logs",
             "_all_notes",
@@ -3493,7 +5275,7 @@
             "topics_dir"
           ],
           "exported": true,
-          "lineCount": 157
+          "lineCount": 195
         }
       ],
       "imports": [
@@ -3507,6 +5289,19 @@
           "source": "re",
           "specifiers": [
             "re"
+          ]
+        },
+        {
+          "source": "uuid",
+          "specifiers": [
+            "uuid"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "asdict"
           ]
         },
         {
@@ -3538,14 +5333,17 @@
         }
       ],
       "exports": [
+        "_query_terms",
+        "MemoryRecord",
+        "MemoryHit",
         "DurableMemoryStore"
       ],
-      "totalLines": 192,
+      "totalLines": 265,
       "hasStructuralAnalysis": true
     },
     "src/memory/journal.py": {
       "filePath": "src/memory/journal.py",
-      "contentHash": "069e847edc389b6880d3a4429d23da33d7e4bb47193614d77df45830191fd101",
+      "contentHash": "99b77fd25b4b7e0a561a05a813a05273ad407d4cb8a84710393b5ca4a4a805eb",
       "functions": [
         {
           "name": "ensure_memory_dir",
@@ -3579,6 +5377,25 @@
           "lineCount": 9
         },
         {
+          "name": "append_structured_daily_log",
+          "params": [
+            "root",
+            "entry"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "iter_structured_daily_logs",
+          "params": [
+            "root"
+          ],
+          "returnType": "list[dict]",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
           "name": "iter_daily_log_entries",
           "params": [
             "root"
@@ -3598,6 +5415,18 @@
           ]
         },
         {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "uuid",
+          "specifiers": [
+            "uuid"
+          ]
+        },
+        {
           "source": "pathlib",
           "specifiers": [
             "Path"
@@ -3608,14 +5437,16 @@
         "ensure_memory_dir",
         "daily_log_path",
         "append_to_daily_log",
+        "append_structured_daily_log",
+        "iter_structured_daily_logs",
         "iter_daily_log_entries"
       ],
-      "totalLines": 50,
+      "totalLines": 81,
       "hasStructuralAnalysis": true
     },
     "src/memory/retrieval.py": {
       "filePath": "src/memory/retrieval.py",
-      "contentHash": "6757a52a5aae7858ef083588b3a2f2ad3c24715640b4c38590067586fcfd4fa1",
+      "contentHash": "c537ac1b39177c67cdca4d2344acc5795d53dd9cdc1a63c84b7c75acce8988e9",
       "functions": [
         {
           "name": "retrieve_into_working_memory",
@@ -3624,9 +5455,9 @@
             "working_memory",
             "query"
           ],
-          "returnType": "list[str]",
+          "returnType": "list[dict]",
           "exported": true,
-          "lineCount": 4
+          "lineCount": 5
         }
       ],
       "classes": [],
@@ -3634,7 +5465,7 @@
       "exports": [
         "retrieve_into_working_memory"
       ],
-      "totalLines": 8,
+      "totalLines": 9,
       "hasStructuralAnalysis": true
     },
     "src/memory/safety.py": {
@@ -3661,7 +5492,7 @@
     },
     "src/memory/working.py": {
       "filePath": "src/memory/working.py",
-      "contentHash": "c729db46b03715aef071d32fe67de3fe0347f44372e04a2a263543bbd9716585",
+      "contentHash": "5e36e498affce0b9d1f67151b615c7a280b64de1ff31b86e5053c32f0ddd3a91",
       "functions": [
         {
           "name": "_read_file_counts_from_dict",
@@ -3729,7 +5560,6 @@
           ],
           "properties": [
             "workspace_root",
-            "task_goal",
             "constraints",
             "recent_files",
             "file_freshness",
@@ -3747,7 +5577,7 @@
             "runtime_state"
           ],
           "exported": true,
-          "lineCount": 213
+          "lineCount": 211
         }
       ],
       "imports": [
@@ -3779,7 +5609,7 @@
         "_file_reads_from_dict",
         "_head_tail_summary"
       ],
-      "totalLines": 294,
+      "totalLines": 292,
       "hasStructuralAnalysis": true
     },
     "src/policy/__init__.py": {
@@ -4119,7 +5949,7 @@
     },
     "src/policy/tool_profiles.py": {
       "filePath": "src/policy/tool_profiles.py",
-      "contentHash": "3755546b36410d70a0d3f7afb49d7af86fda2d678cb525434ab1609fb26dc487",
+      "contentHash": "403dde173ca215c14602991bda1b6073b3b73ca1afd3e57e81f84c5194057649",
       "functions": [
         {
           "name": "build_tool_profiles",
@@ -4128,7 +5958,7 @@
           ],
           "returnType": "dict[str, ToolSetProfile]",
           "exported": true,
-          "lineCount": 15
+          "lineCount": 18
         }
       ],
       "classes": [
@@ -4163,7 +5993,7 @@
         "ToolSetProfile",
         "build_tool_profiles"
       ],
-      "totalLines": 34,
+      "totalLines": 37,
       "hasStructuralAnalysis": true
     },
     "src/policy/tool_rules.py": {
@@ -4345,7 +6175,7 @@
     },
     "src/providers/deepseek.py": {
       "filePath": "src/providers/deepseek.py",
-      "contentHash": "b6ec3cf68387defab9fc62bc7910afd8ce2a78c496f6ed91257cd95b1da6acb9",
+      "contentHash": "eaac9cfa1957a39691aac8d66ba40e948dcd1e078b6d7e4908a1f28ada7f2da3",
       "functions": [],
       "classes": [
         {
@@ -4354,6 +6184,8 @@
             "__init__",
             "complete",
             "complete_summary",
+            "_compile_summary_request",
+            "_extract_response_text",
             "request_preview",
             "_compile_request",
             "_compile_input",
@@ -4364,7 +6196,7 @@
           ],
           "properties": [],
           "exported": true,
-          "lineCount": 149
+          "lineCount": 167
         }
       ],
       "imports": [
@@ -4396,6 +6228,12 @@
           "source": "src.context.result",
           "specifiers": [
             "ContextResult"
+          ]
+        },
+        {
+          "source": "src.context.summary",
+          "specifiers": [
+            "COMPACT_SUMMARY_RESPONSE_FORMAT"
           ]
         },
         {
@@ -4422,12 +6260,12 @@
       "exports": [
         "DeepSeekClient"
       ],
-      "totalLines": 163,
+      "totalLines": 182,
       "hasStructuralAnalysis": true
     },
     "src/providers/minimax.py": {
       "filePath": "src/providers/minimax.py",
-      "contentHash": "87812ae4e0a802e3ecee5c65111618e44a94e1a4ed415e461d2e74f093202c3e",
+      "contentHash": "c9db68b6a2fd7648938f00bcbbe6ff1a01af64333b1c77cd863276c2203a39fd",
       "functions": [],
       "classes": [
         {
@@ -4435,11 +6273,12 @@
           "methods": [
             "__init__",
             "complete",
-            "_compile_request"
+            "_compile_request",
+            "_compile_summary_request"
           ],
           "properties": [],
           "exported": true,
-          "lineCount": 55
+          "lineCount": 69
         }
       ],
       "imports": [
@@ -4471,6 +6310,12 @@
           "source": "src.context.result",
           "specifiers": [
             "ContextResult"
+          ]
+        },
+        {
+          "source": "src.context.summary",
+          "specifiers": [
+            "COMPACT_SUMMARY_RESPONSE_FORMAT"
           ]
         },
         {
@@ -4502,7 +6347,7 @@
       "exports": [
         "MiniMaxClient"
       ],
-      "totalLines": 70,
+      "totalLines": 85,
       "hasStructuralAnalysis": true
     },
     "src/providers/profiles.py": {
@@ -4750,8 +6595,19 @@
     },
     "src/runtime/agent.py": {
       "filePath": "src/runtime/agent.py",
-      "contentHash": "6b49d662c3f470b99e5b0dcadb7de2898d79f976a9227eb9a4ac961a44da5ec0",
-      "functions": [],
+      "contentHash": "1d68a16baba73dfc923979fb71d8ed108d32e4e8f87624741bf76d735f246ccd",
+      "functions": [
+        {
+          "name": "_safe_ratio",
+          "params": [
+            "numerator",
+            "denominator"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
       "classes": [
         {
           "name": "JCodeAgent",
@@ -4766,18 +6622,24 @@
             "todo_add",
             "todo_update",
             "todo_list",
+            "todo_delete",
+            "todo_archive",
             "ask_user",
             "ask",
+            "_timed_component",
+            "_finish_harness_run_timing",
             "_print_runtime_error",
             "_ask_loop",
             "resume",
             "abort",
             "refresh_prefix",
             "_begin_run",
+            "_emit_session_continuation_events",
             "_build_context",
             "_context_event_payload",
             "_emit_compact_context_events",
             "_call_model",
+            "_context_step_id",
             "_combined_response_text",
             "_response_status_code",
             "_is_retryable_provider_error",
@@ -4793,6 +6655,7 @@
             "_record_trace",
             "_append_history",
             "_artifact_source_files",
+            "mark_stale_file_evidence",
             "_mark_stale_file_evidence",
             "_create_checkpoint",
             "_finish_run",
@@ -4824,7 +6687,7 @@
             "abort_requested"
           ],
           "exported": true,
-          "lineCount": 937
+          "lineCount": 1027
         }
       ],
       "imports": [
@@ -4859,6 +6722,12 @@
           ]
         },
         {
+          "source": "contextlib",
+          "specifiers": [
+            "contextmanager"
+          ]
+        },
+        {
           "source": "pathlib",
           "specifiers": [
             "Path"
@@ -4890,9 +6759,21 @@
           ]
         },
         {
+          "source": "src.evidence.timing",
+          "specifiers": [
+            "HarnessTiming"
+          ]
+        },
+        {
           "source": "src.memory.consolidation",
           "specifiers": [
             "maintain_after_turn"
+          ]
+        },
+        {
+          "source": "src.memory.retrieval",
+          "specifiers": [
+            "retrieve_into_working_memory"
           ]
         },
         {
@@ -4929,6 +6810,13 @@
           ]
         },
         {
+          "source": "src.workers.roles",
+          "specifiers": [
+            "get_role_spec",
+            "plan_mode_allowed_roles"
+          ]
+        },
+        {
           "source": "src.runtime.transitions",
           "specifiers": [
             "ABORTED",
@@ -4960,6 +6848,7 @@
         {
           "source": "src.state.resume",
           "specifiers": [
+            "build_execution_fingerprint",
             "build_resume_context"
           ]
         },
@@ -4989,9 +6878,10 @@
         }
       ],
       "exports": [
+        "_safe_ratio",
         "JCodeAgent"
       ],
-      "totalLines": 995,
+      "totalLines": 1094,
       "hasStructuralAnalysis": true
     },
     "src/runtime/errors.py": {
@@ -5082,7 +6972,7 @@
     },
     "src/runtime/final_readiness.py": {
       "filePath": "src/runtime/final_readiness.py",
-      "contentHash": "ae8b3daca96347a39bf7d1ae437661f71a626ae905b244dfa8a796e744a5bbf7",
+      "contentHash": "68f64b185f2ad15d6d7d0ee69f52dd1e0e71de4396f3d21bf1992b0a4d9122b8",
       "functions": [
         {
           "name": "build_final_readiness",
@@ -5175,7 +7065,7 @@
     },
     "src/runtime/plan.py": {
       "filePath": "src/runtime/plan.py",
-      "contentHash": "97c1028026946b0a0d21b24c68e8a736fa27a336279002534f4a880f2fcc44d0",
+      "contentHash": "c45ab696d29213852fd77834981f8102a8e4f4bddd5c43e5dcfdef1a714ba982",
       "functions": [
         {
           "name": "slugify",
@@ -5307,13 +7197,14 @@
     },
     "src/state/checkpoint.py": {
       "filePath": "src/state/checkpoint.py",
-      "contentHash": "d6990a76493f58f499200d4c77c40eacec700ed5edde3cbad0fad2eba6ed6f5e",
+      "contentHash": "71b59024c9da3e547b567cbd8f671e72fd4338e68adfda6e48ef3b8e86ec9332",
       "functions": [
         {
           "name": "evaluate_checkpoint_path",
           "params": [
             "path",
-            "workspace"
+            "workspace",
+            "workspace_baseline"
           ],
           "returnType": "tuple[str, dict]",
           "exported": true,
@@ -5323,7 +7214,8 @@
           "name": "evaluate_checkpoint_data",
           "params": [
             "data",
-            "workspace"
+            "workspace",
+            "workspace_baseline"
           ],
           "returnType": "tuple[str, dict]",
           "exported": true,
@@ -5353,7 +7245,7 @@
             "path"
           ],
           "exported": true,
-          "lineCount": 54
+          "lineCount": 58
         }
       ],
       "imports": [
@@ -5389,7 +7281,7 @@
         "evaluate_checkpoint_data",
         "_stale_paths"
       ],
-      "totalLines": 113,
+      "totalLines": 117,
       "hasStructuralAnalysis": true
     },
     "src/state/history.py": {
@@ -5468,8 +7360,28 @@
     },
     "src/state/resume.py": {
       "filePath": "src/state/resume.py",
-      "contentHash": "c66f8e908ececa4b6912f34a4884a00a8adf001a9cce1fa19cfceebe03bcd7f6",
+      "contentHash": "9a57917f02b809ffa5a98399033bcd9882782dcd281f4e25eba934661bf7c420",
       "functions": [
+        {
+          "name": "build_execution_fingerprint",
+          "params": [
+            "model_snapshot",
+            "tool_definitions"
+          ],
+          "returnType": "dict",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "_changed_paths",
+          "params": [
+            "saved",
+            "current"
+          ],
+          "returnType": "list[str]",
+          "exported": true,
+          "lineCount": 4
+        },
         {
           "name": "build_resume_context",
           "params": [
@@ -5477,11 +7389,12 @@
             "session_store",
             "run_store",
             "workspace",
-            "resume_requested"
+            "resume_requested",
+            "execution_fingerprint"
           ],
           "returnType": "dict",
           "exported": true,
-          "lineCount": 26
+          "lineCount": 47
         }
       ],
       "classes": [],
@@ -5493,9 +7406,21 @@
           ]
         },
         {
+          "source": "hashlib",
+          "specifiers": [
+            "hashlib"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
           "source": "src.state.checkpoint",
           "specifiers": [
-            "evaluate_checkpoint_path"
+            "evaluate_checkpoint_data"
           ]
         },
         {
@@ -5508,14 +7433,16 @@
         }
       ],
       "exports": [
+        "build_execution_fingerprint",
+        "_changed_paths",
         "build_resume_context"
       ],
-      "totalLines": 35,
+      "totalLines": 71,
       "hasStructuralAnalysis": true
     },
     "src/state/session.py": {
       "filePath": "src/state/session.py",
-      "contentHash": "e2d2dc9fb3b35f5a8f18ba8dfdd9a8944da1179022c6e11a93b99b214e82ad33",
+      "contentHash": "c404f5a899c8136a9a3525433e504d341d9a3be8fc5393fa5795620480103e2c",
       "functions": [],
       "classes": [
         {
@@ -5692,7 +7619,7 @@
     },
     "src/state/todo.py": {
       "filePath": "src/state/todo.py",
-      "contentHash": "56299e2df9ba9b1ee8bdb8885d55745314b3b4a8e181fc1f186ba9ad53a3194e",
+      "contentHash": "8075a9321dabfaeb27eb11edbbba0023212ce4232722a6d18b02016bef60aa11",
       "functions": [],
       "classes": [
         {
@@ -5707,10 +7634,12 @@
             "priority",
             "note",
             "created_at",
-            "updated_at"
+            "updated_at",
+            "archived",
+            "archived_at"
           ],
           "exported": true,
-          "lineCount": 11
+          "lineCount": 13
         },
         {
           "name": "TodoLedger",
@@ -5719,6 +7648,8 @@
             "to_dict",
             "add",
             "update",
+            "delete",
+            "archive",
             "get",
             "list_items",
             "render_list"
@@ -5728,7 +7659,7 @@
             "next_index"
           ],
           "exported": true,
-          "lineCount": 102
+          "lineCount": 126
         }
       ],
       "imports": [
@@ -5750,12 +7681,12 @@
         "TodoItem",
         "TodoLedger"
       ],
-      "totalLines": 125,
+      "totalLines": 153,
       "hasStructuralAnalysis": true
     },
     "src/state/workspace.py": {
       "filePath": "src/state/workspace.py",
-      "contentHash": "e1ec54392d1d1f06555e9920e51e0b6fbc1deaf04ed8a7ead6280fa36eb85854",
+      "contentHash": "b395eb35ce5c73014eaea3ae074767f68e3c4448637112859dbf2e0b5697d178",
       "functions": [
         {
           "name": "now_iso",
@@ -5802,7 +7733,11 @@
             "resolve_path",
             "relpath",
             "fingerprint",
+            "fingerprint_from_baseline",
+            "baseline",
+            "_git_value",
             "snapshot",
+            "changed_paths",
             "runtime_text",
             "stable_docs_text",
             "project_rules_text",
@@ -5820,7 +7755,7 @@
             "project_docs"
           ],
           "exported": true,
-          "lineCount": 130
+          "lineCount": 152
         }
       ],
       "imports": [
@@ -5828,6 +7763,12 @@
           "source": "hashlib",
           "specifiers": [
             "hashlib"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
           ]
         },
         {
@@ -5876,7 +7817,7 @@
         "_clip",
         "_default_branch"
       ],
-      "totalLines": 181,
+      "totalLines": 204,
       "hasStructuralAnalysis": true
     },
     "src/tools/__init__.py": {
@@ -6009,7 +7950,7 @@
     },
     "src/tools/executor.py": {
       "filePath": "src/tools/executor.py",
-      "contentHash": "d7a6c9a815d453fe309f17399a39b75ebd2ede30fda42c81d0b8ee5999973a80",
+      "contentHash": "4f0b52e665f0d6a0446a4c7d9dabc8503e062b76e3d00587f0c564bfd2410347",
       "functions": [
         {
           "name": "_side_effect_notice",
@@ -6044,7 +7985,7 @@
             "redactor"
           ],
           "exported": true,
-          "lineCount": 291
+          "lineCount": 306
         }
       ],
       "imports": [
@@ -6092,7 +8033,7 @@
         "ToolExecutor",
         "_side_effect_notice"
       ],
-      "totalLines": 325,
+      "totalLines": 340,
       "hasStructuralAnalysis": true
     },
     "src/tools/plan.py": {
@@ -6138,14 +8079,14 @@
     },
     "src/tools/registry.py": {
       "filePath": "src/tools/registry.py",
-      "contentHash": "a8ab017b5fb0e7a79000a4e63a061908a8c5d6dbf940238aefddeae14dbff01f",
+      "contentHash": "eea3d618baf769f73cb4926549fccf1e5d330e5eb332ec323d267ccb818efdff",
       "functions": [
         {
           "name": "build_default_registry",
           "params": [],
           "returnType": "ToolRegistry",
           "exported": true,
-          "lineCount": 18
+          "lineCount": 20
         }
       ],
       "classes": [
@@ -6198,6 +8139,8 @@
             "SendSubagentMessageArgs",
             "SpawnSubagentArgs",
             "TodoAddArgs",
+            "TodoArchiveArgs",
+            "TodoDeleteArgs",
             "TodoListArgs",
             "TodoUpdateArgs",
             "WaitSubagentArgs",
@@ -6222,6 +8165,8 @@
           "source": "src.tools.todos",
           "specifiers": [
             "tool_todo_add",
+            "tool_todo_archive",
+            "tool_todo_delete",
             "tool_todo_list",
             "tool_todo_update"
           ]
@@ -6247,12 +8192,12 @@
         "ToolRegistry",
         "build_default_registry"
       ],
-      "totalLines": 81,
+      "totalLines": 85,
       "hasStructuralAnalysis": true
     },
     "src/tools/schemas.py": {
       "filePath": "src/tools/schemas.py",
-      "contentHash": "2b221f13f4ebc635ebf0dd06b617ce142ea3dc5da8b1731cda1f82be1799ad79",
+      "contentHash": "df7cf86dd9259afdad606eae4b29136556b884121e630afa0205b5b347d32c08",
       "functions": [],
       "classes": [
         {
@@ -6353,6 +8298,24 @@
           "lineCount": 2
         },
         {
+          "name": "TodoDeleteArgs",
+          "methods": [],
+          "properties": [
+            "todo_id"
+          ],
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "TodoArchiveArgs",
+          "methods": [],
+          "properties": [
+            "todo_id"
+          ],
+          "exported": true,
+          "lineCount": 2
+        },
+        {
           "name": "AskUserArgs",
           "methods": [],
           "properties": [
@@ -6381,14 +8344,17 @@
         },
         {
           "name": "SpawnSubagentArgs",
-          "methods": [],
+          "methods": [
+            "validate_acceptance_criteria"
+          ],
           "properties": [
             "prompt",
-            "subagent_type",
+            "role",
+            "acceptance_criteria",
             "write_scope"
           ],
           "exported": true,
-          "lineCount": 4
+          "lineCount": 15
         },
         {
           "name": "SendSubagentMessageArgs",
@@ -6412,10 +8378,18 @@
       ],
       "imports": [
         {
+          "source": "typing",
+          "specifiers": [
+            "Literal"
+          ]
+        },
+        {
           "source": "pydantic",
           "specifiers": [
             "BaseModel",
-            "Field"
+            "ConfigDict",
+            "Field",
+            "field_validator"
           ]
         }
       ],
@@ -6429,6 +8403,8 @@
         "TodoAddArgs",
         "TodoUpdateArgs",
         "TodoListArgs",
+        "TodoDeleteArgs",
+        "TodoArchiveArgs",
         "AskUserArgs",
         "EnterPlanModeArgs",
         "ExitPlanModeArgs",
@@ -6436,7 +8412,7 @@
         "SendSubagentMessageArgs",
         "WaitSubagentArgs"
       ],
-      "totalLines": 87,
+      "totalLines": 108,
       "hasStructuralAnalysis": true
     },
     "src/tools/shell.py": {
@@ -6558,7 +8534,7 @@
     },
     "src/tools/todos.py": {
       "filePath": "src/tools/todos.py",
-      "contentHash": "b5b0ade045b8f05c830f468e6f9933e461afbdf6b965308ea6c640472d5a9498",
+      "contentHash": "524956154a0d848bb2b8a67f6f6bf82dbeebcec728cefc1d5357ed9dc39af35a",
       "functions": [
         {
           "name": "tool_todo_add",
@@ -6589,6 +8565,26 @@
           "returnType": "ToolResult",
           "exported": true,
           "lineCount": 2
+        },
+        {
+          "name": "tool_todo_delete",
+          "params": [
+            "workspace",
+            "args"
+          ],
+          "returnType": "ToolResult",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "tool_todo_archive",
+          "params": [
+            "workspace",
+            "args"
+          ],
+          "returnType": "ToolResult",
+          "exported": true,
+          "lineCount": 2
         }
       ],
       "classes": [],
@@ -6603,14 +8599,16 @@
       "exports": [
         "tool_todo_add",
         "tool_todo_update",
-        "tool_todo_list"
+        "tool_todo_list",
+        "tool_todo_delete",
+        "tool_todo_archive"
       ],
-      "totalLines": 16,
+      "totalLines": 24,
       "hasStructuralAnalysis": true
     },
     "src/tools/workspace.py": {
       "filePath": "src/tools/workspace.py",
-      "contentHash": "bca0e4cfea34900fe3a2888bda584eab5534192b8c28c06224b321c1be2f43a2",
+      "contentHash": "fd164066e735e4b6e5d078f1bf203ae8ccd1602ceabc20ae1d64b66421bd8a25",
       "functions": [
         {
           "name": "freshness",
@@ -6622,6 +8620,25 @@
           "lineCount": 3
         },
         {
+          "name": "_newline_style",
+          "params": [
+            "text"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "_normalize_newlines",
+          "params": [
+            "text",
+            "style"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
           "name": "read_file",
           "params": [
             "workspace",
@@ -6630,7 +8647,7 @@
           ],
           "returnType": "ToolResult",
           "exported": true,
-          "lineCount": 35
+          "lineCount": 41
         },
         {
           "name": "write_file",
@@ -6650,7 +8667,7 @@
           ],
           "returnType": "ToolResult",
           "exported": true,
-          "lineCount": 11
+          "lineCount": 26
         },
         {
           "name": "list_files",
@@ -6690,13 +8707,15 @@
       ],
       "exports": [
         "freshness",
+        "_newline_style",
+        "_normalize_newlines",
         "read_file",
         "write_file",
         "apply_text_patch",
         "list_files",
         "search"
       ],
-      "totalLines": 102,
+      "totalLines": 143,
       "hasStructuralAnalysis": true
     },
     "src/workers/__init__.py": {
@@ -6743,18 +8762,8 @@
     },
     "src/workers/manager.py": {
       "filePath": "src/workers/manager.py",
-      "contentHash": "9c2322c54f46abf5a5ba6ea9607e55d51458d2fbac81016c0fbbdd0719476cf1",
-      "functions": [
-        {
-          "name": "_clean_subagent_type",
-          "params": [
-            "value"
-          ],
-          "returnType": "str",
-          "exported": true,
-          "lineCount": 5
-        }
-      ],
+      "contentHash": "9f251752d51789f6f616eb360b76d2bbe67bf9f07ee9902b83570de09b0ff2e6",
+      "functions": [],
       "classes": [
         {
           "name": "WorkerManager",
@@ -6764,7 +8773,10 @@
             "spawn",
             "send",
             "wait",
-            "run_tool"
+            "run_tool",
+            "_result_tool",
+            "_write_state",
+            "_load_persisted_workers"
           ],
           "properties": [
             "workspace",
@@ -6776,7 +8788,7 @@
             "workers"
           ],
           "exported": true,
-          "lineCount": 93
+          "lineCount": 144
         }
       ],
       "imports": [
@@ -6819,22 +8831,40 @@
           ]
         },
         {
+          "source": "src.workers.roles",
+          "specifiers": [
+            "get_role_spec",
+            "plan_mode_allowed_roles"
+          ]
+        },
+        {
           "source": "src.workers.runtime",
           "specifiers": [
             "WorkerRuntime"
           ]
+        },
+        {
+          "source": "src.workers.runner",
+          "specifiers": [
+            "SubagentRunner"
+          ]
+        },
+        {
+          "source": "src.workers.result",
+          "specifiers": [
+            "WorkerResult"
+          ]
         }
       ],
       "exports": [
-        "WorkerManager",
-        "_clean_subagent_type"
+        "WorkerManager"
       ],
-      "totalLines": 120,
+      "totalLines": 167,
       "hasStructuralAnalysis": true
     },
     "src/workers/result.py": {
       "filePath": "src/workers/result.py",
-      "contentHash": "c5d13e980cc5fd80abbf1a795bb3784b56518d91c3f516464972420083ed714a",
+      "contentHash": "c22e43ec71fa4b1c697557c885cb93d9b624a27200020c748e9b126a761b47a1",
       "functions": [],
       "classes": [
         {
@@ -6842,11 +8872,78 @@
           "methods": [],
           "properties": [
             "worker_id",
+            "role",
             "status",
-            "text"
+            "text",
+            "changed_files",
+            "artifacts",
+            "verification",
+            "tool_failures",
+            "stop_reason",
+            "steps",
+            "model_profile"
           ],
           "exported": true,
-          "lineCount": 4
+          "lineCount": 12
+        }
+      ],
+      "imports": [
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        }
+      ],
+      "exports": [
+        "WorkerResult"
+      ],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
+    },
+    "src/workers/roles.py": {
+      "filePath": "src/workers/roles.py",
+      "contentHash": "d2d28cf4a0ae1fbaaae00e8cd185488dcfe06bb517020612346641a07105eee6",
+      "functions": [
+        {
+          "name": "get_role_spec",
+          "params": [
+            "role"
+          ],
+          "returnType": "SubagentRoleSpec",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "plan_mode_allowed_roles",
+          "params": [],
+          "returnType": "frozenset[str]",
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [
+        {
+          "name": "SubagentRoleSpec",
+          "methods": [],
+          "properties": [
+            "role_id",
+            "display_name",
+            "system_instruction",
+            "tool_profile",
+            "allow_write",
+            "allow_shell",
+            "allow_nested_spawn",
+            "output_contract"
+          ],
+          "exported": true,
+          "lineCount": 9
         }
       ],
       "imports": [
@@ -6858,14 +8955,132 @@
         }
       ],
       "exports": [
-        "WorkerResult"
+        "SubagentRoleSpec",
+        "get_role_spec",
+        "plan_mode_allowed_roles"
       ],
-      "totalLines": 11,
+      "totalLines": 84,
+      "hasStructuralAnalysis": true
+    },
+    "src/workers/runner.py": {
+      "filePath": "src/workers/runner.py",
+      "contentHash": "446d86f96ff225308e07e930f34d015c156f65ab381944e66a42467365da6ffd",
+      "functions": [],
+      "classes": [
+        {
+          "name": "SubagentRunner",
+          "methods": [
+            "__init__",
+            "run",
+            "_run_loop",
+            "_execute_tool",
+            "_record_model",
+            "_persist_state",
+            "_result",
+            "_task_text",
+            "_write_worker_state",
+            "_emit"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 235
+        }
+      ],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "src.context.manager",
+          "specifiers": [
+            "ContextManager"
+          ]
+        },
+        {
+          "source": "src.evidence.store",
+          "specifiers": [
+            "RunStore"
+          ]
+        },
+        {
+          "source": "src.evidence.tool_artifacts",
+          "specifiers": [
+            "prepare_tool_result_observation"
+          ]
+        },
+        {
+          "source": "src.memory.durable",
+          "specifiers": [
+            "DurableMemoryStore"
+          ]
+        },
+        {
+          "source": "src.memory.working",
+          "specifiers": [
+            "WorkingMemory"
+          ]
+        },
+        {
+          "source": "src.providers.continuation",
+          "specifiers": [
+            "ProviderContinuation"
+          ]
+        },
+        {
+          "source": "src.state.checkpoint",
+          "specifiers": [
+            "CheckpointManager"
+          ]
+        },
+        {
+          "source": "src.state.history",
+          "specifiers": [
+            "append_history"
+          ]
+        },
+        {
+          "source": "src.state.task",
+          "specifiers": [
+            "TaskState"
+          ]
+        },
+        {
+          "source": "src.tools.base",
+          "specifiers": [
+            "ToolResult"
+          ]
+        },
+        {
+          "source": "src.workers.result",
+          "specifiers": [
+            "WorkerResult"
+          ]
+        },
+        {
+          "source": "src.workers.roles",
+          "specifiers": [
+            "SubagentRoleSpec"
+          ]
+        }
+      ],
+      "exports": [
+        "SubagentRunner"
+      ],
+      "totalLines": 255,
       "hasStructuralAnalysis": true
     },
     "src/workers/runtime.py": {
       "filePath": "src/workers/runtime.py",
-      "contentHash": "3cf4d92518e9881748cbe103c0ea442f96eb1f21d937f0aac18cf4b8a8c01200",
+      "contentHash": "237eb853ba11f6aff1d901573716f4b7fc050049db003c96cb7af7be743bc36b",
       "functions": [],
       "classes": [
         {
@@ -6873,23 +9088,32 @@
           "methods": [
             "__init__",
             "send",
-            "run"
+            "to_dict"
           ],
           "properties": [
             "worker_id",
+            "role",
             "prompt",
-            "subagent_type",
+            "acceptance_criteria",
             "write_scope",
+            "model_profile",
+            "parent_session_id",
+            "parent_run_id",
             "messages",
             "status",
-            "result",
-            "model_profile"
+            "result"
           ],
           "exported": true,
-          "lineCount": 30
+          "lineCount": 58
         }
       ],
       "imports": [
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
         {
           "source": "src.workers.result",
           "specifiers": [
@@ -6900,7 +9124,7 @@
       "exports": [
         "WorkerRuntime"
       ],
-      "totalLines": 36,
+      "totalLines": 66,
       "hasStructuralAnalysis": true
     },
     "test/test_app_config.py": {
@@ -7256,7 +9480,7 @@
     },
     "test/test_compact_summary.py": {
       "filePath": "test/test_compact_summary.py",
-      "contentHash": "3cc0c70b53fba753ea3735eac208cc8feecbe9b500e7e5a3c59cd230ef870417",
+      "contentHash": "c06256499b2f0fb71ca389d9fdc52e6387d31dbb30d4f80b1efe301624e7e542",
       "functions": [
         {
           "name": "profile",
@@ -7268,7 +9492,7 @@
           "name": "test_summary_schema_and_deterministic_metadata_only",
           "params": [],
           "exported": true,
-          "lineCount": 5
+          "lineCount": 6
         },
         {
           "name": "test_summary_request_has_no_tools_or_working_memory",
@@ -7289,6 +9513,12 @@
           "params": [],
           "exported": true,
           "lineCount": 7
+        },
+        {
+          "name": "test_old_summary_schema_is_rejected",
+          "params": [],
+          "exported": true,
+          "lineCount": 8
         }
       ],
       "classes": [],
@@ -7326,14 +9556,15 @@
         "test_summary_schema_and_deterministic_metadata_only",
         "test_summary_request_has_no_tools_or_working_memory",
         "test_summary_model_retries_twice_then_fallback",
-        "test_invalid_summary_json_is_rejected"
+        "test_invalid_summary_json_is_rejected",
+        "test_old_summary_schema_is_rejected"
       ],
-      "totalLines": 46,
+      "totalLines": 57,
       "hasStructuralAnalysis": true
     },
     "test/test_context_budget.py": {
       "filePath": "test/test_context_budget.py",
-      "contentHash": "505a9224dfddf094c4560ba81eec20fe4926f43b2caa5d6885d8d38b70c52d26",
+      "contentHash": "c2823eb62f4b9e1bdefe88b0aa6602dc37842300c8c34132d1e04d11a88dfb84",
       "functions": [
         {
           "name": "test_empty_continuation_occupants_are_zero",
@@ -7368,12 +9599,12 @@
           "lineCount": 19
         },
         {
-          "name": "test_internal_continuation_instruction_is_sent_without_replacing_goal",
+          "name": "test_internal_continuation_instruction_is_sent_after_history",
           "params": [
             "tmp_path"
           ],
           "exported": true,
-          "lineCount": 9
+          "lineCount": 10
         }
       ],
       "classes": [],
@@ -7427,14 +9658,14 @@
         "test_serialized_input_occupancies_partition_actual_input",
         "test_candidate_packing_is_stable_and_rejects_oversized_optional_items",
         "test_list_files_window_merges_last_pair_and_removes_orphan",
-        "test_internal_continuation_instruction_is_sent_without_replacing_goal"
+        "test_internal_continuation_instruction_is_sent_after_history"
       ],
-      "totalLines": 71,
+      "totalLines": 72,
       "hasStructuralAnalysis": true
     },
     "test/test_context_manager.py": {
       "filePath": "test/test_context_manager.py",
-      "contentHash": "5be0732726fea78e2abe3bd20a444a0f7a1486d5c6f9384f554b3dae6a3b5f8f",
+      "contentHash": "8d4808b25c6b24321dca7264291aa59fedbd611dffaf069ac84a963ccee76a04",
       "functions": [
         {
           "name": "manager",
@@ -7453,12 +9684,12 @@
           "lineCount": 4
         },
         {
-          "name": "test_task_goal_is_full_request_and_history",
+          "name": "test_current_request_is_only_sent_through_history",
           "params": [
             "tmp_path"
           ],
           "exported": true,
-          "lineCount": 8
+          "lineCount": 9
         },
         {
           "name": "test_build_does_not_duplicate_current_user_event",
@@ -7483,12 +9714,28 @@
           "lineCount": 6
         },
         {
+          "name": "test_pressure_uses_provider_input_not_unsent_history_metadata",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 19
+        },
+        {
           "name": "test_mandatory_capacity_failure",
           "params": [
             "tmp_path"
           ],
           "exported": true,
           "lineCount": 3
+        },
+        {
+          "name": "test_final_capacity_failure_does_not_delete_old_history",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 12
         },
         {
           "name": "test_level_windows",
@@ -7542,6 +9789,7 @@
         {
           "source": "src.runtime.errors",
           "specifiers": [
+            "FinalContextExceedsWindowError",
             "MandatoryContextExceedsWindowError"
           ]
         },
@@ -7561,20 +9809,22 @@
       "exports": [
         "manager",
         "test_pressure_boundaries",
-        "test_task_goal_is_full_request_and_history",
+        "test_current_request_is_only_sent_through_history",
         "test_build_does_not_duplicate_current_user_event",
         "test_compaction_history_keeps_only_latest_summary",
         "test_provider_snapshot_is_audited_exactly",
+        "test_pressure_uses_provider_input_not_unsent_history_metadata",
         "test_mandatory_capacity_failure",
+        "test_final_capacity_failure_does_not_delete_old_history",
         "test_level_windows",
         "test_compact_summary_turn_id_handles_short_history"
       ],
-      "totalLines": 85,
+      "totalLines": 121,
       "hasStructuralAnalysis": true
     },
     "test/test_deepseek_provider.py": {
       "filePath": "test/test_deepseek_provider.py",
-      "contentHash": "75b2eb8b78428fdaf025f3dcc41dac784c1adf0d90d797371119801a078e22f4",
+      "contentHash": "d1827ea6d984a24d67ea1812575f135558e583d6f2fd215ce83bff7c7d3ca882",
       "functions": [
         {
           "name": "profile",
@@ -7608,6 +9858,14 @@
           ],
           "exported": true,
           "lineCount": 4
+        },
+        {
+          "name": "test_summary_request_uses_schema_and_reads_message_content",
+          "params": [
+            "monkeypatch"
+          ],
+          "exported": true,
+          "lineCount": 29
         }
       ],
       "classes": [
@@ -7673,9 +9931,10 @@
         "profile",
         "context",
         "test_preview_and_payload_share_provider_snapshot",
-        "test_missing_api_key_uses_local_token_count"
+        "test_missing_api_key_uses_local_token_count",
+        "test_summary_request_uses_schema_and_reads_message_content"
       ],
-      "totalLines": 45,
+      "totalLines": 76,
       "hasStructuralAnalysis": true
     },
     "test/test_final_readiness.py": {
@@ -7764,9 +10023,84 @@
       "totalLines": 85,
       "hasStructuralAnalysis": true
     },
+    "test/test_memory_closed_loop.py": {
+      "filePath": "test/test_memory_closed_loop.py",
+      "contentHash": "88d0de7fe7b4c26a988e279641588ae87da7784ab610ad2b3bfcb5f46f90d7e8",
+      "functions": [
+        {
+          "name": "test_explicit_memory_is_promoted_and_retrieved",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "test_non_explicit_text_does_not_create_candidate",
+          "params": [],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "test_duplicate_and_conflict_are_explicit",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 10
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "src.memory.consolidation",
+          "specifiers": [
+            "extract_memory_candidates",
+            "maintain_after_turn"
+          ]
+        },
+        {
+          "source": "src.memory.durable",
+          "specifiers": [
+            "DurableMemoryStore"
+          ]
+        },
+        {
+          "source": "src.memory.journal",
+          "specifiers": [
+            "iter_structured_daily_logs"
+          ]
+        },
+        {
+          "source": "src.memory.retrieval",
+          "specifiers": [
+            "retrieve_into_working_memory"
+          ]
+        },
+        {
+          "source": "src.memory.working",
+          "specifiers": [
+            "WorkingMemory"
+          ]
+        }
+      ],
+      "exports": [
+        "test_explicit_memory_is_promoted_and_retrieved",
+        "test_non_explicit_text_does_not_create_candidate",
+        "test_duplicate_and_conflict_are_explicit"
+      ],
+      "totalLines": 39,
+      "hasStructuralAnalysis": true
+    },
     "test/test_minimax_provider.py": {
       "filePath": "test/test_minimax_provider.py",
-      "contentHash": "3ca471f6014c013d6a823cb46c8ce34f0906d00bae2aabe095aa302ea865967c",
+      "contentHash": "1d0c58166213287170a6af63fedb46b6d3fdc7cfbc1e7bf0d028a73572316976",
       "functions": [
         {
           "name": "profile",
@@ -7780,6 +10114,12 @@
             "monkeypatch",
             "tmp_path"
           ],
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "test_minimax_summary_request_preserves_reasoning_and_schema",
+          "params": [],
           "exported": true,
           "lineCount": 10
         }
@@ -7845,9 +10185,10 @@
       "exports": [
         "FakeHttpResponse",
         "profile",
-        "test_minimax_payload_uses_snapshot"
+        "test_minimax_payload_uses_snapshot",
+        "test_minimax_summary_request_preserves_reasoning_and_schema"
       ],
-      "totalLines": 32,
+      "totalLines": 44,
       "hasStructuralAnalysis": true
     },
     "test/test_model_selection.py": {
@@ -7904,9 +10245,182 @@
       "totalLines": 44,
       "hasStructuralAnalysis": true
     },
+    "test/test_multiagent_roles.py": {
+      "filePath": "test/test_multiagent_roles.py",
+      "contentHash": "0a5a577640d1b078046c5abef0202849e965fd3897a8d78402afecf44015baad",
+      "functions": [
+        {
+          "name": "_build_manager",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "test_fixed_roles_have_explicit_capabilities",
+          "params": [],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "test_tester_profile_allows_shell_but_not_direct_writes",
+          "params": [],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "test_spawn_schema_requires_role_and_acceptance_criteria",
+          "params": [],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "test_old_subagent_type_is_not_accepted",
+          "params": [],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "test_tester_runner_records_existing_file_shell_side_effect",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 12
+        }
+      ],
+      "classes": [
+        {
+          "name": "_Redactor",
+          "methods": [
+            "redact"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_FakeClient",
+          "methods": [
+            "__init__",
+            "complete"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 14
+        }
+      ],
+      "imports": [
+        {
+          "source": "src.policy.tool_profiles",
+          "specifiers": [
+            "build_tool_profiles"
+          ]
+        },
+        {
+          "source": "src.policy.call_guard",
+          "specifiers": [
+            "CallGuard"
+          ]
+        },
+        {
+          "source": "src.policy.permissions",
+          "specifiers": [
+            "PermissionChecker"
+          ]
+        },
+        {
+          "source": "src.policy.sandbox",
+          "specifiers": [
+            "SandboxPolicy"
+          ]
+        },
+        {
+          "source": "src.policy.tool_rules",
+          "specifiers": [
+            "ToolPolicyChecker"
+          ]
+        },
+        {
+          "source": "src.providers.base",
+          "specifiers": [
+            "ModelResponse",
+            "ModelToolCall"
+          ]
+        },
+        {
+          "source": "src.providers.profiles",
+          "specifiers": [
+            "ModelProfile"
+          ]
+        },
+        {
+          "source": "src.providers.registry",
+          "specifiers": [
+            "ModelRegistry"
+          ]
+        },
+        {
+          "source": "src.providers.router",
+          "specifiers": [
+            "ModelRouter"
+          ]
+        },
+        {
+          "source": "src.state.workspace",
+          "specifiers": [
+            "Workspace"
+          ]
+        },
+        {
+          "source": "src.tools.executor",
+          "specifiers": [
+            "ToolExecutor"
+          ]
+        },
+        {
+          "source": "src.tools.registry",
+          "specifiers": [
+            "build_default_registry"
+          ]
+        },
+        {
+          "source": "src.tools.schemas",
+          "specifiers": [
+            "SpawnSubagentArgs"
+          ]
+        },
+        {
+          "source": "src.workers.manager",
+          "specifiers": [
+            "WorkerManager"
+          ]
+        },
+        {
+          "source": "src.workers.roles",
+          "specifiers": [
+            "get_role_spec",
+            "plan_mode_allowed_roles"
+          ]
+        }
+      ],
+      "exports": [
+        "_Redactor",
+        "_FakeClient",
+        "_build_manager",
+        "test_fixed_roles_have_explicit_capabilities",
+        "test_tester_profile_allows_shell_but_not_direct_writes",
+        "test_spawn_schema_requires_role_and_acceptance_criteria",
+        "test_old_subagent_type_is_not_accepted",
+        "test_tester_runner_records_existing_file_shell_side_effect"
+      ],
+      "totalLines": 112,
+      "hasStructuralAnalysis": true
+    },
     "test/test_provider_continuation.py": {
       "filePath": "test/test_provider_continuation.py",
-      "contentHash": "837c66d04a85b75a7894fc6bd6c8d58283ef6613d42bf05cc7dbe60f79e1af71",
+      "contentHash": "39c4c71c0b5f680946764b1367b8a10f9ee5eefa51f9d447731523f4e83cd283",
       "functions": [
         {
           "name": "test_provider_continuation_keeps_native_call_chain",
@@ -8206,7 +10720,7 @@
     },
     "test/test_runtime_error_reporting.py": {
       "filePath": "test/test_runtime_error_reporting.py",
-      "contentHash": "1dfcd81cb5809f12c4db63114e137ee5dee0921df80ef03d23625ccbc1fbeae6",
+      "contentHash": "87ba0a2bdb685c42da7422b2f999df124b1b9591668cf511ca4d00e2030e9924",
       "functions": [
         {
           "name": "test_context_compression_event_does_not_pass_run_id_twice",
@@ -8265,15 +10779,23 @@
     },
     "test/test_session_checkpoint_v2.py": {
       "filePath": "test/test_session_checkpoint_v2.py",
-      "contentHash": "1a6192464095b2152662262f3fe4c67a72d30cf45023772f374100c6d76ac69a",
+      "contentHash": "8a217c3a588e485cf04aac5e8826b6e7ae21832a0192710c585d1dc619c3594b",
       "functions": [
         {
-          "name": "test_session_schema5_atomic_save_and_working_memory_v2",
+          "name": "test_session_schema6_atomic_save_and_working_memory_v3",
           "params": [
             "tmp_path"
           ],
           "exported": true,
-          "lineCount": 9
+          "lineCount": 10
+        },
+        {
+          "name": "test_old_session_and_working_memory_schemas_are_rejected",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 10
         },
         {
           "name": "test_checkpoint_schema2_reads_hot_file_freshness",
@@ -8289,7 +10811,15 @@
             "tmp_path"
           ],
           "exported": true,
-          "lineCount": 12
+          "lineCount": 13
+        },
+        {
+          "name": "test_resume_context_reports_external_workspace_changes",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 21
         }
       ],
       "classes": [],
@@ -8298,6 +10828,12 @@
           "source": "pathlib",
           "specifiers": [
             "Path"
+          ]
+        },
+        {
+          "source": "pytest",
+          "specifiers": [
+            "pytest"
           ]
         },
         {
@@ -8331,20 +10867,115 @@
           "specifiers": [
             "Workspace"
           ]
+        },
+        {
+          "source": "src.state.resume",
+          "specifiers": [
+            "build_resume_context"
+          ]
         }
       ],
       "exports": [
-        "test_session_schema5_atomic_save_and_working_memory_v2",
+        "test_session_schema6_atomic_save_and_working_memory_v3",
+        "test_old_session_and_working_memory_schemas_are_rejected",
         "test_checkpoint_schema2_reads_hot_file_freshness",
-        "test_checkpoint_persists_final_gate_dual_quality_snapshot"
+        "test_checkpoint_persists_final_gate_dual_quality_snapshot",
+        "test_resume_context_reports_external_workspace_changes"
       ],
-      "totalLines": 39,
+      "totalLines": 79,
+      "hasStructuralAnalysis": true
+    },
+    "test/test_todo_tools.py": {
+      "filePath": "test/test_todo_tools.py",
+      "contentHash": "2f885d3e9b24a79aaa7a538a75b1de56ba396592e3ace6fa17fd2ff3921f170c",
+      "functions": [
+        {
+          "name": "test_todo_status_is_strict_and_archive_is_not_status",
+          "params": [],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "test_todo_delete_removes_only_current_ledger_item",
+          "params": [],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "test_archived_todos_are_excluded_from_working_memory",
+          "params": [],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "test_todo_tool_schema_and_descriptions_are_explicit",
+          "params": [],
+          "exported": true,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "pytest",
+          "specifiers": [
+            "pytest"
+          ]
+        },
+        {
+          "source": "src.memory.working",
+          "specifiers": [
+            "WorkingMemory"
+          ]
+        },
+        {
+          "source": "src.state.todo",
+          "specifiers": [
+            "TodoLedger"
+          ]
+        },
+        {
+          "source": "src.tools.registry",
+          "specifiers": [
+            "build_default_registry"
+          ]
+        }
+      ],
+      "exports": [
+        "test_todo_status_is_strict_and_archive_is_not_status",
+        "test_todo_delete_removes_only_current_ledger_item",
+        "test_archived_todos_are_excluded_from_working_memory",
+        "test_todo_tool_schema_and_descriptions_are_explicit"
+      ],
+      "totalLines": 47,
       "hasStructuralAnalysis": true
     },
     "test/test_web_turns.py": {
       "filePath": "test/test_web_turns.py",
-      "contentHash": "9c82f921d06b898bbd52f602fda04e744c00e60fbf9cdc3922d34a9f5422fc55",
+      "contentHash": "bce288eb6a4f618bfaf5abaa48dd56007ee83fe133bf5a75a0d783805c2785f6",
       "functions": [
+        {
+          "name": "test_model_configuration_exposes_global_defaults_for_empty_session_area",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 36
+        },
+        {
+          "name": "test_web_session_config_does_not_mark_new_session_as_resume",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 22
+        },
         {
           "name": "test_steps_show_process_content_without_reasoning",
           "params": [],
@@ -8415,6 +11046,12 @@
           ]
         },
         {
+          "source": "src.app.config",
+          "specifiers": [
+            "AppConfig"
+          ]
+        },
+        {
           "source": "src.app.web_runs",
           "specifiers": [
             "WebRun",
@@ -8432,9 +11069,17 @@
           "specifiers": [
             "build_session_turns"
           ]
+        },
+        {
+          "source": "src.providers.profiles",
+          "specifiers": [
+            "ModelProfile"
+          ]
         }
       ],
       "exports": [
+        "test_model_configuration_exposes_global_defaults_for_empty_session_area",
+        "test_web_session_config_does_not_mark_new_session_as_resume",
         "test_steps_show_process_content_without_reasoning",
         "test_steps_keep_full_tool_result_summary",
         "test_steps_preserve_compression_summary_and_attach_one_comparison",
@@ -8444,7 +11089,7 @@
         "test_session_turns_keep_history_order_when_run_ids_are_reversed",
         "test_session_turns_attach_turn_id_and_current_messages_to_their_run"
       ],
-      "totalLines": 174,
+      "totalLines": 238,
       "hasStructuralAnalysis": true
     },
     "test/test_working_memory.py": {
@@ -8555,7 +11200,7 @@
     },
     "test/test_write_file_read_gate.py": {
       "filePath": "test/test_write_file_read_gate.py",
-      "contentHash": "4c2bce23d7444ec3f2bd17f721bd60fd1d0b57890bfd7871983ac9e0168f3196",
+      "contentHash": "1a6dcf41aa63b1e65281f4a1602b7d70669ba67c71fb79bf960969b0bd5a19f5",
       "functions": [
         {
           "name": "build_executor",
@@ -8592,6 +11237,38 @@
         },
         {
           "name": "test_apply_patch_allows_absolute_path_after_relative_read",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "test_read_file_and_apply_patch_preserve_crlf_for_multiline_old_text",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "test_apply_patch_content_mismatch_reports_newline_diagnostics",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "test_apply_patch_normalizes_lf_parameter_against_crlf_file",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "test_apply_patch_still_rejects_content_difference_after_newline_normalization",
           "params": [
             "tmp_path"
           ],
@@ -8712,12 +11389,16 @@
         "test_write_file_denies_existing_unread_file",
         "test_write_file_allows_existing_file_after_read",
         "test_apply_patch_allows_absolute_path_after_relative_read",
+        "test_read_file_and_apply_patch_preserve_crlf_for_multiline_old_text",
+        "test_apply_patch_content_mismatch_reports_newline_diagnostics",
+        "test_apply_patch_normalizes_lf_parameter_against_crlf_file",
+        "test_apply_patch_still_rejects_content_difference_after_newline_normalization",
         "test_write_file_allows_absolute_path_after_relative_read",
         "test_write_file_denies_after_external_change_with_freshness_conflict",
         "test_jcode_own_patch_refreshes_freshness_for_followup_write",
         "test_apply_patch_gate_remains_unchanged_for_unread_file"
       ],
-      "totalLines": 151,
+      "totalLines": 226,
       "hasStructuralAnalysis": true
     }
   }

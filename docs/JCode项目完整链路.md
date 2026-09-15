@@ -44,10 +44,10 @@ flowchart TD
     StateWrite --> Checkpoint[写入 checkpoint.json]
     Checkpoint --> BuildContext
 
-    HasTools -->|否| Complete{响应是否完整}
-    Complete -->|需要续写| Continue[保存 Provider continuation]
+    HasTools -->|否| Complete{是否有最终 content}
+    Complete -->|text 为空且可续写| Continue[保存 Provider continuation]
     Continue --> BuildContext
-    Complete -->|完整| FinalGate[FinalGate 评估最终就绪]
+    Complete -->|text 非空| FinalGate[FinalReadiness 记录收口证据]
     FinalGate -->|要求纠正| Correction[注入 correction packet]
     Correction --> BuildContext
     FinalGate -->|允许结束| Finish[finish_run]
@@ -61,7 +61,7 @@ flowchart TD
     SSE --> Browser[Web 时间线]
 ```
 
-主循环由 `src/runtime/agent.py:JCodeAgent._ask_loop()` 驱动。一次模型响应可以包含多个原生工具调用；工具结果写回 Provider continuation 后进入下一子轮。没有工具调用时，运行时根据完成状态、输出续写和 FinalGate 决定继续或结束。
+主循环由 `src/runtime/agent.py:JCodeAgent._ask_loop()` 驱动。一次模型响应可以包含多个原生工具调用；工具结果按 `call_id` 写回 Provider continuation 后进入下一子轮。没有工具调用时，非空 `text` 进入最终收口，空 `text` 按当前终态或续写规则处理；Final Gate 仍可要求注入纠正事实后重跑，不再通过 XML parser 重试。
 
 ## 2. 工具治理分支
 
@@ -261,7 +261,7 @@ flowchart TD
     Resume[CLI 或 Web 请求恢复 session] --> Load[SessionStore.load_requested]
     Load --> Session[恢复 history working_memory todo runtime_mode]
     Session --> Latest[定位 latest_run_id]
-    Latest --> Checkpoint[读取 checkpoint.json schema v3]
+    Latest --> Checkpoint[读取 checkpoint.json schema v5]
     Checkpoint --> Schema{schema 与 resumable 校验}
     Schema -->|失败| Invalid[schema_mismatch 或 checkpoint_not_resumable]
     Schema -->|通过| Fingerprint{工作区 fingerprint 一致}

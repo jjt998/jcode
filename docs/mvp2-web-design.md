@@ -13,10 +13,10 @@ MVP2 选择方案 A：将事件流内嵌到对应 turn 的推理抽屉中，并�
 - 移除右侧全局事件栏。
 - 将每个 run 的事件流挂载到对应对话 turn 内。
 - 在用户消息和助手最终回答之间展示一个默认折叠的步骤时间线。
-- 每个步骤默认折叠，标题行展示步骤号、时间戳、状态、工具数量、耗时和推理摘要。
-- 步骤展开后展示推理全文、工具调用清单和工具结果。
-- 如果模型返回 `<reasoning>...</reasoning>`，只取第一个片段，作为一个步骤的推理正文。
-- 如果这次没有 reasoning，就完全不显示对应步骤块。
+- 每个步骤默认折叠，标题行展示步骤号、时间戳、状态、工具数量、耗时和过程摘要。
+- 步骤展开后展示模型过程消息、工具调用清单和工具结果，不展示未持久化的内部推理正文。
+- 步骤内容来自 `model_responded`、`tool_requested`、`tool_executed` 和压缩审计事件；不再从 XML 标签抽取 reasoning。
+- 如果本轮只有最终 content 且没有工具事件，仍保留 turn 的最终状态，不创建虚假的推理步骤。
 - 将完整 context、模型原始返回、工具请求和工具执行结果直接写入 `trace.jsonl`。
 - SSE 只做事件级流式更新，最终回答仍一次性出现。
 - 逐 token 输出明确留到 MVP3。
@@ -68,7 +68,7 @@ MVP2 将 MVP1 的三栏布局调整为两栏布局：
 助手最终回答
 ```
 
-说明：如果 turn 没有 reasoning，则直接跳过该步骤，不显示占位。最终答案始终置底。
+说明：如果 turn 没有模型过程或工具事件，则直接跳过步骤块，不显示占位。最终答案始终置底。
 
 运行中和完成后，步骤都默认折叠。SSE 到达时只更新对应 step，不自动展开其它步骤。
 
@@ -120,8 +120,7 @@ Turn 对齐规则：
 - session history 中带 `run_id` 的 user message 是 turn 起点。
 - 同一 `run_id` 的 assistant message 是 turn 终点。
 - 同一 `run_id` 的 tool history 和 trace events 归入该 turn。
-- 如果 `model_responded.response_text` 中包含首个 `<reasoning>...</reasoning>`，则提取成一个 step 的 `reasoning_text`。
-- 后端根据 `<reasoning>`、`<tool>`、`<tools>` 和 `<final>` 的相对顺序，构造 `reasoning_steps[]`。
+- 后端由 `src/app/web_steps.py` 根据原生事件顺序构造 `reasoning_steps[]`，并按 `step_id` 增量更新。
 - 若历史 session 没有完整 run_id，前端显示普通历史消息，不强行归入推理抽屉。
 - 若 run 中断且没有 assistant message，turn 状态显示 `stopped`、`failed` 或 `incomplete`。
 
@@ -160,21 +159,19 @@ MVP1 的 trace 更偏审计摘要。MVP2 需要把可浏览原文写入 trace。
 
 `model_requested` 可以继续保留为请求统计事件。`model_responded` 用于前端展示“模型原始返回”。
 
-`model_responded.response_text` 同时也是 reasoning 的抽取来源：如果其中包含首个 `<reasoning>...</reasoning>`，服务层提取该片段写入第一个 step；如果没有，就不生成该 step。
+`model_responded.response_text` 保存 Provider 返回的 `ModelResponse.text`，`native_tool_calls` 保存已归一化的原生工具调用；服务层不再从文本标签抽取 reasoning。
 
-### model_parsed
+### native_tool_calls_received
 
-继续记录解析后的结构化 action：
+运行时在收到原生工具调用后记录调用快照：
 
 ```json
 {
-  "event": "model_parsed",
+  "event": "native_tool_calls_received",
   "run_id": "run-...",
-  "action": {
-    "kind": "tool",
-    "tool_name": "read_file",
-    "content": ""
-  }
+  "tool_calls": [
+    {"call_id": "call-1", "name": "read_file", "arguments": {"path": "README.md"}}
+  ]
 }
 ```
 
@@ -259,11 +256,11 @@ SSE 增量更新规则：
 ```text
 context_built -> Context 拼凑
 model_responded -> 模型原始返回
-model_parsed -> 模型解析结果
+native_tool_calls_received -> 原生工具调用快照
 tool_requested -> 工具请求
 tool_executed -> 工具结果
 checkpoint_created -> Checkpoint
-final_readiness_decision -> Final gate
+final_readiness_evaluated -> Final gate 评估
 memory_maintained -> 记忆整理
 run_finished -> 运行结束
 approval_required -> 等待确认
@@ -458,8 +455,8 @@ context 和工具结果可能包含路径、环境信息或敏感输出。
 
 1. 增强 runtime trace：写入完整 context、模型原始返回和完整工具结果。
 2. 新增 `model_responded` 事件。
-3. 从 `model_responded.response_text` 提取首个 `<reasoning>`，生成首个 step。
-4. 解析 `<reasoning>`、`<tool>`、`<tools>` 和 `<final>`，生成 `reasoning_steps[]`。
+3. 消费 `model_responded`，将原生 `native_tool_calls` 和响应文本写入当前 step。
+4. 消费 `tool_requested`、`tool_executed`、`context_built` 和 `run_finished`，生成 `reasoning_steps[]`。
 5. 新增 turn 构造逻辑，从 session history、run_ids 和 trace files 生成 turn view model。
 6. 新增 `GET /api/projects/{project_id}/sessions/{session_id}/turns`。
 7. 前端移除右侧 timeline DOM 和 CSS。
