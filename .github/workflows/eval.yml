@@ -1,11 +1,8 @@
 name: JCode Evaluation
 
 on:
-  pull_request:
-  push:
-    branches: [main]
-  schedule:
-    - cron: "0 2 * * *"
+  # 仅保留手动触发，关闭所有自动测试触发。
+  workflow_dispatch:
 
 jobs:
   eval-smoke:
